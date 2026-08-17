@@ -136,6 +136,13 @@
     transition: box-shadow .18s ease, background .18s ease;
   }
   .nav-cta:hover{ box-shadow: 0 0 18px var(--mint-glow); background: var(--mint-bg); }
+  .nav-links{ display:flex; align-items:center; gap: 18px; }
+  .nav-link{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 13px; text-decoration: none; color: var(--ink-soft);
+    transition: color .18s ease;
+  }
+  .nav-link:hover{ color: var(--ink); }
 
   /* ---------- HERO ---------- */
   .hero{ padding: 84px 0 40px; text-align:center; position: relative; }
@@ -337,7 +344,10 @@
       <span class="b display">Bilancio</span>
       <span class="m">Money<span class="cursor"></span></span>
     </div>
-    <a class="nav-cta" href="#signup">Reserve your line →</a>
+    <div class="nav-links">
+      <a class="nav-link" href="dashboard.html">See the dashboard</a>
+      <a class="nav-cta" href="#signup">Reserve your line →</a>
+    </div>
   </div>
 </nav>
 
@@ -376,6 +386,7 @@
 
     <div class="hero-actions">
       <button class="btn-primary" onclick="document.getElementById('signup').scrollIntoView({behavior:'smooth'})">Reserve your line</button>
+      <a class="nav-cta" href="dashboard.html">See the dashboard →</a>
       <span class="hero-note">No card. No spam. One email when we open the ledger.</span>
     </div>
   </div>
