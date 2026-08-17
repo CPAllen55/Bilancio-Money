@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bilancio Money — Balance, live.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #05080B;
+    --bg-panel: #0C1218;
+    --bg-panel-2: #111922;
+    --grid-line: rgba(231,238,243,0.05);
+    --hair: rgba(231,238,243,0.10);
+    --hair-strong: rgba(231,238,243,0.18);
+    --ink: #E7EEF3;
+    --ink-soft: #8A9BAC;
+    --mint: #00F0A8;
+    --mint-dim: #00A876;
+    --mint-glow: rgba(0,240,168,0.35);
+    --mint-bg: rgba(0,240,168,0.08);
+    --coral: #FF5C72;
+    --coral-bg: rgba(255,92,114,0.08);
+  }
+
+  *{ box-sizing: border-box; }
+  html{ scroll-behavior: smooth; }
+
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .bg-base, .bg-grid{
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+  }
+  .bg-base{
+    z-index: 0;
+    background:
+      radial-gradient(ellipse 900px 500px at 50% -10%, rgba(0,240,168,0.10), transparent 60%),
+      var(--bg);
+  }
+  .bg-grid{
+    z-index: 1;
+    opacity: 0;
+  }
+  .bg-grid.silver{
+    background:
+      repeating-linear-gradient(180deg, rgba(196,206,214,0.85) 0px, rgba(196,206,214,0.85) 1px, transparent 1px, transparent 44px),
+      repeating-linear-gradient(90deg, rgba(196,206,214,0.85) 0px, rgba(196,206,214,0.85) 1px, transparent 1px, transparent 44px);
+    animation: gridSilverFade 18s ease-in-out infinite;
+  }
+
+  @keyframes gridSilverFade{
+    0%{ opacity: 0; }
+    25%{ opacity: 0.22; }
+    60%{ opacity: 0.22; }
+    90%{ opacity: 0; }
+    100%{ opacity: 0; }
+  }
+
+  .page{
+    position: relative;
+    z-index: 2;
+  }
+
+  a{ color: inherit; }
+
+  .wrap{ max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+
+  .display{
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .mono{ font-family: 'IBM Plex Mono', monospace; }
+
+  .eyebrow{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--mint);
+  }
+
+  /* cursor blink */
+  .cursor{
+    display:inline-block;
+    width: 8px; height: 1em;
+    background: var(--mint);
+    margin-left: 2px;
+    vertical-align: -2px;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink{ 50%{ opacity: 0; } }
+
+  /* ---------- NAV ---------- */
+  .nav{
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(5,8,11,0.78);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--hair);
+  }
+  .nav-inner{ display:flex; align-items:center; justify-content:space-between; padding: 18px 0; }
+  .wordmark{ display:flex; align-items: baseline; gap: 8px; }
+  .wordmark .b{
+    font-size: 23px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(120deg, #C9A227 0%, #F5DFA0 28%, #FFF6DD 50%, #E7C567 72%, #B8892A 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 14px rgba(245,197,24,0.28));
+  }
+  .wordmark .m{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 11px; letter-spacing: 0.14em;
+    color: var(--ink-soft); text-transform: uppercase;
+  }
+  .nav-cta{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 13px; text-decoration: none;
+    color: var(--mint);
+    border: 1px solid var(--mint-dim);
+    padding: 8px 14px; border-radius: 3px;
+    transition: box-shadow .18s ease, background .18s ease;
+  }
+  .nav-cta:hover{ box-shadow: 0 0 18px var(--mint-glow); background: var(--mint-bg); }
+
+  /* ---------- HERO ---------- */
+  .hero{ padding: 84px 0 40px; text-align:center; position: relative; }
+  .hero h1{
+    font-size: clamp(38px, 5.6vw, 64px);
+    line-height: 1.05;
+    margin: 18px 0 16px;
+  }
+  .hero h1 .glow{ color: var(--mint); text-shadow: 0 0 26px var(--mint-glow); }
+  .hero p.lede{
+    font-size: 18px; color: var(--ink-soft);
+    max-width: 52ch; margin: 0 auto 44px;
+  }
+
+  .ticker-wrap{ position: relative; max-width: 720px; margin: 0 auto 46px; }
+  .ticker{
+    font-family:'IBM Plex Mono', monospace;
+    font-weight: 500;
+    font-size: clamp(48px, 8vw, 84px);
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .ticker .cents{ font-size: 0.55em; color: var(--ink-soft); }
+  .ticker.flash{ animation: flash .5s ease; }
+  @keyframes flash{ 0%{ color: var(--mint); text-shadow: 0 0 30px var(--mint-glow);} 100%{ color: var(--ink); text-shadow: none; } }
+  .ticker-label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-soft); margin-top: 6px;
+  }
+  .ticker-label .dot{
+    display:inline-block; width:6px; height:6px; border-radius:50%;
+    background: var(--mint); margin-right:7px;
+    box-shadow: 0 0 8px var(--mint-glow);
+    animation: pulseDot 1.6s ease-in-out infinite;
+  }
+  @keyframes pulseDot{ 0%,100%{ opacity: 1; } 50%{ opacity: .35; } }
+
+  /* network diagram */
+  .network{ max-width: 760px; margin: 0 auto; display:block; }
+  .network .flow{
+    stroke: var(--mint-dim);
+    stroke-width: 1.4;
+    fill: none;
+    stroke-dasharray: 3 7;
+    animation: dash 1.6s linear infinite;
+    opacity: 0.8;
+  }
+  @keyframes dash{ to{ stroke-dashoffset: -20; } }
+  .network .node-ring{ fill: var(--bg-panel); stroke: var(--hair-strong); stroke-width: 1; }
+  .network .node-label{
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    fill: var(--ink-soft);
+    text-anchor: middle;
+  }
+  .network .center-glow{ fill: var(--mint); opacity: 0.16; }
+  .network .center-dot{ fill: var(--mint); }
+
+  .hero-actions{
+    display:flex; align-items:center; justify-content:center;
+    gap: 20px; flex-wrap: wrap; margin-top: 40px;
+  }
+  .btn-primary{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 14px; letter-spacing: 0.02em;
+    background: var(--mint); color: #04120C;
+    border: none; padding: 15px 24px; border-radius: 3px;
+    cursor: pointer; font-weight: 600;
+    box-shadow: 0 0 0 rgba(0,240,168,0);
+    transition: box-shadow .2s ease, transform .18s ease;
+  }
+  .btn-primary:hover{ box-shadow: 0 0 30px var(--mint-glow); }
+  .btn-primary:active{ transform: translateY(1px); }
+  .btn-primary:focus-visible{ outline: 2px solid var(--mint); outline-offset: 3px; }
+  .hero-note{ font-size: 13px; color: var(--ink-soft); }
+
+  /* ---------- COMPARE ---------- */
+  .compare{ padding: 88px 0; border-top: 1px solid var(--hair); }
+  .compare-head{ max-width: 60ch; margin: 0 auto 44px; text-align:center; }
+  .compare-head h2{ font-size: clamp(28px, 3.4vw, 38px); margin: 12px 0 0; }
+  .compare-grid{ display:grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .compare-col{
+    padding: 28px 30px; border-radius: 6px;
+    border: 1px solid var(--hair-strong);
+    background: var(--bg-panel);
+  }
+  .compare-col.debit{ box-shadow: inset 0 0 60px var(--coral-bg); }
+  .compare-col.credit{ box-shadow: inset 0 0 60px var(--mint-bg); }
+  .compare-col h3{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    margin: 0 0 20px;
+  }
+  .compare-col.debit h3{ color: var(--coral); }
+  .compare-col.credit h3{ color: var(--mint); }
+  .compare-col ul{ list-style: none; margin:0; padding:0; }
+  .compare-col li{
+    padding: 12px 0; border-top: 1px solid var(--hair);
+    font-size: 15px; color: var(--ink);
+  }
+  .compare-col li:first-of-type{ border-top: none; }
+
+  /* ---------- FEATURES ---------- */
+  .features{ padding: 88px 0; border-top: 1px solid var(--hair); }
+  .features-head{ max-width: 60ch; margin: 0 auto 44px; text-align:center; }
+  .features-head h2{ font-size: clamp(28px, 3.4vw, 38px); margin: 12px 0 0; }
+  .feature-grid{ display:grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  .feature-card{
+    padding: 28px; border-radius: 6px;
+    border: 1px solid var(--hair-strong);
+    background: var(--bg-panel);
+    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+  }
+  .feature-card:hover{
+    border-color: var(--mint-dim);
+    box-shadow: 0 0 34px -8px var(--mint-glow);
+    transform: translateY(-2px);
+  }
+  .feature-card .num{
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12.5px; color: var(--mint);
+    display:block; margin-bottom: 14px;
+  }
+  .feature-card h4{ font-size: 19px; margin: 0 0 8px; }
+  .feature-card p{ margin:0; color: var(--ink-soft); }
+
+  /* ---------- SIGNUP ---------- */
+  .signup{ padding: 90px 0 100px; border-top: 1px solid var(--hair); }
+  .signup-card{
+    max-width: 640px; margin: 0 auto;
+    padding: 42px 40px 34px; border-radius: 6px;
+    border: 1px solid var(--hair-strong);
+    background: var(--bg-panel);
+    box-shadow: 0 0 70px -20px var(--mint-glow);
+  }
+  .signup-card h2{ font-size: clamp(24px, 3vw, 30px); margin: 10px 0 8px; }
+  .signup-card > p{ color: var(--ink-soft); margin: 0 0 28px; }
+
+  .term-line{
+    display:flex; align-items:center; gap: 10px;
+    background: var(--bg-panel-2);
+    border: 1px solid var(--hair-strong);
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin-bottom: 22px;
+  }
+  .term-line .prompt{ color: var(--mint); font-family:'IBM Plex Mono', monospace; font-size: 15px; }
+  .term-line input{
+    flex:1; border: none; background: transparent;
+    font-family:'IBM Plex Mono', monospace; font-size: 15px; color: var(--ink);
+  }
+  .term-line input:focus{ outline: none; }
+  .term-line input::placeholder{ color: var(--ink-soft); opacity: 0.6; }
+
+  .signup-foot{ display:flex; align-items:center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .signup-foot .fine{ font-size: 12.5px; color: var(--ink-soft); }
+
+  .confirm{
+    display:none; align-items:center; gap: 12px;
+    font-family:'IBM Plex Mono', monospace; font-size: 14px; color: var(--mint);
+  }
+  .confirm .check{
+    display:inline-flex; align-items:center; justify-content:center;
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 1px solid var(--mint); font-size: 12px;
+    box-shadow: 0 0 10px var(--mint-glow);
+  }
+
+  /* ---------- FOOTER ---------- */
+  footer{ border-top: 1px solid var(--hair); padding: 26px 0 44px; }
+  .foot-inner{ display:flex; justify-content:space-between; align-items:center; flex-wrap: wrap; gap: 10px; }
+  .foot-inner .tag{ font-style: italic; color: var(--ink-soft); font-size: 14px; }
+  .foot-inner .copy{ font-family:'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-soft); }
+
+  @media (max-width: 860px){
+    .compare-grid{ grid-template-columns: 1fr; }
+    .feature-grid{ grid-template-columns: 1fr; }
+    .signup-card{ padding: 30px 22px 26px; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation: none !important; transition: none !important; }
+    html{ scroll-behavior: auto; }
+    .bg-grid.silver{ opacity: 0.14; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-base"></div>
+<div class="bg-grid silver"></div>
+
+<div class="page">
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <div class="wordmark">
+      <span class="b display">Bilancio</span>
+      <span class="m">Money<span class="cursor"></span></span>
+    </div>
+    <a class="nav-cta" href="#signup">Reserve your line →</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">// live ledger — early access</span>
+    <h1 class="display">Watch your balance<br><span class="glow">breathe.</span></h1>
+    <p class="lede">Every account feeds one number, updated the instant something moves. This is money, without the lag.</p>
+
+    <div class="ticker-wrap">
+      <div class="ticker mono" id="ticker">$0.00</div>
+      <div class="ticker-label"><span class="dot"></span>net balance · updating live</div>
+    </div>
+
+    <svg class="network" viewBox="0 0 760 220" aria-hidden="true">
+      <path class="flow" d="M110,40 C 260,40 300,90 380,110"/>
+      <path class="flow" d="M650,40 C 500,40 460,90 380,110"/>
+      <path class="flow" d="M110,180 C 260,180 300,120 380,110"/>
+      <path class="flow" d="M650,180 C 500,180 460,120 380,110"/>
+
+      <circle class="center-glow" cx="380" cy="110" r="34"/>
+      <circle class="center-dot" cx="380" cy="110" r="5"/>
+
+      <circle class="node-ring" cx="110" cy="40" r="26"/>
+      <text class="node-label" x="110" y="44">Checking</text>
+
+      <circle class="node-ring" cx="650" cy="40" r="26"/>
+      <text class="node-label" x="650" y="44">Savings</text>
+
+      <circle class="node-ring" cx="110" cy="180" r="26"/>
+      <text class="node-label" x="110" y="184">Card</text>
+
+      <circle class="node-ring" cx="650" cy="180" r="26"/>
+      <text class="node-label" x="650" y="184">Invest</text>
+    </svg>
+
+    <div class="hero-actions">
+      <button class="btn-primary" onclick="document.getElementById('signup').scrollIntoView({behavior:'smooth'})">Reserve your line</button>
+      <span class="hero-note">No card. No spam. One email when we open the ledger.</span>
+    </div>
+  </div>
+</header>
+
+<section class="compare">
+  <div class="wrap">
+    <div class="compare-head">
+      <span class="eyebrow">// two columns</span>
+      <h2 class="display">Every finance app is a ledger.<br>Most just run on a delay.</h2>
+    </div>
+    <div class="compare-grid">
+      <div class="compare-col debit">
+        <h3>Debit — the old way</h3>
+        <ul>
+          <li>Five banking apps, five passwords</li>
+          <li>A spreadsheet updated once a quarter</li>
+          <li>Finding out you overspent — after the statement lands</li>
+          <li>Guessing what you're actually worth</li>
+        </ul>
+      </div>
+      <div class="compare-col credit">
+        <h3>Credit — Bilancio</h3>
+        <ul>
+          <li>One ledger, every account, live</li>
+          <li>Transactions sorted before you open the app</li>
+          <li>A budget that warns you before you're over</li>
+          <li>Your balance, updating in real time</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="features">
+  <div class="wrap">
+    <div class="features-head">
+      <span class="eyebrow">// system modules</span>
+      <h2 class="display">What's running under the hood</h2>
+    </div>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <span class="num mono">[ 01 ]</span>
+        <h4>One ledger, every account</h4>
+        <p>Checking, savings, and cards, reconciled into a single live balance — nothing to tally by hand.</p>
+      </div>
+      <div class="feature-card">
+        <span class="num mono">[ 02 ]</span>
+        <h4>Categorized in real time</h4>
+        <p>Transactions sort themselves the moment they land. Correct one, and Bilancio remembers next time.</p>
+      </div>
+      <div class="feature-card">
+        <span class="num mono">[ 03 ]</span>
+        <h4>Budgets that hold you to them</h4>
+        <p>Set a line for each category and watch it move live — not in a statement that arrives after the damage is done.</p>
+      </div>
+      <div class="feature-card">
+        <span class="num mono">[ 04 ]</span>
+        <h4>A balance you can trust</h4>
+        <p>No more guessing what's left this month. Open the ledger — it's already added up.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="signup" id="signup">
+  <div class="wrap">
+    <div class="signup-card">
+      <span class="eyebrow">// open an account</span>
+      <h2 class="display">Reserve your line in the ledger</h2>
+      <p>We're opening Bilancio to a small first group. Leave your email and we'll write you in.</p>
+
+      <form id="signup-form">
+        <div class="term-line">
+          <span class="prompt">&gt;</span>
+          <input type="email" id="email-input" placeholder="enter email_" required aria-label="Email address">
+        </div>
+        <div class="signup-foot">
+          <span class="fine">We'll email you once, when the ledger opens.</span>
+          <button type="submit" class="btn-primary">Add to the ledger</button>
+        </div>
+      </form>
+
+      <div class="confirm" id="confirm-msg">
+        <span class="check">✓</span>
+        <span>Entered. You're on the ledger — we'll be in touch.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-inner">
+    <span class="tag">"il bilancio" — the balance, the equilibrium.</span>
+    <span class="copy">© 2026 Bilancio Money</span>
+  </div>
+</footer>
+
+</div>
+
+<script>
+  // Count-up ticker on load, then gentle live flicker
+  const ticker = document.getElementById('ticker');
+  const target = 10842.17;
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function fmt(v){
+    return '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+
+  if(prefersReduced){
+    ticker.textContent = fmt(target);
+    startLiveFlicker();
+  } else {
+    let start = null;
+    const duration = 1200;
+    function step(ts){
+      if(!start) start = ts;
+      const progress = Math.min((ts - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      ticker.textContent = fmt(target * eased);
+      if(progress < 1){
+        requestAnimationFrame(step);
+      } else {
+        startLiveFlicker();
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
+  let current = target;
+  function startLiveFlicker(){
+    setInterval(function(){
+      const delta = (Math.random() * 2.4) - 0.6;
+      current = Math.max(0, current + delta);
+      ticker.textContent = fmt(current);
+      ticker.classList.remove('flash');
+      void ticker.offsetWidth;
+      ticker.classList.add('flash');
+    }, 3200);
+  }
+
+  // Signup
+  const form = document.getElementById('signup-form');
+  const confirmMsg = document.getElementById('confirm-msg');
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    // Front-end only for now — wire this up to your waitlist backend
+    // (e.g. a serverless function, Mailchimp, or ConvertKit) before launch.
+    form.style.display = 'none';
+    confirmMsg.style.display = 'flex';
+  });
+</script>
+
+</body>
+</html>
