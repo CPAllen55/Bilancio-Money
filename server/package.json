@@ -1,0 +1,22 @@
+{
+  "name": "bilancio-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bilancio Money API \u2014 bank connections via Plaid, transaction storage, and the dashboard's data feed.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "plaid": "^29.0.0"
+  }
+}

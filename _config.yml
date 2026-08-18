@@ -1,0 +1,5 @@
+# GitHub Pages publishes this repo. The API is a server app, not a static page —
+# keep it out of the published site so its source is not served at bilanciomoney.com.
+exclude:
+  - server
+  - README.md
