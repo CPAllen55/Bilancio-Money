@@ -537,21 +537,25 @@ function escapeHtml(s) {
  * the optgroup labels and are not themselves selectable — a transaction belongs
  * to a leaf, or the rollup would double-count it.
  */
-function categoryOptions(selectedSlug) {
-  const parents = categoryList.filter(c => !c.parentSlug);
+function categoryOptions(selectedSlug, side) {
+  // Only the side of the ledger the money actually moved on. A category cannot
+  // change whether cash came in or went out, so offering "Salary" for a payment
+  // just invites filing that the totals will then have to ignore.
+  const pool = side ? categoryList.filter(c => c.kind === side) : categoryList;
+  const parents = pool.filter(c => !c.parentSlug);
   const opt = c => '<option value="' + c.id + '"' +
     (c.slug === selectedSlug ? ' selected' : '') + '>' +
     escapeHtml(c.label) + (c.isSystem ? '' : ' ·yours') + '</option>';
 
   let html = '<option value="">—</option>';
   for (const p of parents) {
-    const kids = categoryList.filter(c => c.parentSlug === p.slug);
+    const kids = pool.filter(c => c.parentSlug === p.slug);
     if (!kids.length) continue;
     html += '<optgroup label="' + escapeHtml(p.label) + '">' + kids.map(opt).join('') + '</optgroup>';
   }
-  // Anything a user created before parents existed, or without one.
-  const orphans = categoryList.filter(c => !c.parentSlug && !parents.some(p => p.slug === c.slug && categoryList.some(k => k.parentSlug === p.slug)));
-  const loose = orphans.filter(c => !categoryList.some(k => k.parentSlug === c.slug));
+  // Categories with no children of their own — a user's own, or a parent that
+  // has none yet. Without this they would be unreachable in the dropdown.
+  const loose = parents.filter(p => !pool.some(c => c.parentSlug === p.slug));
   if (loose.length) html += '<optgroup label="Other">' + loose.map(opt).join('') + '</optgroup>';
 
   return html + '<option value="' + NEW_CATEGORY + '">+ New category…</option>';
@@ -572,7 +576,9 @@ async function renderTransactions() {
       '<td class="num" style="color:var(--muted)">' + t.date + '</td>' +
       '<td>' + escapeHtml(t.name) + (t.pending ? ' <span class="pill">pending</span>' : '') +
         (source ? ' <span class="pill">' + source + '</span>' : '') + '</td>' +
-      '<td><select class="catsel" data-id="' + t.id + '">' + categoryOptions(t.category) + '</select></td>' +
+      '<td><select class="catsel" data-id="' + t.id + '">' +
+        // Amount decides which side of the ledger this row is on.
+        categoryOptions(t.category, t.amount > 0 ? 'income' : 'spend') + '</select></td>' +
       '<td class="num' + (t.amount > 0 ? ' in' : '') + '">' +
         (t.amount > 0 ? '+' : '') + money(t.amount) + '</td></tr>';
   }).join('');

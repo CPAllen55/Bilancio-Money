@@ -45,8 +45,30 @@ export interface CategoryContext {
   /** leaf slug -> its parent's slug. A parent maps to itself, so rolling up is
    *  always the same lookup whether the category has a parent or not. */
   parentOfSlug: Map<string, string>;
+  /** slug -> "spend" | "income". Which side of the ledger it belongs on. */
+  kindOfSlug: Map<string, string>;
   /** normalised merchant key -> category slug */
   ruleBySlugKey: Map<string, string>;
+}
+
+/**
+ * Money out can only land in a spending bucket and money in only in an income
+ * one, whatever the category says.
+ *
+ * Without this, an expense filed under an income category rolls up into the
+ * Income parent and gets drawn as a bar in the spending chart — income belongs
+ * behind the bars as a level, never as one of them. Anything mismatched falls
+ * back to the catch-all on the correct side, so the stack still sums to the
+ * total rather than quietly losing the amount.
+ */
+export function bucketFor(
+  slug: string | null,
+  side: "spend" | "income",
+  ctx: CategoryContext,
+): string {
+  const fallback = side === "income" ? "other-income" : "other";
+  if (!slug) return fallback;
+  return ctx.kindOfSlug.get(slug) === side ? slug : fallback;
 }
 
 export { ownedAccountIds };
@@ -88,6 +110,7 @@ export async function loadCategories(
 
   // A parent maps to itself, so a rollup is one lookup regardless of depth.
   const parentOfSlug = new Map(rows.map((r) => [r.slug, r.parentSlug ?? r.slug]));
+  const kindOfSlug = new Map(rows.map((r) => [r.slug, r.kind]));
 
   const rules = await db
     .select({ matchKey: merchantRules.matchKey, categoryId: merchantRules.categoryId })
@@ -100,7 +123,7 @@ export async function loadCategories(
     if (slug) ruleBySlugKey.set(r.matchKey, slug);
   }
 
-  return { list: rows, slugById, parentOfSlug, ruleBySlugKey };
+  return { list: rows, slugById, parentOfSlug, kindOfSlug, ruleBySlugKey };
 }
 
 /**
@@ -118,6 +141,9 @@ export function rollUp(
   for (const c of ctx.list) if (!c.parentId && c.kind === kind) out[c.slug] = 0;
   for (const [slug, value] of Object.entries(byCategory)) {
     if (!value) continue;
+    // Belt and braces: an entry from the other side of the ledger is dropped
+    // rather than inventing a parent for it.
+    if (ctx.kindOfSlug.get(slug) !== kind) continue;
     const parent = ctx.parentOfSlug.get(slug) ?? slug;
     out[parent] = (out[parent] ?? 0) + value;
   }
@@ -230,13 +256,15 @@ function tally(rows: AmountRow[], ctx: CategoryContext): Totals {
     // can file a refund under any category they like; it is still money in.
     if (signed > 0) {
       out.income += signed;
-      if (slug && slug in out.byIncomeCategory) out.byIncomeCategory[slug] += signed;
+      const bucket = bucketFor(slug, "income", ctx);
+      out.byIncomeCategory[bucket] = (out.byIncomeCategory[bucket] ?? 0) + signed;
       continue;
     }
 
     const spent = -signed;
     out.expense += spent;
-    if (slug && slug in out.byCategory) out.byCategory[slug] += spent;
+    const bucket = bucketFor(slug, "spend", ctx);
+    out.byCategory[bucket] = (out.byCategory[bucket] ?? 0) + spent;
   }
   out.net = out.income - out.expense;
   return out;
@@ -526,7 +554,11 @@ export async function monthlyBuckets(
     const out = Number(r.outCents);
     if (out > 0) {
       b.expense += out;
-      if (slug && slug in b.byCategory) b.byCategory[slug] += out;
+      // Spending can only land in a spending bucket. An expense filed under an
+      // income category would otherwise stack as an "Income" bar in the chart,
+      // and income belongs behind the bars as a level, never as one of them.
+      const bucket = bucketFor(slug, "spend", ctx);
+      b.byCategory[bucket] = (b.byCategory[bucket] ?? 0) + out;
     }
   }
   for (const b of buckets.values()) b.total = b.expense;
