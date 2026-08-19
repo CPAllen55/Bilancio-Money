@@ -26,6 +26,16 @@
     }
   ],
 
+  // Clerk publishable keys are public by design — they ship in the front end
+  // either way, and Clerk's own docs put them in client code. Only
+  // CLERK_SECRET_KEY is a secret, set with `wrangler secret put`.
+  //
+  // This is the DEVELOPMENT instance. Production needs its own Clerk instance
+  // and its own pk_live_ key in the production env below.
+  "vars": {
+    "CLERK_PUBLISHABLE_KEY": "pk_test_bGVuaWVudC10cmVlZnJvZy0yMTQ4LmNsZXJrLmFjY291bnRzLmRldiQ"
+  },
+
   "observability": {
     "enabled": true
   },
@@ -45,6 +55,12 @@
           "id": "bcda6d421eb84977a4ca51385c6018fb"
         }
       ]
+
+      // TODO before production traffic: create a Clerk PRODUCTION instance and
+      // add its key here as
+      //   "vars": { "CLERK_PUBLISHABLE_KEY": "pk_live_..." }
+      // then `wrangler secret put CLERK_SECRET_KEY --env production`.
+      // Development keys have strict usage limits and must not serve real users.
     }
   }
 }
