@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Bilancio — Sign in</title>
+<title>Bilancio — Your ledger</title>
 <link rel="icon" href="/brand/icon-32.png" sizes="32x32">
 <link rel="icon" href="/brand/icon-16.png" sizes="16x16">
 <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png">
@@ -15,338 +15,339 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 
 <style>
-  /* Same tokens as the landing page, so this does not read as a different product. */
+  /* Same tokens as the landing page, so this reads as one product. */
   :root{
-    --bg: #05080B;
-    --bg-panel: #0C1218;
-    --hair: rgba(231,238,243,0.10);
-    --ink: #E7EEF3;
-    --ink-soft: #8A9BAC;
-    --mint: #00F0A8;
-    --mint-dim: #00A876;
-    --coral: #FF5C72;
-    --warning: #FAB219;
+    --bg:#05080B; --bg-panel:#0C1218; --hair:rgba(231,238,243,0.10);
+    --hair-strong:rgba(231,238,243,0.18);
+    --ink:#E7EEF3; --ink-soft:#8A9BAC; --muted:#7E90A2;
+    --mint:#00F0A8; --mint-dim:#00A876; --mint-glow:rgba(0,240,168,0.35); --mint-bg:rgba(0,240,168,0.08);
+    --coral:#FF5C72; --warning:#FAB219;
+    --surface:#0F171F; --grid:#1B2630;
+    --cat-home:#3987e5; --cat-groceries:#d95926; --cat-shopping:#199e70;
+    --cat-dining:#c98500; --cat-pets:#d55181; --cat-transport:#008300; --cat-bills:#9085e9;
   }
-  *{ box-sizing: border-box; }
-  /* class-level display rules outrank the UA sheet's [hidden], so restate it */
+  *{ box-sizing:border-box; }
   [hidden]{ display:none !important; }
-  body{
-    margin:0; min-height:100vh; background:var(--bg); color:var(--ink);
-    font-family:'IBM Plex Sans', sans-serif;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:28px; padding:40px 20px;
-  }
-  .wordmark{
-    font-family:'Space Grotesk', sans-serif; font-weight:700;
-    font-size:22px; letter-spacing:-0.01em;
-  }
+  body{ margin:0; min-height:100vh; background:var(--bg); color:var(--ink);
+        font-family:'IBM Plex Sans', sans-serif; }
+  .wrap{ max-width:1120px; margin:0 auto; padding:0 24px; }
+
+  /* ---------- header ---------- */
+  header.top{ border-bottom:1px solid var(--hair); position:sticky; top:0;
+              background:rgba(5,8,11,.9); backdrop-filter:blur(8px); z-index:5; }
+  .top-inner{ display:flex; align-items:center; justify-content:space-between; padding:16px 0; gap:16px; }
+  .wordmark{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:20px;
+             letter-spacing:-.01em; text-decoration:none; color:var(--ink); }
   .wordmark span{ color:var(--mint); }
+  .who{ display:flex; align-items:center; gap:14px; font-family:'IBM Plex Mono', monospace;
+        font-size:12px; color:var(--ink-soft); }
 
-  #signin{ min-height:1px; }
-
-  /* The proof panel — one line per link in the chain. */
-  .panel{
-    width:100%; max-width:560px; background:var(--bg-panel);
-    border:1px solid var(--hair); border-radius:10px; padding:20px 22px;
-  }
-  .panel h2{
-    margin:0 0 14px; font-family:'IBM Plex Mono', monospace;
-    font-size:12px; font-weight:500; letter-spacing:0.08em;
-    text-transform:uppercase; color:var(--ink-soft);
-  }
-  ol{ margin:0; padding:0; list-style:none;
-      font-family:'IBM Plex Mono', monospace; font-size:13px; line-height:1.9; }
-  li{ display:flex; gap:10px; align-items:baseline; }
-  li .mark{ width:1.2em; flex:none; }
-  li.pending .mark::before{ content:'·'; color:var(--ink-soft); }
-  li.ok      .mark::before{ content:'✓'; color:var(--mint); }
-  li.fail    .mark::before{ content:'✕'; color:var(--coral); }
-  li.pending { color:var(--ink-soft); }
-  li.fail    { color:var(--coral); }
-  li .detail{ color:var(--ink-soft); }
-
-  .actions{ margin-top:18px; padding-top:16px; border-top:1px solid var(--hair);
-            display:flex; gap:16px; align-items:center; }
-  button{
-    font-family:'IBM Plex Mono', monospace; font-size:12px;
-    background:none; border:1px solid var(--hair); color:var(--ink-soft);
-    padding:7px 14px; border-radius:6px; cursor:pointer;
-  }
+  button{ font-family:'IBM Plex Mono', monospace; font-size:12px; background:none;
+          border:1px solid var(--hair); color:var(--ink-soft); padding:7px 13px;
+          border-radius:6px; cursor:pointer; }
   button:hover{ color:var(--ink); border-color:var(--mint-dim); }
-  button.primary{
-    font-size:13px; padding:11px 22px; color:var(--bg);
-    background:var(--mint); border-color:var(--mint); font-weight:600;
-  }
-  button.primary:hover{ color:var(--bg); background:#2BFFC0; border-color:#2BFFC0; }
-  .bank-list{ font-family:'IBM Plex Mono', monospace; font-size:13px; line-height:1.8; }
-  .bank-list .inst{ color:var(--ink); }
-  .bank-list .acct{ color:var(--ink-soft); padding-left:14px; }
-  .bank-list .amt{ color:var(--mint); }
-  .bank-list .none{ color:var(--ink-soft); }
-  .bank-status{
-    margin:14px 0 0; font-family:'IBM Plex Mono', monospace;
-    font-size:12px; color:var(--ink-soft); min-height:1.2em;
-  }
-  .bank-status.bad{ color:var(--coral); }
-  .bank-status.good{ color:var(--mint); }
+  button.primary{ background:var(--mint); border-color:var(--mint); color:#04120C;
+                  font-weight:600; font-size:13px; padding:11px 20px; }
+  button.primary:hover{ background:#2BFFC0; border-color:#2BFFC0; color:#04120C; }
+  button:disabled{ opacity:.5; cursor:default; }
 
-  .range-note{ font-family:'IBM Plex Mono', monospace; font-size:11px;
-               font-weight:400; color:var(--ink-soft); text-transform:none;
-               letter-spacing:0; margin-left:8px; }
-  /* ---------- Overview: the same design as the landing-page demo,
-       running on real data from /api/summary and /api/trend ---------- */
-  :root{ --dash-surface:#0F171F; --dash-grid:#1B2630; --muted:#7E90A2;
-         --good:#00F0A8; --warning:#FAB219; --critical:#FF5C72; }
+  /* ---------- tabs ---------- */
+  .tabs{ display:flex; gap:8px; flex-wrap:wrap; padding:20px 0 0; }
+  .tab{ font-family:'IBM Plex Mono', monospace; font-size:13px; padding:9px 15px;
+        border:1px solid var(--hair); border-radius:6px; background:none;
+        color:var(--ink-soft); cursor:pointer; }
+  .tab[aria-current="true"]{ color:var(--mint); border-color:var(--mint-dim); background:var(--mint-bg); }
 
-  .ov-safe{ background:var(--dash-surface); border:1px solid var(--hair);
-            border-radius:6px; padding:20px 22px; margin-bottom:16px; }
-  .ov-eyebrow{ font-family:'IBM Plex Mono', monospace; font-size:11px;
-               letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft); margin:0; }
-  .ov-fig{ font-family:'IBM Plex Sans', sans-serif; font-size:46px; line-height:1.05;
-           font-weight:600; letter-spacing:-.02em; margin:10px 0 2px; }
-  .ov-sub{ font-size:13px; color:var(--ink-soft); margin:0 0 18px; }
-  .ov-sub b{ color:var(--ink); font-weight:600; }
+  .bar{ display:flex; align-items:center; justify-content:space-between; gap:16px;
+        flex-wrap:wrap; padding:16px 0 22px; }
+  select.ctl{ font-family:'IBM Plex Mono', monospace; font-size:12px; background:var(--bg-panel);
+              color:var(--ink); border:1px solid var(--hair-strong); border-radius:6px; padding:8px 11px; }
 
-  .meter-track{ position:relative; height:10px; border-radius:2px; background:var(--dash-grid); }
+  .panel{ display:none; padding-bottom:64px; }
+  .panel[aria-current="true"]{ display:block; }
+
+  h2.view{ font-family:'Space Grotesk', sans-serif; font-size:24px; margin:0 0 4px; }
+  p.lede{ color:var(--ink-soft); font-size:14px; margin:0 0 20px; max-width:62ch; }
+
+  .card{ background:var(--surface); border:1px solid var(--hair); border-radius:6px; padding:20px 22px; }
+  .eyebrow{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.12em;
+            text-transform:uppercase; color:var(--ink-soft); margin:0; }
+
+  /* ---------- overview ---------- */
+  .fig{ font-size:46px; line-height:1.05; font-weight:600; letter-spacing:-.02em; margin:10px 0 2px; }
+  .fig-sub{ font-size:13px; color:var(--ink-soft); margin:0 0 18px; }
+  .fig-sub b{ color:var(--ink); font-weight:600; }
+  .meter-track{ position:relative; height:10px; border-radius:2px; background:var(--grid); }
   .meter-fill{ position:absolute; inset:0 auto 0 0; border-radius:2px 4px 4px 2px; background:var(--mint); }
   .meter-tick{ position:absolute; top:-5px; bottom:-5px; width:2px; background:var(--ink); border-radius:1px; }
   .meter-legend{ display:flex; justify-content:space-between; gap:12px; margin-top:9px;
                  font-size:12px; color:var(--muted); }
   .meter-legend .mono{ font-family:'IBM Plex Mono', monospace; color:var(--ink-soft); }
   .status{ display:inline-flex; align-items:center; gap:7px; font-size:13px; font-weight:600; }
-  .status.good{ color:var(--good); }
-  .status.warning{ color:var(--warning); }
+  .status.good{ color:var(--mint); } .status.warn{ color:var(--warning); }
 
-  .ov-tiles{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px; }
-  .tile{ background:var(--dash-surface); border:1px solid var(--hair); border-radius:6px;
-         padding:16px 18px; display:flex; flex-direction:column; gap:2px; }
-  .tile .t-label{ font-size:12.5px; color:var(--ink-soft); }
-  .tile .t-value{ font-family:'IBM Plex Sans', sans-serif; font-size:25px; font-weight:600;
-                  letter-spacing:-.015em; margin-top:2px; }
-  .tile .t-foot{ display:flex; align-items:flex-end; justify-content:space-between; gap:10px; margin-top:8px; }
-  .tile .t-delta{ font-size:12.5px; display:flex; align-items:center; gap:5px; }
-  .tile .t-delta.up-good{ color:var(--good); }
-  .tile .t-delta.down-bad{ color:var(--critical); }
-  .tile .t-delta.flat{ color:var(--muted); }
-  .tile .t-delta .vs{ color:var(--muted); }
-  .spark{ display:block; }
+  .tiles{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:16px; margin-top:16px; }
+  .tile{ background:var(--surface); border:1px solid var(--hair); border-radius:6px; padding:16px 18px; }
+  .t-label{ font-size:12.5px; color:var(--ink-soft); }
+  .t-value{ font-size:25px; font-weight:600; letter-spacing:-.015em; margin-top:2px; }
+  .t-foot{ display:flex; align-items:flex-end; justify-content:space-between; gap:10px; margin-top:8px; }
+  .t-delta{ font-size:12.5px; display:flex; align-items:center; gap:5px; }
+  .t-delta.up-good{ color:var(--mint); } .t-delta.down-bad{ color:var(--coral); }
+  .t-delta.flat{ color:var(--muted); } .t-delta .vs{ color:var(--muted); }
 
-  .ov-cats{ margin-top:16px; border-top:1px solid var(--hair); padding-top:14px;
-            font-family:'IBM Plex Mono', monospace; font-size:13px; }
-  .ov-cats .row{ display:flex; justify-content:space-between; color:var(--ink-soft); line-height:1.9; }
-  .ov-cats .row b{ color:var(--ink); font-weight:500; }
+  /* ---------- category rows ---------- */
+  .crow{ display:grid; grid-template-columns:120px minmax(0,1fr) 110px; gap:14px;
+         align-items:center; padding:10px 0; border-top:1px solid var(--hair); }
+  .crow:first-child{ border-top:none; }
+  .crow .cname{ display:flex; align-items:center; gap:8px; font-size:13.5px; }
+  .crow .swatch{ width:10px; height:10px; border-radius:2px; flex:none; }
+  .crow .ctrack{ height:8px; background:var(--grid); border-radius:2px; overflow:hidden; }
+  .crow .cfill{ height:100%; border-radius:2px; }
+  .crow .camt{ text-align:right; font-family:'IBM Plex Mono', monospace; font-size:13px; }
 
-  @media (max-width: 560px){ .ov-tiles{ grid-template-columns:minmax(0,1fr); } }
-  .range-select{
-    font-family:'IBM Plex Mono', monospace; font-size:12px;
-    background:var(--bg); color:var(--ink-soft);
-    border:1px solid var(--hair); border-radius:6px; padding:7px 10px;
+  /* ---------- table ---------- */
+  table.data{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  table.data th{ text-align:left; font-family:'IBM Plex Mono', monospace; font-size:11px;
+                 letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
+                 padding:0 10px 10px 0; font-weight:500; }
+  table.data td{ padding:9px 10px 9px 0; border-top:1px solid var(--hair); vertical-align:top; }
+  table.data td.num{ text-align:right; font-family:'IBM Plex Mono', monospace;
+                     font-variant-numeric:tabular-nums; white-space:nowrap; }
+  td.num.in{ color:var(--mint); }
+  .pill{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft);
+         border:1px solid var(--hair); border-radius:99px; padding:2px 8px; white-space:nowrap; }
+
+  /* ---------- banks ---------- */
+  .bank{ border-top:1px solid var(--hair); padding:14px 0; }
+  .bank:first-child{ border-top:none; }
+  .bank .inst{ font-size:15px; }
+  .bank .acct{ display:flex; justify-content:space-between; gap:12px; color:var(--ink-soft);
+               font-family:'IBM Plex Mono', monospace; font-size:13px; line-height:1.9; padding-left:14px; }
+  .bank .acct b{ color:var(--mint); font-weight:500; }
+  .warnpill{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--warning); }
+
+  .msg{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-soft);
+        min-height:1.3em; margin:14px 0 0; }
+  .msg.bad{ color:var(--coral); } .msg.good{ color:var(--mint); }
+  .empty{ color:var(--ink-soft); font-size:14px; margin:0; }
+
+  /* ---------- signed out ---------- */
+  .gate{ display:flex; flex-direction:column; align-items:center; justify-content:center;
+         gap:18px; min-height:70vh; text-align:center; }
+  .gate p{ color:var(--ink-soft); max-width:44ch; margin:0; }
+
+  @media (max-width: 900px){ .tiles{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
+  @media (max-width: 560px){
+    .tiles{ grid-template-columns:minmax(0,1fr); }
+    .crow{ grid-template-columns:100px minmax(0,1fr); }
+    .crow .camt{ grid-column:1 / -1; text-align:left; }
   }
-
-  .note{
-    max-width:560px; font-family:'IBM Plex Mono', monospace;
-    font-size:11px; line-height:1.7; color:var(--ink-soft); text-align:center;
-  }
-  .note b{ color:var(--warning); font-weight:500; }
-  a{ color:var(--mint-dim); }
 </style>
 </head>
 <body>
 
-<div class="wordmark">bilancio<span>_</span></div>
-
-<div id="signin" hidden>
-  <button id="go-signin" class="primary" type="button">Sign in / create account</button>
-</div>
-
-<div class="panel" id="proof" hidden>
-  <h2>Auth chain</h2>
-  <ol>
-    <li id="s-config"  class="pending"><span class="mark"></span><span>Publishable key from Worker <span class="detail"></span></span></li>
-    <li id="s-clerk"   class="pending"><span class="mark"></span><span>Clerk loaded <span class="detail"></span></span></li>
-    <li id="s-session" class="pending"><span class="mark"></span><span>Signed in <span class="detail"></span></span></li>
-    <li id="s-token"   class="pending"><span class="mark"></span><span>Session token issued <span class="detail"></span></span></li>
-    <li id="s-me"      class="pending"><span class="mark"></span><span>Token verified on Worker <span class="detail"></span></span></li>
-    <li id="s-row"     class="pending"><span class="mark"></span><span>Local users row in Neon <span class="detail"></span></span></li>
-  </ol>
-  <div class="actions" id="actions" hidden>
-    <button id="signout" type="button">Sign out</button>
-    <button id="recheck" type="button">Re-run check</button>
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="wordmark" href="/">bilancio<span>_</span></a>
+    <div class="who" id="who" hidden>
+      <span id="who-email"></span>
+      <button id="signout" type="button">Sign out</button>
+    </div>
   </div>
-</div>
+</header>
 
-<div class="panel" id="banks" hidden>
-  <h2>Linked banks</h2>
-  <div id="bank-list" class="bank-list"></div>
-  <div class="actions">
-    <button id="link-bank" class="primary" type="button">Connect a bank</button>
-    <button id="sync-now" type="button">Sync transactions</button>
+<main class="wrap">
+
+  <div class="gate" id="gate" hidden>
+    <h2 class="view">Sign in to your ledger</h2>
+    <p id="gate-note">Bilancio is invitation-only while we open it to a first group.</p>
+    <button class="primary" id="go-signin" type="button">Sign in</button>
+    <p><a href="/#signup" style="color:var(--mint-dim)">Not invited yet? Reserve your line</a></p>
   </div>
-  <p class="bank-status" id="bank-status"></p>
-</div>
 
-<div class="panel" id="snapshot" hidden>
-  <h2>Overview <span class="range-note" id="snap-range"></span></h2>
+  <div id="app" hidden>
+    <div class="tabs" id="tabs">
+      <button class="tab" data-view="overview" aria-current="true">Overview</button>
+      <button class="tab" data-view="trend">Trend</button>
+      <button class="tab" data-view="categories">Categories</button>
+      <button class="tab" data-view="transactions">Transactions</button>
+      <button class="tab" data-view="banks">Banks</button>
+    </div>
 
-  <div class="ov-safe" id="ov-safe"></div>
-  <div class="ov-tiles" id="ov-tiles"></div>
-  <div class="ov-cats" id="ov-cats"></div>
+    <div class="bar">
+      <select class="ctl" id="range">
+        <option value="this-month" selected>This month</option>
+        <option value="last-month">Last month</option>
+        <option value="last-3">Last 3 months</option>
+        <option value="last-6">Last 6 months</option>
+        <option value="ytd">Year to date</option>
+      </select>
+      <span class="msg" id="global-msg"></span>
+    </div>
 
-  <div class="actions">
-    <select class="range-select" id="snap-range-select">
-      <option value="this-month" selected>This month</option>
-      <option value="last-month">Last month</option>
-      <option value="last-3">Last 3 months</option>
-      <option value="last-6">Last 6 months</option>
-      <option value="ytd">Year to date</option>
-    </select>
-    <button id="snap-refresh" type="button">Refresh</button>
+    <section class="panel" id="v-overview" aria-current="true">
+      <h2 class="view">What's actually left</h2>
+      <p class="lede">Safe-to-spend with a pace line, then money in, money out, kept and your savings rate — each against the comparable period before.</p>
+      <div class="card" id="ov-safe"></div>
+      <div class="tiles" id="ov-tiles"></div>
+    </section>
+
+    <section class="panel" id="v-trend">
+      <h2 class="view">A year, against the year before</h2>
+      <p class="lede">Where the money went each month, stacked by category, with a dashed line showing what that same month cost you a year earlier.</p>
+      <div class="bar" style="padding-top:0">
+        <select class="ctl" id="trend-range">
+          <option value="3">Last 3 months</option>
+          <option value="6">Last 6 months</option>
+          <option value="12" selected>Last year</option>
+          <option value="24">Last 2 years</option>
+        </select>
+      </div>
+      <div class="card"><div id="trend-chart"></div></div>
+    </section>
+
+    <section class="panel" id="v-categories">
+      <h2 class="view">Where it goes</h2>
+      <p class="lede">Every settled transaction sorted into a bucket. Transfers between your own accounts are excluded — moving money is not spending.</p>
+      <div class="card" id="cat-list"></div>
+    </section>
+
+    <section class="panel" id="v-transactions">
+      <h2 class="view">Every line</h2>
+      <p class="lede">Newest first. Amounts read the way you think about them: money in is positive.</p>
+      <div class="card" id="tx-list"></div>
+    </section>
+
+    <section class="panel" id="v-banks">
+      <h2 class="view">Linked banks</h2>
+      <p class="lede">Bilancio reads your accounts. It cannot move money, and access tokens are encrypted before they are stored.</p>
+      <div class="card" id="bank-list"></div>
+      <div class="bar">
+        <span>
+          <button class="primary" id="link-bank" type="button">Connect a bank</button>
+          <button id="sync-now" type="button">Sync transactions</button>
+        </span>
+      </div>
+      <p class="msg" id="bank-msg"></p>
+    </section>
   </div>
-  <p class="bank-status" id="snap-status"></p>
-</div>
-
-<p class="note">
-  This page proves the plumbing end to end — auth, then a real bank connection.
-  It is <b>not</b> the product: the dashboard on the
-  <a href="/">landing page</a> still runs on demo data in your browser.
-</p>
+</main>
 
 <script>
 const CLERK_JS_VERSION = '6';
+const PLAID_LINK_JS = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-/**
- * Load clerk-js from your own Clerk instance rather than a public CDN — the
- * host is base64'd into the publishable key, so dev and production each load
- * their own with nothing hard-coded.
- */
-function clerkScriptUrl(publishableKey) {
-  const host = atob(publishableKey.split('_').slice(2).join('_')).replace(/\$$/, '');
-  return `https://${host}/npm/@clerk/clerk-js@${CLERK_JS_VERSION}/dist/clerk.browser.js`;
-}
-
-const step = (id, state, detail) => {
-  const el = document.getElementById(id);
-  el.className = state;
-  el.querySelector('.detail').textContent = detail ? `— ${detail}` : '';
+const CAT_COLOUR = {
+  home:'var(--cat-home)', groceries:'var(--cat-groceries)', shopping:'var(--cat-shopping)',
+  dining:'var(--cat-dining)', pets:'var(--cat-pets)', transport:'var(--cat-transport)',
+  bills:'var(--cat-bills)'
 };
 
-async function boot() {
-  document.getElementById('proof').hidden = false;
+const $ = id => document.getElementById(id);
+const money  = c => (c / 100).toLocaleString('en-US', { style:'currency', currency:'USD' });
+const money0 = c => (c / 100).toLocaleString('en-US', { style:'currency', currency:'USD', maximumFractionDigits:0 });
+const say = (el, text, tone) => { el.textContent = text; el.className = 'msg' + (tone ? ' ' + tone : ''); };
 
-  // 1 — publishable key, so dev and production keys never get hard-coded here.
-  let publishableKey;
+/* ------------------------------------------------------------------ auth -- */
+
+function clerkScriptUrl(pk) {
+  const host = atob(pk.split('_').slice(2).join('_')).replace(/=+$/, '').replace(/\$$/, '');
+  return 'https://' + host + '/npm/@clerk/clerk-js@' + CLERK_JS_VERSION + '/dist/clerk.browser.js';
+}
+
+async function boot() {
+  let pk;
   try {
-    const res = await fetch('/api/auth/config');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    ({ publishableKey } = await res.json());
-    if (!publishableKey) throw new Error('CLERK_PUBLISHABLE_KEY not set on the Worker');
-    step('s-config', 'ok', publishableKey.slice(0, 11) + '…');
+    const cfg = await (await fetch('/api/auth/config')).json();
+    pk = cfg.publishableKey;
+    if (!pk) throw new Error('CLERK_PUBLISHABLE_KEY is not set on the Worker');
   } catch (err) {
-    return step('s-config', 'fail', err.message);
+    $('gate').hidden = false;
+    $('gate-note').textContent = err.message;
+    return;
   }
 
-  // 2 — load clerk-js with that key.
   try {
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = clerkScriptUrl(publishableKey);
+      s.src = clerkScriptUrl(pk);
       s.async = true;
       s.crossOrigin = 'anonymous';
-      s.setAttribute('data-clerk-publishable-key', publishableKey);
+      s.setAttribute('data-clerk-publishable-key', pk);
       s.onload = resolve;
-      s.onerror = () => reject(new Error('could not load clerk.browser.js'));
+      s.onerror = () => reject(new Error('could not load Clerk'));
       document.head.appendChild(s);
     });
-    // clerk-js validates the key while it initialises and, if it hates it,
-    // throws before ever setting window.Clerk. Say so plainly rather than
-    // letting this surface as "cannot read properties of undefined".
-    if (!window.Clerk) {
-      throw new Error(`clerk-js rejected the publishable key (${publishableKey.slice(0, 11)}…) — check CLERK_PUBLISHABLE_KEY`);
-    }
+    if (!window.Clerk) throw new Error('Clerk rejected the publishable key');
     await window.Clerk.load();
-    step('s-clerk', 'ok');
   } catch (err) {
-    return step('s-clerk', 'fail', err.message);
-  }
-
-  await check();
-}
-
-async function check() {
-  const Clerk = window.Clerk;
-  const signinEl = document.getElementById('signin');
-
-  // 3 — signed in? If not, offer the button and stop here.
-  //
-  // Sign-in happens on Clerk's hosted Account Portal rather than an embedded
-  // widget: mountSignIn() needs UI components that clerk.browser.js fetches at
-  // runtime, and when that fetch does not resolve it fails at the mount with
-  // "Clerk was not loaded with Ui components". The redirect needs none of that,
-  // and Clerk maintains the page it sends you to.
-  if (!Clerk.user) {
-    step('s-session', 'pending', 'waiting for sign-in');
-    document.getElementById('actions').hidden = true;
-    signinEl.hidden = false;
-    return;
-  }
-  signinEl.hidden = true;
-  document.getElementById('actions').hidden = false;
-  step('s-session', 'ok', Clerk.user.primaryEmailAddress?.emailAddress ?? Clerk.user.id);
-
-  // 4 — token.
-  let token;
-  try {
-    token = await Clerk.session.getToken();
-    if (!token) throw new Error('no active session');
-    step('s-token', 'ok');
-  } catch (err) {
-    return step('s-token', 'fail', err.message);
-  }
-
-  // 5 + 6 — Worker verifies it, and mirrors the user into Postgres.
-  try {
-    const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } });
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.reason || body.error || `HTTP ${res.status}`);
-    step('s-me', 'ok', '200');
-    step('s-row', 'ok', body.user.id);
-  } catch (err) {
-    step('s-me', 'fail', err.message);
-    step('s-row', 'fail');
+    $('gate').hidden = false;
+    $('gate-note').textContent = err.message;
     return;
   }
 
-  // The auth chain held, so the bank and snapshot panels are worth showing.
-  document.getElementById('banks').hidden = false;
-  document.getElementById('snapshot').hidden = false;
-  loadBanks();
-  loadSnapshot();
+  if (!window.Clerk.user) { $('gate').hidden = false; return; }
+
+  $('app').hidden = false;
+  $('who').hidden = false;
+  const email = window.Clerk.user.primaryEmailAddress;
+  $('who-email').textContent = email ? email.emailAddress : '';
+  refresh();
 }
 
-/* ==========================================================================
-   Overview — the demo's first view, rendered from real Plaid data.
-   Same design language as the landing page; the numbers come from the Worker.
-   ========================================================================== */
+async function authed(path, options) {
+  options = options || {};
+  const token = await window.Clerk.session.getToken();
+  const headers = Object.assign({}, options.headers || {}, { Authorization: 'Bearer ' + token });
+  const res = await fetch(path, Object.assign({}, options, { headers }));
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.message || body.reason || body.error || ('HTTP ' + res.status));
+  return body;
+}
 
-/** Compact sparkline. Flat series get a flat line rather than a divide-by-zero. */
+/* ----------------------------------------------------------------- views -- */
+
+const range = () => $('range').value;
+let summaryCache = null;
+
+async function summaryFor(r) {
+  if (summaryCache && summaryCache.range.key === r) return summaryCache;
+  summaryCache = await authed('/api/summary?range=' + encodeURIComponent(r));
+  return summaryCache;
+}
+
+async function refresh() {
+  const current = document.querySelector('.tab[aria-current="true"]');
+  const view = current ? current.dataset.view : 'overview';
+  const msg = $('global-msg');
+  say(msg, 'Loading…');
+  try {
+    if (view === 'overview')     await renderOverview();
+    if (view === 'trend')        await renderTrend();
+    if (view === 'categories')   await renderCategories();
+    if (view === 'transactions') await renderTransactions();
+    if (view === 'banks')        await renderBanks();
+    say(msg, '');
+  } catch (err) {
+    say(msg, err.message, 'bad');
+  }
+}
+
 function sparkline(values, stroke) {
-  const W = 116, H = 30, P = 4;
-  const lo = Math.min(...values), hi = Math.max(...values);
+  const W = 104, H = 28, P = 4;
+  const lo = Math.min.apply(null, values), hi = Math.max.apply(null, values);
   const span = (hi - lo) || 1;
   const x = i => P + (i / Math.max(1, values.length - 1)) * (W - P * 2);
   const y = v => H - P - ((v - lo) / span) * (H - P * 2);
   const d = values.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
-  const last = values[values.length - 1];
-  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">
-    <path d="${d}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity=".85"/>
-    <circle cx="${x(values.length - 1).toFixed(1)}" cy="${y(last).toFixed(1)}" r="2.5" fill="${stroke}"/>
-  </svg>`;
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true">' +
+    '<path d="' + d + '" fill="none" stroke="' + stroke + '" stroke-width="1.5" stroke-linejoin="round" opacity=".85"/>' +
+    '<circle cx="' + x(values.length - 1).toFixed(1) + '" cy="' + y(values[values.length - 1]).toFixed(1) +
+    '" r="2.5" fill="' + stroke + '"/></svg>';
 }
 
-/**
- * Direction is not the same as good. More money in is good; more money out is
- * not. Each tile says which way it reads rather than assuming up means up.
- */
+/** Direction is not the same as good: more in is good, more out is not. */
 function tile(label, value, now, before, betterWhen, spark) {
   let cls = 'flat', arrow = '', text = 'no prior period';
   if (before) {
@@ -355,143 +356,193 @@ function tile(label, value, now, before, betterWhen, spark) {
     const good = betterWhen === 'up' ? rose : !rose;
     cls = pct === 0 ? 'flat' : (good ? 'up-good' : 'down-bad');
     arrow = pct === 0 ? '' : (rose ? '▲' : '▼');
-    text = `${pct >= 0 ? '+' : ''}${pct}%`;
+    text = (pct >= 0 ? '+' : '') + pct + '%';
   }
-  return `<div class="tile">
-    <div class="t-label">${label}</div>
-    <div class="t-value">${value}</div>
-    <div class="t-foot">
-      <span class="t-delta ${cls}">${arrow} ${text} <span class="vs">vs prior</span></span>
-      ${spark || ''}
-    </div>
-  </div>`;
+  return '<div class="tile"><div class="t-label">' + label + '</div>' +
+    '<div class="t-value">' + value + '</div><div class="t-foot">' +
+    '<span class="t-delta ' + cls + '">' + arrow + ' ' + text + ' <span class="vs">vs prior</span></span>' +
+    (spark || '') + '</div></div>';
 }
 
-async function loadSnapshot() {
-  const range = document.getElementById('snap-range-select').value;
-  const status = document.getElementById('snap-status');
-  status.textContent = 'Computing…';
-  status.className = 'bank-status';
+async function renderOverview() {
+  const s = await summaryFor(range());
+  const t = s.totals, p = s.previous, safe = s.safeToSpend;
 
-  try {
-    const s = await authed(`/api/summary?range=${encodeURIComponent(range)}`);
-    const t = s.totals, p = s.previous, safe = s.safeToSpend;
-    document.getElementById('snap-range').textContent = `${s.range.start} → ${s.range.end}`;
+  const spentPct = safe.budget ? Math.min(100, (safe.spent / safe.budget) * 100) : 0;
+  const pacePct  = Math.min(100, (safe.daysElapsed / safe.daysInPeriod) * 100);
 
-    /* ---- safe to spend, with a pace tick ---- */
-    const spentPct = safe.budget ? Math.min(100, (safe.spent / safe.budget) * 100) : 0;
-    const pacePct  = Math.min(100, (safe.daysElapsed / safe.daysInPeriod) * 100);
-    document.getElementById('ov-safe').innerHTML = `
-      <p class="ov-eyebrow">Safe to spend · rest of period</p>
-      <p class="ov-fig">${money(safe.remaining)}</p>
-      <p class="ov-sub">${safe.daysLeft > 0
-        ? `That is about <b>${money(safe.perDay)} a day</b> for the ${safe.daysLeft} days left.`
-        : 'The period is complete.'}</p>
-      <div class="meter-track">
-        <div class="meter-fill" style="width:${spentPct.toFixed(1)}%"></div>
-        <div class="meter-tick" style="left:${pacePct.toFixed(1)}%"></div>
-      </div>
-      <div class="meter-legend">
-        <span class="mono">${money(safe.spent)} spent of ${money(safe.budget)}</span>
-        <span class="status ${safe.onPace ? 'good' : 'warning'}">${safe.onPace ? '✓ on pace' : '! ahead of pace'}</span>
-      </div>`;
+  $('ov-safe').innerHTML =
+    '<p class="eyebrow">Safe to spend · ' + s.range.label.toLowerCase() + '</p>' +
+    '<p class="fig">' + money(safe.remaining) + '</p>' +
+    '<p class="fig-sub">' + (safe.daysLeft > 0
+      ? 'That is about <b>' + money(safe.perDay) + ' a day</b> for the ' + safe.daysLeft + ' days left.'
+      : 'This period is complete.') + '</p>' +
+    '<div class="meter-track">' +
+      '<div class="meter-fill" style="width:' + spentPct.toFixed(1) + '%"></div>' +
+      '<div class="meter-tick" style="left:' + pacePct.toFixed(1) + '%" title="where a steady period would have you today"></div>' +
+    '</div>' +
+    '<div class="meter-legend"><span class="mono">' + money(safe.spent) + ' spent of ' + money(safe.budget) + '</span>' +
+    '<span class="status ' + (safe.onPace ? 'good' : 'warn') + '">' +
+    (safe.onPace ? '✓ on pace' : '! ahead of pace') + '</span></div>';
 
-    /* ---- four tiles, with sparklines from the trend endpoint ---- */
-    let sp = null;
-    try { sp = (await authed('/api/trend?months=12')).sparklines; } catch { /* tiles still work without */ }
-    const line = (arr, colour) => (sp && arr && arr.some(v => v) ? sparkline(arr, colour) : '');
+  let sp = null;
+  try { sp = (await authed('/api/trend?months=12')).sparklines; } catch (e) { /* cosmetic only */ }
+  const line = (arr, colour) => (arr && arr.some(v => v) ? sparkline(arr, colour) : '');
 
-    document.getElementById('ov-tiles').innerHTML = [
-      tile('Money in',     money(t.income),  t.income,  p.income,  'up',   line(sp?.income,  'var(--good)')),
-      tile('Money out',    money(t.expense), t.expense, p.expense, 'down', line(sp?.expense, 'var(--critical)')),
-      tile('Kept',         money(t.net),     t.net,     p.net,     'up',   line(sp?.net,     'var(--good)')),
-      tile('Savings rate',
-           t.income ? ((t.net / t.income) * 100).toFixed(1) + '%' : '—',
-           t.income ? (t.net / t.income) * 100 : 0,
-           p.income ? (p.net / p.income) * 100 : 0,
-           'up', line(sp?.savingsRate, 'var(--good)')),
-    ].join('');
+  $('ov-tiles').innerHTML = [
+    tile('Money in',  money(t.income),  t.income,  p.income,  'up',   line(sp && sp.income,  'var(--mint)')),
+    tile('Money out', money(t.expense), t.expense, p.expense, 'down', line(sp && sp.expense, 'var(--coral)')),
+    tile('Kept',      money(t.net),     t.net,     p.net,     'up',   line(sp && sp.net,     'var(--mint)')),
+    tile('Savings rate',
+         t.income ? ((t.net / t.income) * 100).toFixed(1) + '%' : '—',
+         t.income ? (t.net / t.income) * 100 : 0,
+         p.income ? (p.net / p.income) * 100 : 0, 'up',
+         line(sp && sp.savingsRate, 'var(--mint)'))
+  ].join('');
+}
 
-    /* ---- where it went ---- */
-    const cats = Object.entries(t.byCategory).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-    const label = id => (s.categories.find(c => c.id === id) || {}).label || id;
-    document.getElementById('ov-cats').innerHTML = cats.length
-      ? cats.map(([id, v]) => `<div class="row"><span>${label(id)}</span><b>${money(v)}</b></div>`).join('')
-      : '<div class="row">No categorised spending in this range.</div>';
+async function renderCategories() {
+  const s = await summaryFor(range());
+  const rows = Object.keys(s.totals.byCategory)
+    .map(id => [id, s.totals.byCategory[id]])
+    .filter(pair => pair[1] > 0)
+    .sort((a, b) => b[1] - a[1]);
 
-    status.textContent = t.transfersExcluded
-      ? `${t.transfersExcluded} transfer${t.transfersExcluded === 1 ? '' : 's'} excluded — moving your own money is not spending.`
-      : 'No transfers in this range.';
-  } catch (err) {
-    status.textContent = err.message;
-    status.className = 'bank-status bad';
+  const host = $('cat-list');
+  if (!rows.length) { host.innerHTML = '<p class="empty">No categorised spending in this range.</p>'; return; }
+
+  const max = rows[0][1];
+  const labelOf = id => {
+    const found = s.categories.filter(c => c.id === id)[0];
+    return found ? found.label : id;
+  };
+  host.innerHTML = rows.map(pair => {
+    const id = pair[0], v = pair[1], colour = CAT_COLOUR[id] || 'var(--muted)';
+    return '<div class="crow">' +
+      '<div class="cname"><span class="swatch" style="background:' + colour + '"></span>' + labelOf(id) + '</div>' +
+      '<div class="ctrack"><div class="cfill" style="width:' + ((v / max) * 100).toFixed(1) + '%;background:' + colour + '"></div></div>' +
+      '<div class="camt">' + money(v) + '</div></div>';
+  }).join('');
+}
+
+async function renderTransactions() {
+  const r = await authed('/api/transactions?range=' + encodeURIComponent(range()) + '&limit=200');
+  const host = $('tx-list');
+  if (!r.transactions.length) { host.innerHTML = '<p class="empty">Nothing in this range.</p>'; return; }
+
+  const rows = r.transactions.map(t =>
+    '<tr><td class="num" style="color:var(--muted)">' + t.date + '</td>' +
+    '<td>' + t.name + (t.pending ? ' <span class="pill">pending</span>' : '') + '</td>' +
+    '<td><span class="pill">' + (t.kind === 'transfer' ? 'transfer' : (t.category || '—')) +
+    (t.categorySource === 'user' ? ' ·edited' : '') + '</span></td>' +
+    '<td class="num' + (t.amount > 0 ? ' in' : '') + '">' + (t.amount > 0 ? '+' : '') + money(t.amount) + '</td></tr>'
+  ).join('');
+
+  host.innerHTML = '<table class="data"><thead><tr><th>Date</th><th>Description</th>' +
+    '<th>Category</th><th style="text-align:right">Amount</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<p class="msg">' + r.transactions.length + ' of ' + r.total + ' shown.</p>';
+}
+
+async function renderTrend() {
+  const months = Number($('trend-range').value);
+  const tr = await authed('/api/trend?months=' + months);
+  const host = $('trend-chart');
+  const data = tr.series, prior = tr.priorSeries;
+
+  if (!data.some(m => m.expense > 0)) {
+    host.innerHTML = '<p class="empty">No monthly data yet.</p>';
+    return;
   }
-}
 
-document.getElementById('snap-refresh').addEventListener('click', loadSnapshot);
-document.getElementById('snap-range-select').addEventListener('change', loadSnapshot);
+  const W = Math.max(560, host.clientWidth || 880), H = 320;
+  const PL = 66, PR = 14, PT = 20, PB = 38;
+  const plotW = W - PL - PR, plotH = H - PT - PB;
+  const peak = Math.max(
+    Math.max.apply(null, data.map(m => m.expense)),
+    Math.max.apply(null, prior.map(m => m.expense))
+  ) || 1;
 
-/* ==========================================================================
-   Plaid — link a bank, then pull what it knows.
-   Every call carries the Clerk session token; the Worker decides ownership.
-   ========================================================================== */
-const PLAID_LINK_JS = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
+  // round the axis up to something a person would choose
+  const mag = Math.pow(10, Math.floor(Math.log10(peak / 4)));
+  const stepMul = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].filter(m => m * mag >= peak / 4)[0] || 10;
+  const yMax = stepMul * mag * 4;
+  const y = v => PT + plotH - (v / yMax) * plotH;
+  const band = plotW / data.length;
+  const barW = Math.min(26, band * 0.55);
+  const every = Math.ceil(data.length / 12);
 
-const statusEl = () => document.getElementById('bank-status');
-function say(msg, tone) {
-  const el = statusEl();
-  el.textContent = msg;
-  el.className = 'bank-status' + (tone ? ' ' + tone : '');
-}
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
+            '" role="img" aria-label="Monthly spending against the year before">';
 
-async function authed(path, options = {}) {
-  const token = await window.Clerk.session.getToken();
-  const res = await fetch(path, {
-    ...options,
-    headers: { ...(options.headers || {}), Authorization: `Bearer ${token}` }
+  for (let i = 0; i <= 4; i++) {
+    const v = (yMax / 4) * i, yy = y(v);
+    svg += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + yy + '" y2="' + yy + '" stroke="var(--grid)" stroke-width="1"/>' +
+           '<text x="' + (PL - 9) + '" y="' + (yy + 4) + '" text-anchor="end" font-family="IBM Plex Mono" ' +
+           'font-size="10.5" fill="var(--muted)">' + money0(v) + '</text>';
+  }
+
+  data.forEach((m, i) => {
+    const cx = PL + band * i + band / 2;
+    let acc = 0;
+    Object.keys(m.byCategory).forEach(id => {
+      const v = m.byCategory[id];
+      if (!v) return;
+      const top = y(acc + v), bot = y(acc);
+      svg += '<rect x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
+             '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 2).toFixed(1) +
+             '" fill="' + (CAT_COLOUR[id] || 'var(--muted)') + '" rx="1"><title>' + id + ': ' + money(v) + '</title></rect>';
+      acc += v;
+    });
+
+    if (i % every === 0 || i === data.length - 1) {
+      const parts = m.month.split('-');
+      const label = MONTH_NAMES[Number(parts[1]) - 1] +
+        (parts[1] === '01' || i === 0 ? " '" + parts[0].slice(2) : '');
+      svg += '<text x="' + cx + '" y="' + (H - PB + 18) + '" text-anchor="middle" font-family="IBM Plex Mono" ' +
+             'font-size="10.5" fill="var(--muted)">' + label + '</text>';
+    }
   });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.message || body.reason || body.error || `HTTP ${res.status}`);
-  return body;
+
+  // year-ago line last, so it draws over the bars; dashed so it reads as a reference
+  const pts = prior.map((p, i) => (PL + band * i + band / 2).toFixed(1) + ',' + y(p.expense).toFixed(1));
+  svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--ink)" stroke-width="2" ' +
+         'stroke-dasharray="5 4" opacity=".78"/>';
+  prior.forEach((p, i) => {
+    svg += '<circle cx="' + (PL + band * i + band / 2).toFixed(1) + '" cy="' + y(p.expense).toFixed(1) +
+           '" r="3.5" fill="var(--bg-panel)" stroke="var(--ink)" stroke-width="2">' +
+           '<title>' + p.month + ': ' + money(p.expense) + '</title></circle>';
+  });
+  svg += '</svg>';
+
+  const legend = Object.keys(CAT_COLOUR).map(id =>
+    '<span style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;font-size:12.5px;color:var(--ink-soft)">' +
+    '<span style="width:11px;height:11px;border-radius:2px;background:' + CAT_COLOUR[id] + '"></span>' + id + '</span>'
+  ).join('');
+
+  host.innerHTML = svg + '<div style="margin-top:12px">' + legend +
+    '<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)">' +
+    '<span style="width:15px;border-top:2px dashed var(--ink);opacity:.78"></span>same month, last year</span></div>';
 }
 
-const money = cents =>
-  (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+/* ----------------------------------------------------------------- banks -- */
 
-async function loadBanks() {
-  try {
-    const { items } = await authed('/api/plaid/items');
-    const list = document.getElementById('bank-list');
-    list.textContent = '';
+async function renderBanks() {
+  const res = await authed('/api/plaid/items');
+  const host = $('bank-list');
+  if (!res.items.length) { host.innerHTML = '<p class="empty">No banks linked yet.</p>'; return; }
 
-    if (!items.length) {
-      const p = document.createElement('p');
-      p.className = 'none';
-      p.textContent = 'No banks linked yet.';
-      list.appendChild(p);
-      return;
-    }
-
-    for (const item of items) {
-      const head = document.createElement('div');
-      head.className = 'inst';
-      head.textContent = `${item.institution || 'Bank'} — ${item.accounts.length} account${item.accounts.length === 1 ? '' : 's'}`;
-      list.appendChild(head);
-
-      for (const a of item.accounts) {
-        const row = document.createElement('div');
-        row.className = 'acct';
-        const bal = a.currentBalance === null ? '—' : money(a.currentBalance);
-        row.innerHTML = `${a.name}${a.mask ? ' ••' + a.mask : ''} <span class="amt">${bal}</span>`;
-        list.appendChild(row);
-      }
-    }
-  } catch (err) {
-    say(err.message, 'bad');
-  }
+  host.innerHTML = res.items.map(it =>
+    '<div class="bank"><div class="inst">' + (it.institution || 'Bank') + ' — ' + it.accounts.length +
+    ' account' + (it.accounts.length === 1 ? '' : 's') +
+    (it.awaitingFirstSync ? ' <span class="warnpill">· waiting for transactions</span>' : '') + '</div>' +
+    it.accounts.map(a =>
+      '<div class="acct"><span>' + a.name + (a.mask ? ' ••' + a.mask : '') + '</span>' +
+      '<b>' + (a.currentBalance === null ? '—' : money(a.currentBalance)) + '</b></div>'
+    ).join('') + '</div>'
+  ).join('');
 }
 
-function loadPlaidScript() {
+function loadPlaid() {
   if (window.Plaid) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
@@ -502,86 +553,87 @@ function loadPlaidScript() {
   });
 }
 
-document.getElementById('link-bank').addEventListener('click', async () => {
-  const btn = document.getElementById('link-bank');
+$('link-bank').addEventListener('click', async () => {
+  const btn = $('link-bank'), msg = $('bank-msg');
   btn.disabled = true;
-  say('Asking Plaid for a link token…');
-
+  say(msg, 'Opening Plaid…');
   try {
-    await loadPlaidScript();
-    const { linkToken } = await authed('/api/plaid/link-token', { method: 'POST' });
-    say('Opening Plaid…');
-
-    const handler = window.Plaid.create({
-      token: linkToken,
+    await loadPlaid();
+    const res = await authed('/api/plaid/link-token', { method: 'POST' });
+    window.Plaid.create({
+      token: res.linkToken,
       onSuccess: async (publicToken) => {
         try {
-          say('Exchanging token and storing it encrypted…');
+          say(msg, 'Storing the connection…');
           const ex = await authed('/api/plaid/exchange', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ publicToken })
+            body: JSON.stringify({ publicToken: publicToken })
           });
-          say(`Linked ${ex.item.institution || 'bank'}. Pulling transactions…`);
-
+          say(msg, 'Linked ' + (ex.item.institution || 'bank') + '. Pulling transactions…');
           const sync = await authed('/api/plaid/sync', { method: 'POST' });
           if (sync.pending && sync.pending.length) {
-            // Plaid took the connection but is still fetching history.
-            say(`Linked. ${sync.pending.join(', ')} is still preparing transactions — click Sync in a moment.`);
+            say(msg, sync.pending.join(', ') + ' is still preparing transactions — click Sync in a moment.');
           } else {
-            say(`Done — ${sync.added} transactions in, ${sync.modified} updated.`, 'good');
+            say(msg, 'Done — ' + sync.added + ' transactions in.', 'good');
           }
-          loadBanks();
+          summaryCache = null;
+          await renderBanks();
         } catch (err) {
-          say(err.message, 'bad');
+          say(msg, err.message, 'bad');
         } finally {
           btn.disabled = false;
         }
       },
       onExit: (err) => {
-        say(err ? `Link closed: ${err.display_message || err.error_message || err.error_code}` : 'Link closed.',
+        say(msg, err ? 'Link closed: ' + (err.display_message || err.error_message || err.error_code) : 'Link closed.',
             err ? 'bad' : '');
         btn.disabled = false;
       }
-    });
-
-    handler.open();
+    }).open();
   } catch (err) {
-    say(err.message, 'bad');
+    say(msg, err.message, 'bad');
     btn.disabled = false;
   }
 });
 
-document.getElementById('sync-now').addEventListener('click', async () => {
-  const btn = document.getElementById('sync-now');
+$('sync-now').addEventListener('click', async () => {
+  const btn = $('sync-now'), msg = $('bank-msg');
   btn.disabled = true;
-  say('Syncing…');
+  say(msg, 'Syncing…');
   try {
     const r = await authed('/api/plaid/sync', { method: 'POST' });
-    if (r.items === 0) {
-      say('Nothing to sync — no banks linked yet.', 'good');
-    } else if (r.pending && r.pending.length) {
-      say(`${r.pending.join(', ')} is still preparing transactions at Plaid. Try again shortly.`);
-    } else {
-      say(`${r.added} added, ${r.modified} updated, ${r.removed} removed across ${r.items} bank${r.items === 1 ? '' : 's'}.`, 'good');
-    }
-    loadBanks();
+    if (!r.items) say(msg, 'Nothing to sync — no banks linked yet.');
+    else if (r.pending && r.pending.length) say(msg, r.pending.join(', ') + ' is still preparing transactions. Try again shortly.');
+    else say(msg, r.added + ' added, ' + r.modified + ' updated, ' + r.removed + ' removed.', 'good');
+    summaryCache = null;
+    await renderBanks();
   } catch (err) {
-    say(err.message, 'bad');
+    say(msg, err.message, 'bad');
   } finally {
     btn.disabled = false;
   }
 });
 
-document.getElementById('go-signin').addEventListener('click', () => {
-  // redirectUrl brings us back here afterwards instead of to the landing page.
-  window.Clerk.redirectToSignIn({ redirectUrl: `${location.origin}/app` });
+/* ---------------------------------------------------------------- wiring -- */
+
+$('tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.tab');
+  if (!btn) return;
+  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-current', String(t === btn)));
+  document.querySelectorAll('.panel').forEach(p =>
+    p.setAttribute('aria-current', String(p.id === 'v-' + btn.dataset.view)));
+  refresh();
 });
-document.getElementById('signout').addEventListener('click', async () => {
+
+$('range').addEventListener('change', () => { summaryCache = null; refresh(); });
+$('trend-range').addEventListener('change', refresh);
+$('go-signin').addEventListener('click', () =>
+  window.Clerk.redirectToSignIn({ redirectUrl: location.origin + '/app' }));
+$('signout').addEventListener('click', async () => {
   await window.Clerk.signOut();
   location.reload();
 });
-document.getElementById('recheck').addEventListener('click', check);
 
 boot();
 </script>
