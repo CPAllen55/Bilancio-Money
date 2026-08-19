@@ -310,6 +310,9 @@
 
   /* ---------- VIEWS ---------- */
   .views{ padding: 88px 0; border-top: 1px solid var(--hair); }
+  .trend-ctl{ display:flex; align-items:center; gap: 10px; flex: none; }
+  .trend-ctl .ctl{ font-size: 12px; padding: 5px 8px; }
+
   .views-head{ max-width: 62ch; margin: 46px auto 0; text-align:center; }
   .views-head h2{ font-size: clamp(28px, 3.4vw, 38px); margin: 12px 0 10px; }
   .views-head p{ color: var(--ink-soft); margin: 0; }
@@ -867,13 +870,24 @@
               <h3 id="h-trend">A year, against the year before</h3>
               <p class="sub" id="trend-sub"></p>
             </div>
-            <button class="tbl-toggle" type="button" data-table="trend" aria-pressed="false">Table view</button>
+            <div class="trend-ctl">
+              <label class="sr-only" for="f-trend-range">Trend range</label>
+              <select class="ctl" id="f-trend-range">
+                <option value="3">Last 3 months</option>
+                <option value="6">Last 6 months</option>
+                <option value="9">Last 9 months</option>
+                <option value="12" selected>Last year</option>
+                <option value="24">Last 2 years</option>
+                <option value="36">Max</option>
+              </select>
+              <button class="tbl-toggle" type="button" data-table="trend" aria-pressed="false">Table view</button>
+            </div>
           </div>
           <p class="panel-lede">Where the money went each month, stacked by category — with a dashed line showing what that same month cost you a year earlier.</p>
           <div class="scroll-x" id="trend-chart"></div>
           <div id="trend-table" hidden></div>
           <ul class="legend" id="trend-legend"></ul>
-          <figcaption>Always the last twelve months against the twelve before them, so seasonal spending reads as a pattern rather than a surprise.</figcaption>
+          <figcaption>Every column is measured against the same month a year earlier, so seasonal spending reads as a pattern rather than a surprise.</figcaption>
         </figure>
       </article>
 
@@ -1203,11 +1217,13 @@ const pick = a => a[Math.floor(rand() * a.length)];
 
 const TODAY = new Date();
 TODAY.setHours(0,0,0,0);
-/* 24 months, oldest → newest. Two years, because the trend chart draws each
-   month against the same month a year earlier — the older twelve are never
-   shown as bars, they are the comparison line. */
+/* 48 months, oldest → newest. Four years, because the trend chart draws every
+   month against the same month a year earlier: whatever range is on screen,
+   the twelve months behind it have to exist. At the widest range — 36 bars —
+   that needs 48 months, and the oldest twelve are only ever the line. */
+const TREND_RANGES = [3, 6, 9, 12, 24, 36];
 const MONTHS = [];
-for (let i = 23; i >= 0; i--){
+for (let i = 47; i >= 0; i--){
   const d = new Date(TODAY.getFullYear(), TODAY.getMonth() - i, 1);
   MONTHS.push(d);
 }
@@ -1264,6 +1280,7 @@ const state = {
   selected: new Set(),
   txLimit: 8,
   hidden: new Set(),        // legend toggles on the trend chart
+  trendMonths: 12,          // bars on the trend chart; the line reaches 12 further back
   lastAction: null
 };
 try {
@@ -1775,10 +1792,20 @@ function renderTrend(){
     const t = totals(sliceFor(w));
     return { month:m, byCat:t.byCat, total:CATS.reduce((s,c) => s + (state.hidden.has(c.id) ? 0 : t.byCat[c.id]), 0) };
   };
-  const months = MONTHS.slice(-12);
-  const priorMonths = MONTHS.slice(0, 12);          // same months, one year back
+  const n = TREND_RANGES.includes(state.trendMonths) ? state.trendMonths : 12;
+  const months = MONTHS.slice(-n);
+  /* The comparison window is the visible one shifted back twelve months, so it
+     always holds exactly n entries. Ending this slice at -n instead of -12 is
+     correct only when n is 12, and silently wrong at every other range. */
+  const priorMonths = MONTHS.slice(-(n + 12), -12);
   const data = months.map(monthTotal);
   const prior = priorMonths.map(monthTotal);
+
+  /* At 24 and 36 bars every column cannot carry a label without them colliding,
+     so thin them out and drop the per-column totals — the axis still gives the
+     scale, and the tooltip still gives the exact figure. */
+  const labelEvery = Math.ceil(n / 12);
+  const showColumnTotals = n <= 12;
 
   const W = chartWidth(host, 420), H = 300, PL = 56, PR = 12, PT = 22, PB = 34;   // PB holds the x-axis band
   const plotW = W - PL - PR, plotH = H - PT - PB;
@@ -1840,12 +1867,17 @@ function renderTrend(){
     });
 
     /* label selectively — the column total only, on the cap */
-    const lb = svg('text', { class:'dlabel soft', x:cx, y:y(d.total) - 7, 'text-anchor':'middle' });
-    lb.textContent = moneyCompact(d.total);
-    s.appendChild(lb);
+    if (showColumnTotals){
+      const lb = svg('text', { class:'dlabel soft', x:cx, y:y(d.total) - 7, 'text-anchor':'middle' });
+      lb.textContent = moneyCompact(d.total);
+      s.appendChild(lb);
+    }
 
-    /* year on January and on the first column, so a twelve-month span reads
-       without repeating the year under every bar */
+    /* year on January and on the first column, so a long span reads without
+       repeating the year under every bar. At wide ranges only every nth
+       column is labelled, or they overlap into mush. */
+    const labelThis = (i === 0) || (i % labelEvery === 0) || d.month.getMonth() === 0;
+    if (!labelThis) return;
     const xl = svg('text', { class:'tick', x:cx, y:H - PB + 17, 'text-anchor':'middle' });
     xl.textContent = (i === 0 || d.month.getMonth() === 0)
       ? monthShort(d.month) + " '" + String(d.month.getFullYear()).slice(-2)
@@ -1880,7 +1912,17 @@ function renderTrend(){
 
   host.appendChild(s);
 
-  /* The headline comparison is now against a year ago, not against last month —
+  const RANGE_TITLE = {
+    3:  'Three months, against a year earlier',
+    6:  'Six months, against a year earlier',
+    9:  'Nine months, against a year earlier',
+    12: 'A year, against the year before',
+    24: 'Two years, against the years before',
+    36: 'Three years, against the years before'
+  };
+  document.getElementById('h-trend').textContent = RANGE_TITLE[n] || RANGE_TITLE[12];
+
+  /* The headline comparison is against a year ago, not against last month —
      that is the question the line was added to answer. */
   const last = data[data.length - 1], lastYear = prior[prior.length - 1];
   const gap = last.total - lastYear.total;
@@ -2273,6 +2315,13 @@ ACCOUNTS.forEach(a => { const o = document.createElement('option'); o.value = a.
 document.getElementById('f-range').addEventListener('change', e => { state.range = e.target.value; state.txLimit = 8; state.selected.clear(); render(); });
 accSel.addEventListener('change', e => { state.account = e.target.value; state.txLimit = 8; state.selected.clear(); render(); });
 document.getElementById('show-more').addEventListener('click', () => { state.txLimit += 8; render(); });
+/* Trend range is local to that one chart — it does not touch the global range
+   filter, which drives every other view. Only the trend needs redrawing. */
+document.getElementById('f-trend-range').addEventListener('change', e => {
+  state.trendMonths = parseInt(e.target.value, 10);
+  renderTrend();
+  syncRailHeight();
+});
 document.getElementById('reset-demo').addEventListener('click', () => {
   state.overrides = {}; state.rules = {}; state.selected.clear(); state.category = 'all'; state.lastAction = null;
   persist(); render(); toast('Demo reset — every category back to its default.', []);
