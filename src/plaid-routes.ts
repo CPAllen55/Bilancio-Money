@@ -184,6 +184,7 @@ plaid.post("/sync", async (c) => {
     if (!mine.length) return c.json({ ok: true, items: 0, added: 0, modified: 0, removed: 0 });
 
     let added = 0, modified = 0, removed = 0;
+    const pending: string[] = [];
 
     for (const item of mine) {
       const accessToken = await openToken(c.env, item.accessTokenCiphertext, item.accessTokenIv);
@@ -194,9 +195,23 @@ plaid.post("/sync", async (c) => {
 
       let cursor = item.transactionsCursor;
       let hasMore = true;
+      let notReady = false;
 
       while (hasMore) {
-        const page = await syncTransactions(c.env, accessToken, cursor);
+        let page;
+        try {
+          page = await syncWithRetry(c.env, accessToken, cursor);
+        } catch (err) {
+          // Plaid has accepted the item but has not finished pulling history
+          // from the institution yet. That is a wait, not a failure — say so
+          // rather than throwing a 502 at somebody who did nothing wrong.
+          if (err instanceof PlaidError && err.errorCode === "PRODUCT_NOT_READY") {
+            pending.push(item.institutionName ?? "your bank");
+            notReady = true;
+            break;
+          }
+          throw err;
+        }
 
         added += await writeTransactions(db, byPlaidId, page.added);
         modified += await writeTransactions(db, byPlaidId, page.modified);
@@ -219,6 +234,10 @@ plaid.post("/sync", async (c) => {
         hasMore = page.has_more;
       }
 
+      // Nothing was fetched, so there is no progress to record — leaving
+      // lastSyncedAt unset keeps "never synced" honest.
+      if (notReady) continue;
+
       // Store the cursor only after the whole item succeeded, so a mid-sync
       // failure resumes from the last good point rather than skipping a page.
       await db
@@ -227,13 +246,46 @@ plaid.post("/sync", async (c) => {
         .where(eq(items.id, item.id));
     }
 
-    return c.json({ ok: true, items: mine.length, added, modified, removed });
+    return c.json({
+      ok: true,
+      items: mine.length,
+      added,
+      modified,
+      removed,
+      // Non-empty when Plaid is still preparing history for those institutions.
+      pending,
+    });
   } catch (err) {
     return c.json(plaidFailure(err), 502);
   } finally {
     c.executionCtx.waitUntil(close());
   }
 });
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * /transactions/sync is not ready the instant an item is created — Plaid still
+ * has to pull history from the institution, and answers PRODUCT_NOT_READY until
+ * it has. A few seconds usually covers it, so a short retry turns "link, then
+ * fail, then click again" into "link, then it works".
+ *
+ * The real answer for production is Plaid's SYNC_UPDATES_AVAILABLE webhook, so
+ * Plaid tells us when data is ready instead of us guessing. This keeps the
+ * common case working until that exists.
+ */
+async function syncWithRetry(env: Env, accessToken: string, cursor: string | null) {
+  const waits = [1500, 3000, 5000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await syncTransactions(env, accessToken, cursor);
+    } catch (err) {
+      const retryable = err instanceof PlaidError && err.errorCode === "PRODUCT_NOT_READY";
+      if (!retryable || attempt >= waits.length) throw err;
+      await sleep(waits[attempt]);
+    }
+  }
+}
 
 async function writeTransactions(
   db: ReturnType<typeof getDb>["db"],
@@ -298,6 +350,9 @@ plaid.get("/items", async (c) => {
         institution: item.institutionName,
         status: item.status,
         lastSyncedAt: item.lastSyncedAt,
+        // A linked-but-never-synced item should not look identical to one
+        // holding a year of history.
+        awaitingFirstSync: item.lastSyncedAt === null,
         accounts: owned.map((a) => ({
           id: a.id,
           name: a.name,

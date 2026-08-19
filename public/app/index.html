@@ -482,7 +482,12 @@ document.getElementById('link-bank').addEventListener('click', async () => {
           say(`Linked ${ex.item.institution || 'bank'}. Pulling transactions…`);
 
           const sync = await authed('/api/plaid/sync', { method: 'POST' });
-          say(`Done — ${sync.added} transactions in, ${sync.modified} updated.`, 'good');
+          if (sync.pending && sync.pending.length) {
+            // Plaid took the connection but is still fetching history.
+            say(`Linked. ${sync.pending.join(', ')} is still preparing transactions — click Sync in a moment.`);
+          } else {
+            say(`Done — ${sync.added} transactions in, ${sync.modified} updated.`, 'good');
+          }
           loadBanks();
         } catch (err) {
           say(err.message, 'bad');
@@ -510,10 +515,13 @@ document.getElementById('sync-now').addEventListener('click', async () => {
   say('Syncing…');
   try {
     const r = await authed('/api/plaid/sync', { method: 'POST' });
-    say(r.items === 0
-      ? 'Nothing to sync — no banks linked yet.'
-      : `${r.added} added, ${r.modified} updated, ${r.removed} removed across ${r.items} bank${r.items === 1 ? '' : 's'}.`,
-      'good');
+    if (r.items === 0) {
+      say('Nothing to sync — no banks linked yet.', 'good');
+    } else if (r.pending && r.pending.length) {
+      say(`${r.pending.join(', ')} is still preparing transactions at Plaid. Try again shortly.`);
+    } else {
+      say(`${r.added} added, ${r.modified} updated, ${r.removed} removed across ${r.items} bank${r.items === 1 ? '' : 's'}.`, 'good');
+    }
     loadBanks();
   } catch (err) {
     say(err.message, 'bad');
