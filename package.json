@@ -13,7 +13,8 @@
     "db:studio": "drizzle-kit studio",
     "waitlist": "node scripts/waitlist.mjs prod",
     "waitlist:dev": "node scripts/waitlist.mjs dev",
-    "brand": "node scripts/brand.mjs"
+    "brand": "node scripts/brand.mjs",
+    "preview": "node scripts/serve-static.mjs"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",
