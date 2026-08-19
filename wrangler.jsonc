@@ -46,7 +46,17 @@
   // to the live domain. Local development overrides it from .dev.vars, which
   // still holds the pk_test_/sk_test_ pair.
   "vars": {
-    "CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuYmlsYW5jaW9tb25leS5jb20k"
+    "CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuYmlsYW5jaW9tb25leS5jb20k",
+
+    // Which Plaid host to call. Stays "sandbox" until Plaid grants production
+    // access — the secret and this value have to move together, or the calls
+    // fail with an error that does not say why.
+    "PLAID_ENV": "sandbox",
+
+    // Empty until a bank that needs an OAuth hand-off is in play. Whatever goes
+    // here must FIRST be registered under Plaid → Developers → API → Allowed
+    // redirect URIs; an unregistered value makes every link attempt fail.
+    "PLAID_REDIRECT_URI": ""
   },
 
   // No named environments on purpose. The Cloudflare build runs

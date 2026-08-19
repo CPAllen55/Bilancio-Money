@@ -78,6 +78,18 @@
     background:var(--mint); border-color:var(--mint); font-weight:600;
   }
   button.primary:hover{ color:var(--bg); background:#2BFFC0; border-color:#2BFFC0; }
+  .bank-list{ font-family:'IBM Plex Mono', monospace; font-size:13px; line-height:1.8; }
+  .bank-list .inst{ color:var(--ink); }
+  .bank-list .acct{ color:var(--ink-soft); padding-left:14px; }
+  .bank-list .amt{ color:var(--mint); }
+  .bank-list .none{ color:var(--ink-soft); }
+  .bank-status{
+    margin:14px 0 0; font-family:'IBM Plex Mono', monospace;
+    font-size:12px; color:var(--ink-soft); min-height:1.2em;
+  }
+  .bank-status.bad{ color:var(--coral); }
+  .bank-status.good{ color:var(--mint); }
+
   .note{
     max-width:560px; font-family:'IBM Plex Mono', monospace;
     font-size:11px; line-height:1.7; color:var(--ink-soft); text-align:center;
@@ -110,9 +122,20 @@
   </div>
 </div>
 
+<div class="panel" id="banks" hidden>
+  <h2>Linked banks</h2>
+  <div id="bank-list" class="bank-list"></div>
+  <div class="actions">
+    <button id="link-bank" class="primary" type="button">Connect a bank</button>
+    <button id="sync-now" type="button">Sync transactions</button>
+  </div>
+  <p class="bank-status" id="bank-status"></p>
+</div>
+
 <p class="note">
-  This page exists to prove the auth chain end to end. It is <b>not</b> the product —
-  the dashboard on the <a href="/">landing page</a> still runs on demo data in your browser.
+  This page proves the plumbing end to end — auth, then a real bank connection.
+  It is <b>not</b> the product: the dashboard on the
+  <a href="/">landing page</a> still runs on demo data in your browser.
 </p>
 
 <script>
@@ -217,8 +240,147 @@ async function check() {
   } catch (err) {
     step('s-me', 'fail', err.message);
     step('s-row', 'fail');
+    return;
+  }
+
+  // The auth chain held, so the bank panel is worth showing.
+  document.getElementById('banks').hidden = false;
+  loadBanks();
+}
+
+/* ==========================================================================
+   Plaid — link a bank, then pull what it knows.
+   Every call carries the Clerk session token; the Worker decides ownership.
+   ========================================================================== */
+const PLAID_LINK_JS = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
+
+const statusEl = () => document.getElementById('bank-status');
+function say(msg, tone) {
+  const el = statusEl();
+  el.textContent = msg;
+  el.className = 'bank-status' + (tone ? ' ' + tone : '');
+}
+
+async function authed(path, options = {}) {
+  const token = await window.Clerk.session.getToken();
+  const res = await fetch(path, {
+    ...options,
+    headers: { ...(options.headers || {}), Authorization: `Bearer ${token}` }
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.message || body.reason || body.error || `HTTP ${res.status}`);
+  return body;
+}
+
+const money = cents =>
+  (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+
+async function loadBanks() {
+  try {
+    const { items } = await authed('/api/plaid/items');
+    const list = document.getElementById('bank-list');
+    list.textContent = '';
+
+    if (!items.length) {
+      const p = document.createElement('p');
+      p.className = 'none';
+      p.textContent = 'No banks linked yet.';
+      list.appendChild(p);
+      return;
+    }
+
+    for (const item of items) {
+      const head = document.createElement('div');
+      head.className = 'inst';
+      head.textContent = `${item.institution || 'Bank'} — ${item.accounts.length} account${item.accounts.length === 1 ? '' : 's'}`;
+      list.appendChild(head);
+
+      for (const a of item.accounts) {
+        const row = document.createElement('div');
+        row.className = 'acct';
+        const bal = a.currentBalance === null ? '—' : money(a.currentBalance);
+        row.innerHTML = `${a.name}${a.mask ? ' ••' + a.mask : ''} <span class="amt">${bal}</span>`;
+        list.appendChild(row);
+      }
+    }
+  } catch (err) {
+    say(err.message, 'bad');
   }
 }
+
+function loadPlaidScript() {
+  if (window.Plaid) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = PLAID_LINK_JS;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('could not load Plaid Link'));
+    document.head.appendChild(s);
+  });
+}
+
+document.getElementById('link-bank').addEventListener('click', async () => {
+  const btn = document.getElementById('link-bank');
+  btn.disabled = true;
+  say('Asking Plaid for a link token…');
+
+  try {
+    await loadPlaidScript();
+    const { linkToken } = await authed('/api/plaid/link-token', { method: 'POST' });
+    say('Opening Plaid…');
+
+    const handler = window.Plaid.create({
+      token: linkToken,
+      onSuccess: async (publicToken) => {
+        try {
+          say('Exchanging token and storing it encrypted…');
+          const ex = await authed('/api/plaid/exchange', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ publicToken })
+          });
+          say(`Linked ${ex.item.institution || 'bank'}. Pulling transactions…`);
+
+          const sync = await authed('/api/plaid/sync', { method: 'POST' });
+          say(`Done — ${sync.added} transactions in, ${sync.modified} updated.`, 'good');
+          loadBanks();
+        } catch (err) {
+          say(err.message, 'bad');
+        } finally {
+          btn.disabled = false;
+        }
+      },
+      onExit: (err) => {
+        say(err ? `Link closed: ${err.display_message || err.error_message || err.error_code}` : 'Link closed.',
+            err ? 'bad' : '');
+        btn.disabled = false;
+      }
+    });
+
+    handler.open();
+  } catch (err) {
+    say(err.message, 'bad');
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('sync-now').addEventListener('click', async () => {
+  const btn = document.getElementById('sync-now');
+  btn.disabled = true;
+  say('Syncing…');
+  try {
+    const r = await authed('/api/plaid/sync', { method: 'POST' });
+    say(r.items === 0
+      ? 'Nothing to sync — no banks linked yet.'
+      : `${r.added} added, ${r.modified} updated, ${r.removed} removed across ${r.items} bank${r.items === 1 ? '' : 's'}.`,
+      'good');
+    loadBanks();
+  } catch (err) {
+    say(err.message, 'bad');
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 document.getElementById('go-signin').addEventListener('click', () => {
   // redirectUrl brings us back here afterwards instead of to the landing page.
