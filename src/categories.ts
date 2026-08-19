@@ -49,6 +49,9 @@ const BY_DETAILED: Record<string, string> = {
   GENERAL_SERVICES_EDUCATION: "education",
   GENERAL_SERVICES_CHILDCARE: "kids",
   GENERAL_SERVICES_ACCOUNTING_AND_FINANCIAL_PLANNING: "business",
+  // Interest you pay is an obligation, not a bank fee — and it is emphatically
+  // not the same thing as interest you earn.
+  BANK_FEES_INTEREST_CHARGE: "interest-paid",
   GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT: "taxes",
   GOVERNMENT_AND_NON_PROFIT_DONATIONS: "giving",
   ENTERTAINMENT_TV_AND_MOVIES: "subscriptions",
@@ -73,17 +76,30 @@ const BY_PRIMARY: Record<string, string> = {
   GOVERNMENT_AND_NON_PROFIT: "other",
 };
 
-const INCOME_PRIMARY = new Set(["INCOME"]);
 const TRANSFER_PRIMARY = new Set(["TRANSFER_IN", "TRANSFER_OUT"]);
+
+/** Money coming in has its own tree — interest earned is not interest paid. */
+const INCOME_BY_DETAILED: Record<string, string> = {
+  INCOME_WAGES: "salary",
+  INCOME_INTEREST_EARNED: "interest-earned",
+  INCOME_DIVIDENDS: "dividends",
+  INCOME_TAX_REFUND: "refunds",
+  INCOME_RETIREMENT_PENSION: "other-income",
+  INCOME_UNEMPLOYMENT: "other-income",
+  INCOME_OTHER_INCOME: "other-income",
+};
 
 export interface Classified {
   kind: Kind;
-  /** null for income and transfers — neither belongs in a spending bucket. */
+  /** null only for transfers, which belong on neither side of the ledger. */
   slug: string | null;
 }
 
 export function classify(primary: string | null, detailed: string | null): Classified {
-  if (primary && INCOME_PRIMARY.has(primary)) return { kind: "income", slug: null };
+  if (primary === "INCOME") {
+    const slug = (detailed && INCOME_BY_DETAILED[detailed]) || "other-income";
+    return { kind: "income", slug };
+  }
   if (primary && TRANSFER_PRIMARY.has(primary)) return { kind: "transfer", slug: null };
 
   const fromDetailed = detailed ? BY_DETAILED[detailed] : undefined;

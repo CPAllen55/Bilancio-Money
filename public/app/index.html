@@ -80,6 +80,20 @@
   .meter-track{ position:relative; height:10px; border-radius:2px; background:var(--grid); }
   .meter-fill{ position:absolute; inset:0 auto 0 0; border-radius:2px 4px 4px 2px; background:var(--mint); }
   .meter-tick{ position:absolute; top:-5px; bottom:-5px; width:2px; background:var(--ink); border-radius:1px; }
+
+  /* Income over spending, same scale. Both bars share a track width, so the
+     shorter one is short because less went out — not because it was drawn
+     against a different maximum. */
+  .bars{ display:flex; flex-direction:column; gap:10px; margin:4px 0 12px; }
+  .brow{ display:grid; grid-template-columns:34px minmax(0,1fr) 96px; gap:12px; align-items:center; }
+  .blabel{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.08em;
+           text-transform:uppercase; color:var(--muted); }
+  .btrack{ position:relative; height:10px; border-radius:2px; background:var(--grid); }
+  .bfill{ position:absolute; inset:0 auto 0 0; border-radius:2px 4px 4px 2px; }
+  .bfill.in{ background:var(--mint); opacity:.85; }
+  .bfill.out{ background:var(--coral); }
+  .bamt{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; text-align:right; color:var(--ink); }
+  .bamt.out{ color:var(--coral); }
   .meter-legend{ display:flex; justify-content:space-between; gap:12px; margin-top:9px;
                  font-size:12px; color:var(--muted); }
   .meter-legend .mono{ font-family:'IBM Plex Mono', monospace; color:var(--ink-soft); }
@@ -413,7 +427,10 @@ async function renderOverview() {
   const s = await summaryFor(range());
   const t = s.totals, p = s.previous, safe = s.safeToSpend;
 
-  const spentPct = safe.budget ? Math.min(100, (safe.spent / safe.budget) * 100) : 0;
+  // Capped at 100 so an overspent month does not draw a bar past the card, but
+  // the overspend is still stated in words below rather than hidden by the cap.
+  const overspent = t.expense > t.income && t.income > 0;
+  const spentPct = t.income ? Math.min(100, (t.expense / t.income) * 100) : (t.expense ? 100 : 0);
   const pacePct  = Math.min(100, (safe.daysElapsed / safe.daysInPeriod) * 100);
 
   $('ov-safe').innerHTML =
@@ -422,11 +439,29 @@ async function renderOverview() {
     '<p class="fig-sub">' + (safe.daysLeft > 0
       ? 'That is about <b>' + money(safe.perDay) + ' a day</b> for the ' + safe.daysLeft + ' days left.'
       : 'This period is complete.') + '</p>' +
-    '<div class="meter-track">' +
-      '<div class="meter-fill" style="width:' + spentPct.toFixed(1) + '%"></div>' +
-      '<div class="meter-tick" style="left:' + pacePct.toFixed(1) + '%" title="where a steady period would have you today"></div>' +
+    // Income above, spending directly beneath it, on the same scale. The
+    // difference in their lengths is the money kept — visible without reading
+    // a single number.
+    '<div class="bars">' +
+      '<div class="brow">' +
+        '<span class="blabel">In</span>' +
+        '<div class="btrack"><div class="bfill in" style="width:100%"></div></div>' +
+        '<span class="bamt">' + money(t.income) + '</span>' +
+      '</div>' +
+      '<div class="brow">' +
+        '<span class="blabel">Out</span>' +
+        '<div class="btrack">' +
+          '<div class="bfill out" style="width:' + spentPct.toFixed(1) + '%"></div>' +
+          '<div class="meter-tick" style="left:' + pacePct.toFixed(1) + '%" title="where a steady period would have you today"></div>' +
+        '</div>' +
+        '<span class="bamt out">' + money(t.expense) + '</span>' +
+      '</div>' +
     '</div>' +
-    '<div class="meter-legend"><span class="mono">' + money(safe.spent) + ' spent of ' + money(safe.budget) + '</span>' +
+    '<div class="meter-legend"><span class="mono">' +
+    (overspent
+      ? money(t.expense - t.income) + ' more went out than came in'
+      : money(safe.spent) + ' spent of ' + money(safe.budget) +
+        (t.income > 0 ? ' · the gap is ' + money(t.income - t.expense) + ' kept' : '')) + '</span>' +
     '<span class="status ' + (safe.onPace ? 'good' : 'warn') + '">' +
     (safe.onPace ? '✓ on pace' : '! ahead of pace') + '</span></div>';
 
@@ -634,14 +669,19 @@ async function renderTrend() {
     return;
   }
 
-  const all = actual.map(m => ({ month: m.month, byParent: m.byParent || {}, expense: m.expense, projected: false }))
-    .concat(projected.map(m => ({ month: m.month, byParent: m.byParent || {}, expense: m.expense, projected: true })));
+  const all = actual.map(m =>
+      ({ month: m.month, byParent: m.byParent || {}, expense: m.expense, income: m.income || 0, projected: false }))
+    .concat(projected.map(m =>
+      ({ month: m.month, byParent: m.byParent || {}, expense: m.expense, income: m.income || 0, projected: true })));
 
   const W = Math.max(560, host.clientWidth || 880), H = 320;
   const PL = 66, PR = 14, PT = 20, PB = 38;
   const plotW = W - PL - PR, plotH = H - PT - PB;
+  // Income is on the same axis as spending — that is the entire point. If it
+  // were scaled separately the gap between them would be meaningless.
   const peak = Math.max(
     Math.max.apply(null, all.map(m => m.expense).concat([0])),
+    Math.max.apply(null, all.map(m => m.income).concat([0])),
     Math.max.apply(null, prior.map(m => m.expense).concat([0]))
   ) || 1;
 
@@ -673,6 +713,35 @@ async function renderTrend() {
     svg += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + yy + '" y2="' + yy + '" stroke="var(--grid)" stroke-width="1"/>' +
            '<text x="' + (PL - 9) + '" y="' + (yy + 4) + '" text-anchor="end" font-family="IBM Plex Mono" ' +
            'font-size="10.5" fill="var(--muted)">' + money0(v) + '</text>';
+  }
+
+  /* ---- income, as a wave behind the bars ----
+     Drawn before the bars so it sits underneath them. Where the wave rises
+     above a bar, that gap is money kept; where a bar breaks through it, that
+     month cost more than it earned. Same axis as spending, or the comparison
+     would be a lie. */
+  if (all.some(m => m.income > 0)) {
+    const pts = all.map((m, i) => [PL + band * i + band / 2, y(m.income)]);
+
+    // Smooth through the points with midpoint control handles — a straight
+    // polyline reads as a measurement, and this is a level, not a series.
+    let d = 'M' + PL + ',' + y(all[0].income).toFixed(1);
+    d += ' L' + pts[0][0].toFixed(1) + ',' + pts[0][1].toFixed(1);
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+      const mx = (x0 + x1) / 2;
+      d += ' C' + mx.toFixed(1) + ',' + y0.toFixed(1) + ' ' + mx.toFixed(1) + ',' + y1.toFixed(1) +
+           ' ' + x1.toFixed(1) + ',' + y1.toFixed(1);
+    }
+    d += ' L' + (W - PR) + ',' + y(all[all.length - 1].income).toFixed(1);
+
+    const baseline = y(0);
+    svg += '<defs><linearGradient id="incomeWave" x1="0" y1="0" x2="0" y2="1">' +
+           '<stop offset="0" stop-color="var(--mint)" stop-opacity=".22"/>' +
+           '<stop offset="1" stop-color="var(--mint)" stop-opacity=".02"/></linearGradient></defs>' +
+           '<path d="' + d + ' L' + (W - PR) + ',' + baseline + ' L' + PL + ',' + baseline + ' Z" ' +
+           'fill="url(#incomeWave)"/>' +
+           '<path d="' + d + '" fill="none" stroke="var(--mint)" stroke-width="1.5" opacity=".7"/>';
   }
 
   all.forEach((m, i) => {
@@ -728,9 +797,17 @@ async function renderTrend() {
     escapeHtml(labelOfSlug(id)) + '</span>'
   ).join('');
 
-  host.innerHTML = svg + '<div style="margin-top:12px">' + legend +
+  const incomeKey = all.some(m => m.income > 0)
+    ? '<span style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;font-size:12.5px;color:var(--ink-soft)">' +
+      '<span style="width:15px;height:9px;border-radius:2px;background:var(--mint);opacity:.4"></span>income</span>'
+    : '';
+
+  host.innerHTML = svg + '<div style="margin-top:12px">' + incomeKey + legend +
     '<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)">' +
-    '<span style="width:15px;border-top:2px dashed var(--ink);opacity:.78"></span>same month, last year</span></div>';
+    '<span style="width:15px;border-top:2px dashed var(--ink);opacity:.78"></span>same month, last year</span></div>' +
+    (all.some(m => m.income > 0)
+      ? '<p class="fc-method" style="margin-top:8px">The gap between the wave and a bar is what that month kept.</p>'
+      : '');
 
   await renderForecast();
 }

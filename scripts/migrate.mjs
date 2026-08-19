@@ -39,13 +39,14 @@ try {
   // parent, and a single pass would depend on the JSON being ordered correctly.
   for (const c of system) {
     await client.query(
-      `insert into categories (user_id, slug, label, colour, sort_order, is_system)
-       values (null, $1, $2, $3, $4, true)
+      `insert into categories (user_id, slug, label, colour, sort_order, is_system, kind)
+       values (null, $1, $2, $3, $4, true, $5)
        on conflict (slug) where user_id is null
        do update set label = excluded.label,
                      colour = excluded.colour,
-                     sort_order = excluded.sort_order`,
-      [c.slug, c.label, c.colour, c.sortOrder],
+                     sort_order = excluded.sort_order,
+                     kind = excluded.kind`,
+      [c.slug, c.label, c.colour, c.sortOrder, c.kind ?? "spend"],
     );
   }
 

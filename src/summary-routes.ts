@@ -33,6 +33,7 @@ const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
 export interface CategoryRow {
   id: string; slug: string; label: string; colour: string; sortOrder: number; isSystem: boolean;
+  kind: string;
   parentId: string | null;
   parentSlug: string | null;
   parentLabel: string | null;
@@ -62,7 +63,7 @@ export async function loadCategories(
     .select({
       id: categories.id, slug: categories.slug, label: categories.label,
       colour: categories.colour, sortOrder: categories.sortOrder,
-      isSystem: categories.isSystem, parentId: categories.parentId,
+      isSystem: categories.isSystem, kind: categories.kind, parentId: categories.parentId,
     })
     .from(categories)
     .where(
@@ -102,13 +103,19 @@ export async function loadCategories(
   return { list: rows, slugById, parentOfSlug, ruleBySlugKey };
 }
 
-/** Rolls leaf totals up to their parents. Leaves with no parent stand alone. */
+/**
+ * Rolls leaf totals up to their parents. Leaves with no parent stand alone.
+ *
+ * `kind` keeps the two ledgers apart: seeding every parent would put an empty
+ * "Income" bar in the spending chart and vice versa.
+ */
 export function rollUp(
   byCategory: Record<string, number>,
   ctx: CategoryContext,
+  kind: "spend" | "income" = "spend",
 ): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const c of ctx.list) if (!c.parentId) out[c.slug] = 0;
+  for (const c of ctx.list) if (!c.parentId && c.kind === kind) out[c.slug] = 0;
   for (const [slug, value] of Object.entries(byCategory)) {
     if (!value) continue;
     const parent = ctx.parentOfSlug.get(slug) ?? slug;
@@ -197,12 +204,15 @@ function resolveRange(range: string, today: Date) {
 interface Totals {
   income: number; expense: number; net: number;
   byCategory: Record<string, number>;
+  /** Income broken down too — "where did it come from" is a real question. */
+  byIncomeCategory: Record<string, number>;
   transfersExcluded: number;
 }
 
 const emptyTotals = (ctx: CategoryContext): Totals => ({
   income: 0, expense: 0, net: 0,
-  byCategory: Object.fromEntries(ctx.list.map((c) => [c.slug, 0])),
+  byCategory: Object.fromEntries(ctx.list.filter((c) => c.kind !== "income").map((c) => [c.slug, 0])),
+  byIncomeCategory: Object.fromEntries(ctx.list.filter((c) => c.kind === "income").map((c) => [c.slug, 0])),
   transfersExcluded: 0,
 });
 
@@ -215,7 +225,14 @@ function tally(rows: AmountRow[], ctx: CategoryContext): Totals {
     const { kind, slug } = resolveSlug(r, ctx);
 
     if (kind === "transfer") { out.transfersExcluded++; continue; }
-    if (signed > 0) { out.income += signed; continue; }
+
+    // Which bucket a row lands in follows the money, not the label. Somebody
+    // can file a refund under any category they like; it is still money in.
+    if (signed > 0) {
+      out.income += signed;
+      if (slug && slug in out.byIncomeCategory) out.byIncomeCategory[slug] += signed;
+      continue;
+    }
 
     const spent = -signed;
     out.expense += spent;
@@ -309,8 +326,16 @@ summary.get("/summary", async (c) => {
       ok: true,
       range: { key: range, label: current.label, start: ymd(current.start), end: ymd(current.end) },
       comparison: { label: previous.label, start: ymd(previous.start), end: ymd(previous.end) },
-      totals: { ...now, byParent: rollUp(now.byCategory, ctx) },
-      previous: { ...before, byParent: rollUp(before.byCategory, ctx) },
+      totals: {
+        ...now,
+        byParent: rollUp(now.byCategory, ctx),
+        byIncomeParent: rollUp(now.byIncomeCategory, ctx, "income"),
+      },
+      previous: {
+        ...before,
+        byParent: rollUp(before.byCategory, ctx),
+        byIncomeParent: rollUp(before.byIncomeCategory, ctx, "income"),
+      },
       safeToSpend: {
         remaining,
         perDay: daysLeft > 0 ? Math.round(remaining / daysLeft) : remaining,
