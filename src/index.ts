@@ -8,6 +8,7 @@
 import { Hono } from "hono";
 import { getDb } from "./db/client";
 import { users } from "./db/schema";
+import { requireUser } from "./auth";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -23,6 +24,30 @@ app.get("/api/health/db", async (c) => {
     return c.json({ ok: true, users: rows.length });
   } finally {
     // Never block the response on teardown, but never leak the connection either.
+    c.executionCtx.waitUntil(close());
+  }
+});
+
+// The publishable key is public by design, but it differs per environment, so
+// the front end asks for it rather than hard-coding one and breaking the other.
+app.get("/api/auth/config", (c) =>
+  c.json({ publishableKey: c.env.CLERK_PUBLISHABLE_KEY }),
+);
+
+// First authenticated call. Proves the whole chain: Clerk session verified on
+// the Worker, local users row created, row read back out of Neon.
+app.get("/api/me", async (c) => {
+  const { db, ready, close } = getDb(c.env);
+  try {
+    await ready;
+    const user = await requireUser(c, db);
+    if (!user) return c.json({ error: "unauthorized" }, 401);
+
+    return c.json({
+      ok: true,
+      user: { id: user.id, email: user.email, createdAt: user.createdAt },
+    });
+  } finally {
     c.executionCtx.waitUntil(close());
   }
 });

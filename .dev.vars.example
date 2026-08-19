@@ -1,0 +1,11 @@
+# Copy to .dev.vars and fill in. .dev.vars is gitignored; this file is not,
+# so never put real values here.
+#
+# Both come from the Clerk dashboard -> API keys. Use the DEVELOPMENT instance
+# keys locally (pk_test_ / sk_test_).
+#
+# For deployed environments these are set with `wrangler secret put`, NOT here,
+# and must be set once per environment (see README).
+
+CLERK_PUBLISHABLE_KEY=pk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+CLERK_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxx

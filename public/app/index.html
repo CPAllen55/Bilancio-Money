@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Bilancio — Sign in</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  /* Same tokens as the landing page, so this does not read as a different product. */
+  :root{
+    --bg: #05080B;
+    --bg-panel: #0C1218;
+    --hair: rgba(231,238,243,0.10);
+    --ink: #E7EEF3;
+    --ink-soft: #8A9BAC;
+    --mint: #00F0A8;
+    --mint-dim: #00A876;
+    --coral: #FF5C72;
+    --warning: #FAB219;
+  }
+  *{ box-sizing: border-box; }
+  /* class-level display rules outrank the UA sheet's [hidden], so restate it */
+  [hidden]{ display:none !important; }
+  body{
+    margin:0; min-height:100vh; background:var(--bg); color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:28px; padding:40px 20px;
+  }
+  .wordmark{
+    font-family:'Space Grotesk', sans-serif; font-weight:700;
+    font-size:22px; letter-spacing:-0.01em;
+  }
+  .wordmark span{ color:var(--mint); }
+
+  #signin{ min-height:1px; }
+
+  /* The proof panel — one line per link in the chain. */
+  .panel{
+    width:100%; max-width:560px; background:var(--bg-panel);
+    border:1px solid var(--hair); border-radius:10px; padding:20px 22px;
+  }
+  .panel h2{
+    margin:0 0 14px; font-family:'IBM Plex Mono', monospace;
+    font-size:12px; font-weight:500; letter-spacing:0.08em;
+    text-transform:uppercase; color:var(--ink-soft);
+  }
+  ol{ margin:0; padding:0; list-style:none;
+      font-family:'IBM Plex Mono', monospace; font-size:13px; line-height:1.9; }
+  li{ display:flex; gap:10px; align-items:baseline; }
+  li .mark{ width:1.2em; flex:none; }
+  li.pending .mark::before{ content:'·'; color:var(--ink-soft); }
+  li.ok      .mark::before{ content:'✓'; color:var(--mint); }
+  li.fail    .mark::before{ content:'✕'; color:var(--coral); }
+  li.pending { color:var(--ink-soft); }
+  li.fail    { color:var(--coral); }
+  li .detail{ color:var(--ink-soft); }
+
+  .actions{ margin-top:18px; padding-top:16px; border-top:1px solid var(--hair);
+            display:flex; gap:16px; align-items:center; }
+  button{
+    font-family:'IBM Plex Mono', monospace; font-size:12px;
+    background:none; border:1px solid var(--hair); color:var(--ink-soft);
+    padding:7px 14px; border-radius:6px; cursor:pointer;
+  }
+  button:hover{ color:var(--ink); border-color:var(--mint-dim); }
+  button.primary{
+    font-size:13px; padding:11px 22px; color:var(--bg);
+    background:var(--mint); border-color:var(--mint); font-weight:600;
+  }
+  button.primary:hover{ color:var(--bg); background:#2BFFC0; border-color:#2BFFC0; }
+  .note{
+    max-width:560px; font-family:'IBM Plex Mono', monospace;
+    font-size:11px; line-height:1.7; color:var(--ink-soft); text-align:center;
+  }
+  .note b{ color:var(--warning); font-weight:500; }
+  a{ color:var(--mint-dim); }
+</style>
+</head>
+<body>
+
+<div class="wordmark">bilancio<span>_</span></div>
+
+<div id="signin" hidden>
+  <button id="go-signin" class="primary" type="button">Sign in / create account</button>
+</div>
+
+<div class="panel" id="proof" hidden>
+  <h2>Auth chain</h2>
+  <ol>
+    <li id="s-config"  class="pending"><span class="mark"></span><span>Publishable key from Worker <span class="detail"></span></span></li>
+    <li id="s-clerk"   class="pending"><span class="mark"></span><span>Clerk loaded <span class="detail"></span></span></li>
+    <li id="s-session" class="pending"><span class="mark"></span><span>Signed in <span class="detail"></span></span></li>
+    <li id="s-token"   class="pending"><span class="mark"></span><span>Session token issued <span class="detail"></span></span></li>
+    <li id="s-me"      class="pending"><span class="mark"></span><span>Token verified on Worker <span class="detail"></span></span></li>
+    <li id="s-row"     class="pending"><span class="mark"></span><span>Local users row in Neon <span class="detail"></span></span></li>
+  </ol>
+  <div class="actions" id="actions" hidden>
+    <button id="signout" type="button">Sign out</button>
+    <button id="recheck" type="button">Re-run check</button>
+  </div>
+</div>
+
+<p class="note">
+  This page exists to prove the auth chain end to end. It is <b>not</b> the product —
+  the dashboard on the <a href="/">landing page</a> still runs on demo data in your browser.
+</p>
+
+<script>
+const CLERK_JS_VERSION = '6';
+
+/**
+ * Load clerk-js from your own Clerk instance rather than a public CDN — the
+ * host is base64'd into the publishable key, so dev and production each load
+ * their own with nothing hard-coded.
+ */
+function clerkScriptUrl(publishableKey) {
+  const host = atob(publishableKey.split('_').slice(2).join('_')).replace(/\$$/, '');
+  return `https://${host}/npm/@clerk/clerk-js@${CLERK_JS_VERSION}/dist/clerk.browser.js`;
+}
+
+const step = (id, state, detail) => {
+  const el = document.getElementById(id);
+  el.className = state;
+  el.querySelector('.detail').textContent = detail ? `— ${detail}` : '';
+};
+
+async function boot() {
+  document.getElementById('proof').hidden = false;
+
+  // 1 — publishable key, so dev and production keys never get hard-coded here.
+  let publishableKey;
+  try {
+    const res = await fetch('/api/auth/config');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    ({ publishableKey } = await res.json());
+    if (!publishableKey) throw new Error('CLERK_PUBLISHABLE_KEY not set on the Worker');
+    step('s-config', 'ok', publishableKey.slice(0, 11) + '…');
+  } catch (err) {
+    return step('s-config', 'fail', err.message);
+  }
+
+  // 2 — load clerk-js with that key.
+  try {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = clerkScriptUrl(publishableKey);
+      s.async = true;
+      s.crossOrigin = 'anonymous';
+      s.setAttribute('data-clerk-publishable-key', publishableKey);
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('could not load clerk.browser.js'));
+      document.head.appendChild(s);
+    });
+    // clerk-js validates the key while it initialises and, if it hates it,
+    // throws before ever setting window.Clerk. Say so plainly rather than
+    // letting this surface as "cannot read properties of undefined".
+    if (!window.Clerk) {
+      throw new Error(`clerk-js rejected the publishable key (${publishableKey.slice(0, 11)}…) — check CLERK_PUBLISHABLE_KEY`);
+    }
+    await window.Clerk.load();
+    step('s-clerk', 'ok');
+  } catch (err) {
+    return step('s-clerk', 'fail', err.message);
+  }
+
+  await check();
+}
+
+async function check() {
+  const Clerk = window.Clerk;
+  const signinEl = document.getElementById('signin');
+
+  // 3 — signed in? If not, offer the button and stop here.
+  //
+  // Sign-in happens on Clerk's hosted Account Portal rather than an embedded
+  // widget: mountSignIn() needs UI components that clerk.browser.js fetches at
+  // runtime, and when that fetch does not resolve it fails at the mount with
+  // "Clerk was not loaded with Ui components". The redirect needs none of that,
+  // and Clerk maintains the page it sends you to.
+  if (!Clerk.user) {
+    step('s-session', 'pending', 'waiting for sign-in');
+    document.getElementById('actions').hidden = true;
+    signinEl.hidden = false;
+    return;
+  }
+  signinEl.hidden = true;
+  document.getElementById('actions').hidden = false;
+  step('s-session', 'ok', Clerk.user.primaryEmailAddress?.emailAddress ?? Clerk.user.id);
+
+  // 4 — token.
+  let token;
+  try {
+    token = await Clerk.session.getToken();
+    if (!token) throw new Error('no active session');
+    step('s-token', 'ok');
+  } catch (err) {
+    return step('s-token', 'fail', err.message);
+  }
+
+  // 5 + 6 — Worker verifies it, and mirrors the user into Postgres.
+  try {
+    const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    step('s-me', 'ok', '200');
+    step('s-row', 'ok', body.user.id);
+  } catch (err) {
+    step('s-me', 'fail', err.message);
+    step('s-row', 'fail');
+  }
+}
+
+document.getElementById('go-signin').addEventListener('click', () => {
+  // redirectUrl brings us back here afterwards instead of to the landing page.
+  window.Clerk.redirectToSignIn({ redirectUrl: `${location.origin}/app` });
+});
+document.getElementById('signout').addEventListener('click', async () => {
+  await window.Clerk.signOut();
+  location.reload();
+});
+document.getElementById('recheck').addEventListener('click', check);
+
+boot();
+</script>
+</body>
+</html>
