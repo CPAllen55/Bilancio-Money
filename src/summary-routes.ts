@@ -46,6 +46,8 @@ export interface CategoryContext {
  * A user sees system categories plus their own. Loading both together means the
  * rest of the code never has to care which kind it is holding.
  */
+export { ownedAccountIds };
+
 export async function loadCategories(
   db: ReturnType<typeof getDb>["db"],
   userId: string,
@@ -380,7 +382,98 @@ summary.get("/transactions", async (c) => {
 
 const TREND_RANGES = [3, 6, 9, 12, 24, 36];
 
-function monthKeys(count: number, today: Date): string[] {
+export interface MonthBucket {
+  total: number;
+  income: number;
+  expense: number;
+  byCategory: Record<string, number>;
+}
+
+/**
+ * Monthly income and spending, with categories resolved.
+ *
+ * Grouped by merchant as well as category, because a merchant rule can send one
+ * shop's spending to a different bucket than Plaid chose — the grouping has to
+ * be fine enough for rules to still apply. Merchant cardinality is far lower
+ * than transaction count, so this still collapses the work substantially.
+ *
+ * Shared by /trend and /forecast: two implementations of "what did each month
+ * cost" would eventually disagree, and the forecast is built on the history.
+ */
+export async function monthlyBuckets(
+  db: ReturnType<typeof getDb>["db"],
+  userId: string,
+  accountIds: string[],
+  ctx: CategoryContext,
+  span: string[],
+): Promise<Map<string, MonthBucket>> {
+  const blank = (): MonthBucket => ({
+    total: 0, income: 0, expense: 0,
+    byCategory: Object.fromEntries(ctx.list.map((cat) => [cat.slug, 0])),
+  });
+  const buckets = new Map(span.map((ym) => [ym, blank()]));
+  if (!accountIds.length || !span.length) return buckets;
+
+  const monthExpr = sql<string>`to_char(${transactions.date}, 'YYYY-MM')`;
+  const merchantExpr = sql<string>`coalesce(${transactions.merchantName}, ${transactions.name})`;
+
+  const rows = await db
+    .select({
+      ym: monthExpr,
+      categoryPrimary: transactions.categoryPrimary,
+      categoryDetailed: transactions.categoryDetailed,
+      merchant: merchantExpr,
+      overrideCategoryId: transactionOverrides.categoryId,
+      outCents: sql<string>`coalesce(sum(case when ${transactions.amount} > 0 then ${transactions.amount} else 0 end), 0)::text`,
+      inCents: sql<string>`coalesce(sum(case when ${transactions.amount} < 0 then -${transactions.amount} else 0 end), 0)::text`,
+    })
+    .from(transactions)
+    .leftJoin(
+      transactionOverrides,
+      and(
+        eq(transactionOverrides.transactionId, transactions.id),
+        eq(transactionOverrides.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        inArray(transactions.accountId, accountIds),
+        gte(transactions.date, `${span[0]}-01`),
+        eq(transactions.pending, false),
+      ),
+    )
+    .groupBy(
+      monthExpr, transactions.categoryPrimary, transactions.categoryDetailed,
+      merchantExpr, transactionOverrides.categoryId,
+    );
+
+  for (const r of rows) {
+    const b = buckets.get(r.ym);
+    if (!b) continue;
+    const { kind, slug } = resolveSlug(
+      {
+        categoryPrimary: r.categoryPrimary,
+        categoryDetailed: r.categoryDetailed,
+        merchantName: r.merchant,
+        name: r.merchant,
+        overrideCategoryId: r.overrideCategoryId,
+      },
+      ctx,
+    );
+    if (kind === "transfer") continue;
+
+    b.income += Number(r.inCents);
+    const out = Number(r.outCents);
+    if (out > 0) {
+      b.expense += out;
+      if (slug && slug in b.byCategory) b.byCategory[slug] += out;
+    }
+  }
+  for (const b of buckets.values()) b.total = b.expense;
+  return buckets;
+}
+
+export function monthKeys(count: number, today: Date): string[] {
   const out: string[] = [];
   for (let i = count - 1; i >= 0; i--) {
     const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - i, 1));
@@ -412,74 +505,7 @@ summary.get("/trend", async (c) => {
       ownedAccountIds(db, auth.user.id, account, true),
     ]);
 
-    const monthExpr = sql<string>`to_char(${transactions.date}, 'YYYY-MM')`;
-    // Grouped by merchant as well as category, because a merchant rule can send
-    // one shop's spending to a different bucket than Plaid chose. Merchant
-    // cardinality is far lower than transaction count, so this still collapses.
-    const merchantExpr = sql<string>`coalesce(${transactions.merchantName}, ${transactions.name})`;
-
-    const rows = ids.length
-      ? await db
-          .select({
-            ym: monthExpr,
-            categoryPrimary: transactions.categoryPrimary,
-            categoryDetailed: transactions.categoryDetailed,
-            merchant: merchantExpr,
-            overrideCategoryId: transactionOverrides.categoryId,
-            outCents: sql<string>`coalesce(sum(case when ${transactions.amount} > 0 then ${transactions.amount} else 0 end), 0)::text`,
-            inCents: sql<string>`coalesce(sum(case when ${transactions.amount} < 0 then -${transactions.amount} else 0 end), 0)::text`,
-          })
-          .from(transactions)
-          .leftJoin(
-            transactionOverrides,
-            and(
-              eq(transactionOverrides.transactionId, transactions.id),
-              eq(transactionOverrides.userId, auth.user.id),
-            ),
-          )
-          .where(
-            and(
-              inArray(transactions.accountId, ids),
-              gte(transactions.date, `${span[0]}-01`),
-              eq(transactions.pending, false),
-            ),
-          )
-          .groupBy(
-            monthExpr, transactions.categoryPrimary, transactions.categoryDetailed,
-            merchantExpr, transactionOverrides.categoryId,
-          )
-      : [];
-
-    const blank = () => ({
-      total: 0, income: 0, expense: 0,
-      byCategory: Object.fromEntries(ctx.list.map((cat) => [cat.slug, 0])) as Record<string, number>,
-    });
-    const buckets = new Map(span.map((ym) => [ym, blank()]));
-
-    for (const r of rows) {
-      const b = buckets.get(r.ym);
-      if (!b) continue;
-      const { kind, slug } = resolveSlug(
-        {
-          categoryPrimary: r.categoryPrimary,
-          categoryDetailed: r.categoryDetailed,
-          merchantName: r.merchant,
-          name: r.merchant,
-          overrideCategoryId: r.overrideCategoryId,
-        },
-        ctx,
-      );
-      if (kind === "transfer") continue;
-
-      b.income += Number(r.inCents);
-      const out = Number(r.outCents);
-      if (out > 0) {
-        b.expense += out;
-        if (slug && slug in b.byCategory) b.byCategory[slug] += out;
-      }
-    }
-    for (const b of buckets.values()) b.total = b.expense;
-
+    const buckets = await monthlyBuckets(db, auth.user.id, ids, ctx, span);
     const shape = (keys: string[]) => keys.map((ym) => ({ month: ym, ...buckets.get(ym)! }));
     const visibleMonths = shape(visible);
 

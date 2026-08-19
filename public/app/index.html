@@ -123,6 +123,26 @@
                  padding:5px 8px; max-width:190px; cursor:pointer; }
   select.catsel:hover{ border-color:var(--mint-dim); }
 
+  .toggle{ display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+           font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-soft); }
+  .toggle input{ accent-color:var(--mint); width:15px; height:15px; cursor:pointer; }
+
+  /* ---------- forecast ---------- */
+  #forecast-box{ margin-top:16px; }
+  .fc-head{ display:flex; align-items:baseline; justify-content:space-between; gap:16px;
+            flex-wrap:wrap; margin-bottom:14px; }
+  .fc-fig{ font-size:32px; font-weight:600; letter-spacing:-.02em; }
+  .fc-fig.neg{ color:var(--coral); }
+  .fc-fig.pos{ color:var(--mint); }
+  .fc-method{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--muted);
+              max-width:52ch; line-height:1.7; }
+  .fc-grid{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px;
+            border-top:1px solid var(--hair); padding-top:14px; }
+  .fc-grid .k{ font-size:12.5px; color:var(--ink-soft); }
+  .fc-grid .v{ font-family:'IBM Plex Mono', monospace; font-size:17px; margin-top:2px; }
+  .fc-warn{ color:var(--warning); font-family:'IBM Plex Mono', monospace; font-size:12px; }
+  @media (max-width: 560px){ .fc-grid{ grid-template-columns:minmax(0,1fr); } }
+
   /* ---------- banks ---------- */
   .bank{ border-top:1px solid var(--hair); padding:14px 0; }
   .bank:first-child{ border-top:none; }
@@ -208,8 +228,10 @@
           <option value="12" selected>Last year</option>
           <option value="24">Last 2 years</option>
         </select>
+        <label class="toggle"><input type="checkbox" id="forecast-on"> Forecast rest of year</label>
       </div>
       <div class="card"><div id="trend-chart"></div></div>
+      <div class="card" id="forecast-box" hidden></div>
     </section>
 
     <section class="panel" id="v-categories">
@@ -628,6 +650,60 @@ async function renderTrend() {
   host.innerHTML = svg + '<div style="margin-top:12px">' + legend +
     '<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)">' +
     '<span style="width:15px;border-top:2px dashed var(--ink);opacity:.78"></span>same month, last year</span></div>';
+
+  await renderForecast();
+}
+
+/* -------------------------------------------------------------- forecast -- */
+
+/**
+ * The projection is only as good as the history behind it, so the method and
+ * how much data it rests on are shown alongside the number. A confident-looking
+ * figure derived from two months would be worse than showing nothing.
+ */
+async function renderForecast() {
+  const box = $('forecast-box');
+  if (!$('forecast-on').checked) { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = '<p class="empty">Projecting…</p>';
+
+  let f;
+  try { f = await authed('/api/forecast'); }
+  catch (err) { box.innerHTML = '<p class="fc-warn">' + escapeHtml(err.message) + '</p>'; return; }
+
+  if (f.method === 'insufficient-data') {
+    box.innerHTML = '<p class="fc-warn">Not enough history to project yet.</p>' +
+      '<p class="fc-method">A forecast needs at least a few complete months of spending. ' +
+      'Once there are, this will show what the rest of ' + f.year + ' is likely to look like.</p>';
+    return;
+  }
+
+  const t = f.totals;
+  const yearEnd = t.projectedYearEndNet;
+
+  const method = f.method === 'seasonal-growth'
+    ? 'Each remaining month is last year&rsquo;s same month, scaled by how ' + f.year +
+      ' is running against ' + (f.year - 1) + ' — currently ' +
+      (f.growthPct >= 0 ? '+' : '') + f.growthPct + '%. ' +
+      'Based on ' + f.basis.comparableMonths + ' month' + (f.basis.comparableMonths === 1 ? '' : 's') +
+      ' where both years have data.'
+    : 'No prior year to compare against, so each remaining month is the average of your last three. ' +
+      'That carries no seasonality — a December projected from summer months will be too low.';
+
+  box.innerHTML =
+    '<div class="fc-head"><div>' +
+      '<p class="eyebrow">Projected to keep by December ' + f.year + '</p>' +
+      '<div class="fc-fig ' + (yearEnd >= 0 ? 'pos' : 'neg') + '">' + money(yearEnd) + '</div>' +
+    '</div></div>' +
+    '<div class="fc-grid">' +
+      '<div><div class="k">Kept so far</div><div class="v">' + money(t.savedSoFar) + '</div></div>' +
+      '<div><div class="k">Expected still to come in</div><div class="v">' + money(t.projectedRemainingIncome) + '</div></div>' +
+      '<div><div class="k">Expected still to go out</div><div class="v">' + money(t.projectedRemainingExpense) + '</div></div>' +
+    '</div>' +
+    '<p class="fc-method" style="margin-top:14px">' + method + '</p>' +
+    (f.basis.monthsOfHistory < 6
+      ? '<p class="fc-warn">Only ' + f.basis.monthsOfHistory + ' months of history — treat this as a rough shape, not a number to plan against.</p>'
+      : '');
 }
 
 /* ----------------------------------------------------------------- banks -- */
@@ -734,6 +810,7 @@ $('tabs').addEventListener('click', (e) => {
 
 $('range').addEventListener('change', () => { summaryCache = null; refresh(); });
 $('trend-range').addEventListener('change', refresh);
+$('forecast-on').addEventListener('change', renderForecast);
 $('go-signin').addEventListener('click', () =>
   window.Clerk.redirectToSignIn({ redirectUrl: location.origin + '/app' }));
 $('signout').addEventListener('click', async () => {
