@@ -21,13 +21,19 @@
     "run_worker_first": ["/api/*"]
   },
 
-  // Points at the Neon `dev` branch. The local connection string lives in
-  // .env as CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE so that
-  // no database password is ever committed to this file.
+  // Points at the Neon `production` branch, because this top-level config is
+  // what the Cloudflare build deploys to the live domain.
+  //
+  // Local development does NOT use this. `wrangler dev` connects straight to
+  // the Neon `dev` branch via CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE
+  // in .env, so no database password is ever committed to this file, and
+  // local work cannot touch production data.
+  //
+  // Dev branch id, for reference: 413bf8729d80417a8303051a59e4eb48
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "413bf8729d80417a8303051a59e4eb48"
+      "id": "bcda6d421eb84977a4ca51385c6018fb"
     }
   ],
 
@@ -43,34 +49,12 @@
     "CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuYmlsYW5jaW9tb25leS5jb20k"
   },
 
+  // No named environments on purpose. The Cloudflare build runs
+  // `wrangler deploy` with no --env, so a named env would deploy a separate
+  // Worker (bilancio-money-production) that owns no custom domain and receives
+  // no traffic. This top-level config IS production; local overrides come from
+  // .dev.vars and .env.
   "observability": {
     "enabled": true
-  },
-
-  "env": {
-    "production": {
-      // Bindings are not inherited by named environments, so both the
-      // assets binding and the Neon `production` branch are repeated here.
-      "assets": {
-        "directory": "./public",
-        "binding": "ASSETS",
-        "run_worker_first": ["/api/*"]
-      },
-      "hyperdrive": [
-        {
-          "binding": "HYPERDRIVE",
-          "id": "bcda6d421eb84977a4ca51385c6018fb"
-        }
-      ]
-
-      // WARNING: nothing deploys this block. The Cloudflare build runs
-      // `wrangler deploy` with no --env, so the top-level config above is what
-      // reaches the live domain. Deploying this one would create a SEPARATE
-      // Worker named bilancio-money-production, which owns no custom domain.
-      //
-      // It exists only to record the Neon `production` Hyperdrive id. The open
-      // decision is to point the top-level binding at this id and delete this
-      // block, so the live site stops talking to the Neon dev branch.
-    }
   }
 }

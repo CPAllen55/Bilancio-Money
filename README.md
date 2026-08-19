@@ -49,18 +49,24 @@ npm run db:studio
 
 ## Secrets in deployed environments
 
-**Secrets are per-environment and are not inherited.** `wrangler.jsonc`
-defines a `production` environment, so every secret has to be set twice —
-once for the default environment and once with `--env production`. Setting it
-only the first way leaves production without the key.
+There are no named environments. The Cloudflare build runs `wrangler deploy`
+with no `--env`, so the top-level config in `wrangler.jsonc` **is** production,
+including the `production` Neon branch and the Clerk production keys. Local
+development overrides both from `.dev.vars` and `.env`, which point at the
+`dev` branch and the Clerk development instance.
+
+So each secret is set once, on the `bilancio-money` Worker:
 
 ```bash
 npx wrangler secret put CLERK_SECRET_KEY
-npx wrangler secret put CLERK_SECRET_KEY --env production
 ```
 
-`CLERK_PUBLISHABLE_KEY` is public by design but still differs per environment;
-the front end reads it from `/api/auth/config` rather than hard-coding one.
+`wrangler secret put` requires a real terminal — it prompts, and there is no
+`--value` flag. In a non-interactive shell it exits without ever asking. Use
+`wrangler secret bulk <file>` or the Cloudflare dashboard instead.
+
+`CLERK_PUBLISHABLE_KEY` is public by design and lives in `wrangler.jsonc` as a
+var. The front end reads it from `/api/auth/config` rather than hard-coding it.
 
 Phase 1 will add `PLAID_CLIENT_ID`, `PLAID_SECRET` and `TOKEN_ENCRYPTION_KEY`
 (`openssl rand -base64 32`). That encryption key wraps every Plaid access
