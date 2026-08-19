@@ -90,6 +90,24 @@
   .bank-status.bad{ color:var(--coral); }
   .bank-status.good{ color:var(--mint); }
 
+  .range-note{ font-family:'IBM Plex Mono', monospace; font-size:11px;
+               font-weight:400; color:var(--ink-soft); text-transform:none;
+               letter-spacing:0; margin-left:8px; }
+  .snap-grid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px 22px;
+              font-family:'IBM Plex Mono', monospace; font-size:13px; }
+  .snap-grid .k{ color:var(--ink-soft); }
+  .snap-grid .v{ color:var(--ink); font-size:17px; }
+  .snap-grid .v.in{ color:var(--mint); }
+  .snap-grid .v.out{ color:var(--coral); }
+  .snap-cats{ grid-column:1 / -1; border-top:1px solid var(--hair); padding-top:12px; }
+  .snap-cats .row{ display:flex; justify-content:space-between; color:var(--ink-soft); }
+  .snap-cats .row b{ color:var(--ink); font-weight:500; }
+  .range-select{
+    font-family:'IBM Plex Mono', monospace; font-size:12px;
+    background:var(--bg); color:var(--ink-soft);
+    border:1px solid var(--hair); border-radius:6px; padding:7px 10px;
+  }
+
   .note{
     max-width:560px; font-family:'IBM Plex Mono', monospace;
     font-size:11px; line-height:1.7; color:var(--ink-soft); text-align:center;
@@ -130,6 +148,22 @@
     <button id="sync-now" type="button">Sync transactions</button>
   </div>
   <p class="bank-status" id="bank-status"></p>
+</div>
+
+<div class="panel" id="snapshot" hidden>
+  <h2>Snapshot <span class="range-note" id="snap-range"></span></h2>
+  <div class="snap-grid" id="snap-grid"></div>
+  <div class="actions">
+    <select class="range-select" id="snap-range-select">
+      <option value="this-month" selected>This month</option>
+      <option value="last-month">Last month</option>
+      <option value="last-3">Last 3 months</option>
+      <option value="last-6">Last 6 months</option>
+      <option value="ytd">Year to date</option>
+    </select>
+    <button id="snap-refresh" type="button">Refresh</button>
+  </div>
+  <p class="bank-status" id="snap-status"></p>
 </div>
 
 <p class="note">
@@ -243,10 +277,76 @@ async function check() {
     return;
   }
 
-  // The auth chain held, so the bank panel is worth showing.
+  // The auth chain held, so the bank and snapshot panels are worth showing.
   document.getElementById('banks').hidden = false;
+  document.getElementById('snapshot').hidden = false;
   loadBanks();
+  loadSnapshot();
 }
+
+/* ==========================================================================
+   Snapshot — the first real numbers, computed by the Worker from Plaid data.
+   This is not the dashboard; it is proof the aggregate endpoint is right.
+   ========================================================================== */
+async function loadSnapshot() {
+  const range = document.getElementById('snap-range-select').value;
+  const status = document.getElementById('snap-status');
+  status.textContent = 'Computing…';
+  status.className = 'bank-status';
+
+  try {
+    const s = await authed(`/api/summary?range=${encodeURIComponent(range)}`);
+    const t = s.totals, p = s.previous;
+    document.getElementById('snap-range').textContent = `${s.range.start} → ${s.range.end}`;
+
+    const delta = (now, before) => {
+      if (!before) return '';
+      const pct = Math.round(((now - before) / before) * 100);
+      return ` (${pct >= 0 ? '+' : ''}${pct}% vs ${s.comparison.label.toLowerCase()})`;
+    };
+
+    const grid = document.getElementById('snap-grid');
+    grid.textContent = '';
+    const cell = (k, v, cls) => {
+      const d = document.createElement('div');
+      d.innerHTML = `<div class="k">${k}</div><div class="v ${cls || ''}">${v}</div>`;
+      grid.appendChild(d);
+    };
+
+    cell('Money in',  money(t.income)  + delta(t.income, p.income),   'in');
+    cell('Money out', money(t.expense) + delta(t.expense, p.expense), 'out');
+    cell('Net', money(t.net));
+    cell('Safe to spend',
+      `${money(s.safeToSpend.remaining)} · ${money(s.safeToSpend.perDay)}/day for ${s.safeToSpend.daysLeft}d`);
+
+    const cats = Object.entries(t.byCategory)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1]);
+
+    const box = document.createElement('div');
+    box.className = 'snap-cats';
+    if (!cats.length) {
+      box.innerHTML = '<div class="row">No categorised spending in this range.</div>';
+    } else {
+      const label = id => (s.categories.find(c => c.id === id) || {}).label || id;
+      box.innerHTML = cats
+        .map(([id, v]) => `<div class="row"><span>${label(id)}</span><b>${money(v)}</b></div>`)
+        .join('');
+    }
+    grid.appendChild(box);
+
+    const note = t.transfersExcluded
+      ? `${t.transfersExcluded} transfer${t.transfersExcluded === 1 ? '' : 's'} excluded — moving your own money is not spending.`
+      : 'No transfers in this range.';
+    status.textContent = note;
+  } catch (err) {
+    status.textContent = err.message;
+    status.className = 'bank-status bad';
+  }
+}
+
+document.getElementById('snap-refresh').addEventListener('click', loadSnapshot);
+document.getElementById('snap-range-select').addEventListener('change', loadSnapshot);
 
 /* ==========================================================================
    Plaid — link a bank, then pull what it knows.
