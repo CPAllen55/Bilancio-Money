@@ -78,6 +78,29 @@ const BY_PRIMARY: Record<string, string> = {
 
 const TRANSFER_PRIMARY = new Set(["TRANSFER_IN", "TRANSFER_OUT"]);
 
+/**
+ * Transfers get categories too, but they are still not spending.
+ *
+ * Moving £2,000 from a current account into a CD is an outflow from that
+ * account and no change at all to what you are worth. Counting it as spending
+ * would report someone as having spent the money they just saved. Categorising
+ * it means it is visible and re-filable rather than silently vanishing, which
+ * is what "where did the other £20,000 go" feels like.
+ */
+const TRANSFER_BY_DETAILED: Record<string, string> = {
+  TRANSFER_OUT_SAVINGS: "to-savings",
+  TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS: "to-investments",
+  TRANSFER_OUT_WITHDRAWAL: "withdrawal",
+  TRANSFER_OUT_ACCOUNT_TRANSFER: "transfer-other",
+  TRANSFER_OUT_OTHER_TRANSFER_OUT: "transfer-other",
+  TRANSFER_IN_SAVINGS: "transfer-in",
+  TRANSFER_IN_DEPOSIT: "transfer-in",
+  TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS: "transfer-in",
+  TRANSFER_IN_ACCOUNT_TRANSFER: "transfer-in",
+  TRANSFER_IN_CASH_ADVANCES_AND_LOANS: "transfer-in",
+  TRANSFER_IN_OTHER_TRANSFER_IN: "transfer-in",
+};
+
 /** Money coming in has its own tree — interest earned is not interest paid. */
 const INCOME_BY_DETAILED: Record<string, string> = {
   INCOME_WAGES: "salary",
@@ -100,7 +123,11 @@ export function classify(primary: string | null, detailed: string | null): Class
     const slug = (detailed && INCOME_BY_DETAILED[detailed]) || "other-income";
     return { kind: "income", slug };
   }
-  if (primary && TRANSFER_PRIMARY.has(primary)) return { kind: "transfer", slug: null };
+  if (primary && TRANSFER_PRIMARY.has(primary)) {
+    const slug = (detailed && TRANSFER_BY_DETAILED[detailed])
+      || (primary === "TRANSFER_IN" ? "transfer-in" : "transfer-other");
+    return { kind: "transfer", slug };
+  }
 
   const fromDetailed = detailed ? BY_DETAILED[detailed] : undefined;
   if (fromDetailed) return { kind: "spend", slug: fromDetailed };

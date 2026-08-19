@@ -125,6 +125,9 @@
   .crow.child .ctrack{ height:5px; }
   .crow.child .camt{ font-size:12px; color:var(--ink-soft); }
   .crow.parent{ padding-top:14px; }
+  /* Transfers sit apart from the ranking above — same money, different meaning. */
+  .moved{ margin-top:22px; padding-top:16px; border-top:1px dashed var(--hair-strong); }
+  .moved .camt{ color:var(--ink-soft); }
 
   /* ---------- table ---------- */
   table.data{ width:100%; border-collapse:collapse; font-size:13.5px; }
@@ -523,6 +526,24 @@ async function renderCategories() {
 
     return head + rows;
   }).join('');
+
+  // Transfers, kept visually apart. They are money you still have, so mixing
+  // them into the ranking above would overstate spending — but hiding them
+  // entirely is what makes a large sum look unaccounted for.
+  const moved = Object.keys(s.totals.byTransferCategory || {})
+    .map(slug => [slug, s.totals.byTransferCategory[slug]])
+    .filter(p => p[1] > 0)
+    .sort((a, b) => b[1] - a[1]);
+
+  if (moved.length) {
+    host.innerHTML += '<div class="moved">' +
+      '<p class="eyebrow">Moved, not spent · ' + money(s.totals.transfersMoved) + '</p>' +
+      '<p class="fc-method" style="margin:6px 0 10px">Between your own accounts — a deposit into savings or a CD is not money leaving your finances, so none of this counts as spending or appears in the trend.</p>' +
+      moved.map(p =>
+        '<div class="crow child"><div class="cname">' + escapeHtml(labelOfSlug(p[0])) + '</div>' +
+        '<div></div><div class="camt">' + money(p[1]) + '</div></div>'
+      ).join('') + '</div>';
+  }
 }
 
 const NEW_CATEGORY = '__new__';

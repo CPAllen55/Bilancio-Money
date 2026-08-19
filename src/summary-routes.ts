@@ -158,20 +158,29 @@ interface Categorisable {
   overrideCategoryId: string | null;
 }
 
-/** Override beats rule beats Plaid. */
+/**
+ * Override beats rule beats Plaid.
+ *
+ * The kind follows the chosen category rather than being assumed. Filing
+ * something as a transfer has to actually make it a transfer, or the row would
+ * be labelled "To Savings" and still counted as spending — which is precisely
+ * the double-count that keeping transfers out of the totals exists to avoid.
+ */
 function resolveSlug(row: Categorisable, ctx: CategoryContext): { kind: string; slug: string | null } {
   const base = classify(row.categoryPrimary, row.categoryDetailed);
 
-  // An override is an explicit statement about this one transaction, so it wins
-  // even over "this merchant is always X" and even for transfers.
+  // An override is an explicit statement about this one transaction, so it
+  // wins over both a merchant rule and Plaid's guess.
   if (row.overrideCategoryId) {
     const slug = ctx.slugById.get(row.overrideCategoryId);
-    if (slug) return { kind: "spend", slug };
+    if (slug) return { kind: ctx.kindOfSlug.get(slug) ?? "spend", slug };
   }
 
+  // Rules do not apply to transfers: a merchant rule is about what something
+  // is, and a transfer between your own accounts is not a purchase.
   if (base.kind === "spend") {
     const ruled = ctx.ruleBySlugKey.get(merchantKey(row.merchantName, row.name));
-    if (ruled) return { kind: "spend", slug: ruled };
+    if (ruled) return { kind: ctx.kindOfSlug.get(ruled) ?? "spend", slug: ruled };
   }
 
   return base;
@@ -232,13 +241,18 @@ interface Totals {
   byCategory: Record<string, number>;
   /** Income broken down too — "where did it come from" is a real question. */
   byIncomeCategory: Record<string, number>;
+  /** Money moved between your own accounts. Reported, never counted as spend. */
+  byTransferCategory: Record<string, number>;
+  transfersMoved: number;
   transfersExcluded: number;
 }
 
 const emptyTotals = (ctx: CategoryContext): Totals => ({
   income: 0, expense: 0, net: 0,
-  byCategory: Object.fromEntries(ctx.list.filter((c) => c.kind !== "income").map((c) => [c.slug, 0])),
+  byCategory: Object.fromEntries(ctx.list.filter((c) => c.kind === "spend").map((c) => [c.slug, 0])),
   byIncomeCategory: Object.fromEntries(ctx.list.filter((c) => c.kind === "income").map((c) => [c.slug, 0])),
+  byTransferCategory: Object.fromEntries(ctx.list.filter((c) => c.kind === "transfer").map((c) => [c.slug, 0])),
+  transfersMoved: 0,
   transfersExcluded: 0,
 });
 
@@ -250,7 +264,15 @@ function tally(rows: AmountRow[], ctx: CategoryContext): Totals {
     const signed = -Number(r.amount); // flip Plaid's sign: negative meant money in
     const { kind, slug } = resolveSlug(r, ctx);
 
-    if (kind === "transfer") { out.transfersExcluded++; continue; }
+    if (kind === "transfer") {
+      // Recorded so it can be shown, never added to income or expense: this is
+      // your own money changing pocket, not money entering or leaving.
+      out.transfersExcluded++;
+      const moved = Math.abs(signed);
+      out.transfersMoved += moved;
+      if (slug && slug in out.byTransferCategory) out.byTransferCategory[slug] += moved;
+      continue;
+    }
 
     // Which bucket a row lands in follows the money, not the label. Somebody
     // can file a refund under any category they like; it is still money in.
