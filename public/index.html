@@ -187,7 +187,7 @@
   .nav-link:hover{ color: var(--ink); }
 
   /* ---------- HERO ---------- */
-  .hero{ padding: 84px 0 40px; text-align:center; position: relative; }
+  .hero{ padding: 52px 0 28px; text-align:center; position: relative; }
   .hero h1{
     font-size: clamp(38px, 5.6vw, 64px);
     line-height: 1.05;
@@ -196,10 +196,10 @@
   .hero h1 .glow{ color: var(--mint); text-shadow: 0 0 26px var(--mint-glow); }
   .hero p.lede{
     font-size: 18px; color: var(--ink-soft);
-    max-width: 52ch; margin: 0 auto 44px;
+    max-width: 52ch; margin: 0 auto 28px;
   }
 
-  .ticker-wrap{ position: relative; max-width: 720px; margin: 0 auto 46px; }
+  .ticker-wrap{ position: relative; max-width: 720px; margin: 0 auto 26px; }
   .ticker{
     font-family:'IBM Plex Mono', monospace;
     font-weight: 500;
@@ -223,30 +223,9 @@
   }
   @keyframes pulseDot{ 0%,100%{ opacity: 1; } 50%{ opacity: .35; } }
 
-  /* network diagram */
-  .network{ max-width: 760px; margin: 0 auto; display:block; }
-  .network .flow{
-    stroke: var(--mint-dim);
-    stroke-width: 1.4;
-    fill: none;
-    stroke-dasharray: 3 7;
-    animation: dash 1.6s linear infinite;
-    opacity: 0.8;
-  }
-  @keyframes dash{ to{ stroke-dashoffset: -20; } }
-  .network .node-ring{ fill: var(--bg-panel); stroke: var(--hair-strong); stroke-width: 1; }
-  .network .node-label{
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 10.5px;
-    fill: var(--ink-soft);
-    text-anchor: middle;
-  }
-  .network .center-glow{ fill: var(--mint); opacity: 0.16; }
-  .network .center-dot{ fill: var(--mint); }
-
   .hero-actions{
     display:flex; align-items:center; justify-content:center;
-    gap: 20px; flex-wrap: wrap; margin-top: 40px;
+    gap: 20px; flex-wrap: wrap; margin-top: 24px;
   }
   .btn-primary{
     font-family:'IBM Plex Mono', monospace;
@@ -542,6 +521,18 @@
   #dash .axlabel{ font-family:'IBM Plex Sans', sans-serif; font-size: 11.5px; fill: var(--muted); }
   #dash .dlabel{ font-family:'IBM Plex Sans', sans-serif; font-size: 11.5px; fill: var(--ink); }
   #dash .dlabel.soft{ fill: var(--ink-soft); }
+
+  /* ---------- year-ago comparison line ----------
+     Neutral and dashed on purpose: it is a reference mark, not a seventh
+     category competing with the stack underneath it. */
+  #dash .yoy-line{ stroke: var(--ink); stroke-width: 2; stroke-dasharray: 5 4;
+                   stroke-linecap: round; stroke-linejoin: round; opacity: .78; }
+  #dash .yoy-dot{ fill: var(--bg-panel); stroke: var(--ink); stroke-width: 2; }
+  #dash .legend .legend-static{ color: var(--muted); }
+  #dash .legend .swatch-line{
+    width: 15px; height: 0; flex: none;
+    border-top: 2px dashed var(--ink); opacity: .78;
+  }
   #dash .hit{ fill: transparent; }
   #dash .seg{ transition: opacity .12s ease; }
   #dash g.mark:focus{ outline: none; }
@@ -712,28 +703,6 @@
       <div class="ticker-label"><span class="dot"></span>net balance · updating live</div>
     </div>
 
-    <svg class="network" viewBox="0 0 760 220" aria-hidden="true">
-      <path class="flow" d="M110,40 C 260,40 300,90 380,110"/>
-      <path class="flow" d="M650,40 C 500,40 460,90 380,110"/>
-      <path class="flow" d="M110,180 C 260,180 300,120 380,110"/>
-      <path class="flow" d="M650,180 C 500,180 460,120 380,110"/>
-
-      <circle class="center-glow" cx="380" cy="110" r="34"/>
-      <circle class="center-dot" cx="380" cy="110" r="5"/>
-
-      <circle class="node-ring" cx="110" cy="40" r="26"/>
-      <text class="node-label" x="110" y="44">Checking</text>
-
-      <circle class="node-ring" cx="650" cy="40" r="26"/>
-      <text class="node-label" x="650" y="44">Savings</text>
-
-      <circle class="node-ring" cx="110" cy="180" r="26"/>
-      <text class="node-label" x="110" y="184">Card</text>
-
-      <circle class="node-ring" cx="650" cy="180" r="26"/>
-      <text class="node-label" x="650" y="184">Invest</text>
-    </svg>
-
     <div class="hero-actions">
       <button class="btn-primary" onclick="document.getElementById('signup').scrollIntoView({behavior:'smooth'})">Reserve your line</button>
       <a class="nav-cta" href="#dash">See the dashboard →</a>
@@ -835,16 +804,16 @@
           <div class="card-head">
             <div>
               <p class="eyebrow">// trend</p>
-              <h3 id="h-trend">Six months, side by side</h3>
+              <h3 id="h-trend">A year, against the year before</h3>
               <p class="sub" id="trend-sub"></p>
             </div>
             <button class="tbl-toggle" type="button" data-table="trend" aria-pressed="false">Table view</button>
           </div>
-          <p class="panel-lede">Where the money went each month, stacked by category — so a bad month reads as a shape, not a number you have to remember.</p>
+          <p class="panel-lede">Where the money went each month, stacked by category — with a dashed line showing what that same month cost you a year earlier.</p>
           <div class="scroll-x" id="trend-chart"></div>
           <div id="trend-table" hidden></div>
           <ul class="legend" id="trend-legend"></ul>
-          <figcaption>Always the last six months, so the shape of the year stays visible whatever range you pick above.</figcaption>
+          <figcaption>Always the last twelve months against the twelve before them, so seasonal spending reads as a pattern rather than a surprise.</figcaption>
         </figure>
       </article>
 
@@ -1169,8 +1138,11 @@ const pick = a => a[Math.floor(rand() * a.length)];
 
 const TODAY = new Date();
 TODAY.setHours(0,0,0,0);
-const MONTHS = [];                                    // 12 months, oldest → newest
-for (let i = 11; i >= 0; i--){
+/* 24 months, oldest → newest. Two years, because the trend chart draws each
+   month against the same month a year earlier — the older twelve are never
+   shown as bars, they are the comparison line. */
+const MONTHS = [];
+for (let i = 23; i >= 0; i--){
   const d = new Date(TODAY.getFullYear(), TODAY.getMonth() - i, 1);
   MONTHS.push(d);
 }
@@ -1404,7 +1376,8 @@ function bindTip(node, rowsFn, title, label){
    7 · STAT TILES — value + delta + 12-month sparkline
    ============================================================ */
 function monthlySeries(metric){
-  return MONTHS.map(m => {
+  // Still twelve: the tiles are a year at a glance, not the whole data set.
+  return MONTHS.slice(-12).map(m => {
     const w = { start:new Date(m.getFullYear(), m.getMonth(), 1), end:new Date(m.getFullYear(), m.getMonth() + 1, 0) };
     const t = totals(sliceFor(w));
     if (metric === 'income') return t.income;
@@ -1730,16 +1703,22 @@ function renderBudgets(rows, r){
 function renderTrend(){
   const host = document.getElementById('trend-chart');
   host.textContent = '';
-  const months = MONTHS.slice(-6);
-  const data = months.map(m => {
+  /* Twelve bars, and the twelve months before them as the comparison line.
+     Both sides honour the legend toggles, or the comparison would be unfair. */
+  const monthTotal = m => {
     const w = { start:new Date(m.getFullYear(), m.getMonth(), 1), end:new Date(m.getFullYear(), m.getMonth() + 1, 0) };
     const t = totals(sliceFor(w));
     return { month:m, byCat:t.byCat, total:CATS.reduce((s,c) => s + (state.hidden.has(c.id) ? 0 : t.byCat[c.id]), 0) };
-  });
+  };
+  const months = MONTHS.slice(-12);
+  const priorMonths = MONTHS.slice(0, 12);          // same months, one year back
+  const data = months.map(monthTotal);
+  const prior = priorMonths.map(monthTotal);
 
   const W = chartWidth(host, 420), H = 300, PL = 56, PR = 12, PT = 22, PB = 34;   // PB holds the x-axis band
   const plotW = W - PL - PR, plotH = H - PT - PB;
-  const rawMax = Math.max.apply(null, data.map(d => d.total)) || 1;
+  /* Scale to whichever is taller — a spike last year must not clip off the top. */
+  const rawMax = Math.max.apply(null, data.map(d => d.total).concat(prior.map(d => d.total))) || 1;
   /* four ticks that land on round numbers */
   const rough = rawMax / 4;
   const mag = Math.pow(10, Math.floor(Math.log10(rough)));
@@ -1800,16 +1779,50 @@ function renderTrend(){
     lb.textContent = moneyCompact(d.total);
     s.appendChild(lb);
 
+    /* year on January and on the first column, so a twelve-month span reads
+       without repeating the year under every bar */
     const xl = svg('text', { class:'tick', x:cx, y:H - PB + 17, 'text-anchor':'middle' });
-    xl.textContent = monthShort(d.month);
+    xl.textContent = (i === 0 || d.month.getMonth() === 0)
+      ? monthShort(d.month) + " '" + String(d.month.getFullYear()).slice(-2)
+      : monthShort(d.month);
     s.appendChild(xl);
+  });
+
+  /* ---- the same month, one year earlier ----
+     Appended after the bars so it draws over them, and dashed so it reads as a
+     reference rather than as another category. */
+  const pts = prior.map((p, i) => ({ x:PL + band * i + band / 2, y:y(p.total), prior:p, now:data[i] }));
+  s.appendChild(svg('path', {
+    class:'yoy-line', fill:'none',
+    d: pts.map((pt, i) => (i ? 'L' : 'M') + pt.x.toFixed(1) + ',' + pt.y.toFixed(1)).join(' ')
+  }));
+
+  pts.forEach(pt => {
+    const g = svg('g', { class:'mark' });
+    g.appendChild(svg('circle', { class:'yoy-dot', cx:pt.x, cy:pt.y, r:3.5 }));
+    g.appendChild(svg('circle', { class:'hit', cx:pt.x, cy:pt.y, r:15 }));
+    const diff = pt.now.total - pt.prior.total;
+    bindTip(g,
+      () => [
+        { label:monthShort(pt.prior.month) + ' ' + pt.prior.month.getFullYear(), value:money2(pt.prior.total) },
+        { label:'this year', value:money2(pt.now.total) },
+        { label:diff >= 0 ? 'more than last year' : 'less than last year', value:money2(Math.abs(diff)), total:true }
+      ],
+      monthShort(pt.now.month) + ' vs a year earlier',
+      monthShort(pt.now.month) + ': ' + money2(pt.now.total) + ' this year against ' + money2(pt.prior.total) + ' a year earlier.');
+    s.appendChild(g);
   });
 
   host.appendChild(s);
 
-  const last = data[data.length - 1], prev = data[data.length - 2];
-  document.getElementById('trend-sub').textContent = prev
-    ? monthShort(last.month) + ' is ' + money0(Math.abs(last.total - prev.total)) + (last.total >= prev.total ? ' above ' : ' below ') + monthShort(prev.month) + '.'
+  /* The headline comparison is now against a year ago, not against last month —
+     that is the question the line was added to answer. */
+  const last = data[data.length - 1], lastYear = prior[prior.length - 1];
+  const gap = last.total - lastYear.total;
+  document.getElementById('trend-sub').textContent = lastYear
+    ? monthShort(last.month) + ' is ' + money0(Math.abs(gap)) +
+      (gap >= 0 ? ' above ' : ' below ') +
+      monthShort(lastYear.month) + ' ' + lastYear.month.getFullYear() + '.'
     : '';
 
   /* legend — always present for two or more series; click to isolate */
@@ -1832,13 +1845,24 @@ function renderTrend(){
     lg.appendChild(li);
   });
 
+  /* The line is a reference, not a series you can switch off — its key says so
+     with a dash rather than a swatch, and it is not a button. */
+  const yoyLi = el('li', 'legend-static');
+  const dash = el('span', 'swatch-line');
+  yoyLi.appendChild(dash);
+  yoyLi.appendChild(document.createTextNode('Same month, last year'));
+  lg.appendChild(yoyLi);
+
   const tw = document.getElementById('trend-table');
   tw.textContent = '';
   tw.appendChild(buildTable(
-    ['Month'].concat(CATS.map(c => c.label)).concat(['Total']),
-    data.map(d => [monthShort(d.month) + ' ' + d.month.getFullYear()]
+    ['Month'].concat(CATS.map(c => c.label)).concat(['Total', 'Year earlier']),
+    data.map((d, i) => [monthShort(d.month) + ' ' + d.month.getFullYear()]
       .concat(CATS.map(c => money0(d.byCat[c.id])))
-      .concat([money0(CATS.reduce((s,c) => s + d.byCat[c.id], 0))]))
+      .concat([
+        money0(CATS.reduce((s,c) => s + d.byCat[c.id], 0)),
+        money0(CATS.reduce((s,c) => s + prior[i].byCat[c.id], 0))
+      ]))
   ));
 }
 
