@@ -196,10 +196,51 @@
   .hero h1 .glow{ color: var(--mint); text-shadow: 0 0 26px var(--mint-glow); }
   .hero p.lede{
     font-size: 18px; color: var(--ink-soft);
-    max-width: 52ch; margin: 0 auto 28px;
+    max-width: 52ch; margin: 0 auto 48px;
   }
 
-  .ticker-wrap{ position: relative; max-width: 720px; margin: 0 auto 26px; }
+  /* ---------- the account network, behind the balance ----------
+     The four feeds converge on the number itself, which is the claim the
+     diagram is making. It is absolutely positioned and deliberately wider
+     than its parent, so it spills behind the lede and the buttons and costs
+     no vertical space of its own. */
+  .ticker-wrap{
+    position: relative; max-width: 720px; margin: 0 auto 26px;
+    min-height: 150px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+  .ticker-net{
+    position:absolute; top:50%; left:50%;
+    /* lifted so the convergence glow sits just above the digits rather than
+       behind them — the number reads as what the four feeds add up to */
+    transform: translate(-50%, calc(-50% - 104px));
+    width: min(1040px, 94vw); height:auto;
+    pointer-events:none; z-index:0; opacity:.62;
+  }
+  .ticker-net .flow{
+    stroke: var(--mint-dim); stroke-width: 1.4; fill: none;
+    stroke-dasharray: 3 7; animation: dash 1.6s linear infinite; opacity: .8;
+  }
+  @keyframes dash{ to{ stroke-dashoffset: -20; } }
+  .ticker-net .node-ring{ fill: var(--bg-panel); stroke: var(--hair-strong); stroke-width: 1; }
+  .ticker-net .node-label{
+    font-family:'IBM Plex Mono', monospace; font-size: 10.5px;
+    fill: var(--ink-soft); text-anchor: middle;
+  }
+  .ticker-net .center-glow{ fill: var(--mint); opacity: .18; }
+  .ticker-net .center-dot{ fill: var(--mint); }
+
+  /* the number sits above the wiring, and carries its own dark halo so the
+     dashed lines never cut through a digit */
+  .ticker, .ticker-label{ position: relative; z-index: 1; }
+  .ticker{ text-shadow: 0 0 22px var(--bg), 0 0 8px var(--bg); }
+
+  /* below this the 760-unit viewBox scales the node labels into illegibility */
+  @media (max-width: 700px){
+    .ticker-net{ display:none; }
+    .ticker-wrap{ min-height: 0; }
+  }
+
   .ticker{
     font-family:'IBM Plex Mono', monospace;
     font-weight: 500;
@@ -269,7 +310,7 @@
 
   /* ---------- VIEWS ---------- */
   .views{ padding: 88px 0; border-top: 1px solid var(--hair); }
-  .views-head{ max-width: 62ch; margin: 0 auto 44px; text-align:center; }
+  .views-head{ max-width: 62ch; margin: 46px auto 0; text-align:center; }
   .views-head h2{ font-size: clamp(28px, 3.4vw, 38px); margin: 12px 0 10px; }
   .views-head p{ color: var(--ink-soft); margin: 0; }
 
@@ -365,7 +406,7 @@
      Everything below is scoped to #dash so it can't reach the
      rest of the landing page.
      ========================================================== */
-  .dash-section{ padding: 88px 0 96px; border-top: 1px solid var(--hair); scroll-margin-top: 74px; }
+  .dash-section{ padding: 40px 0 88px; border-top: 1px solid var(--hair); scroll-margin-top: 74px; }
   .dash-wrap{ max-width: 1240px; margin: 0 auto; padding: 0 28px; }
 
   #dash .eyebrow{
@@ -699,6 +740,30 @@
     <p class="lede">Every account feeds one number, updated the instant something moves. This is money, without the lag.</p>
 
     <div class="ticker-wrap">
+      <!-- The four accounts converge on the balance itself. No centre dot:
+           the number is the point they meet at. -->
+      <svg class="ticker-net" viewBox="0 0 760 220" aria-hidden="true" focusable="false">
+        <path class="flow" d="M110,40 C 260,40 300,90 380,110"/>
+        <path class="flow" d="M650,40 C 500,40 460,90 380,110"/>
+        <path class="flow" d="M110,180 C 260,180 300,120 380,110"/>
+        <path class="flow" d="M650,180 C 500,180 460,120 380,110"/>
+
+        <circle class="center-glow" cx="380" cy="110" r="11"/>
+        <circle class="center-dot" cx="380" cy="110" r="3.2"/>
+
+        <circle class="node-ring" cx="110" cy="40" r="26"/>
+        <text class="node-label" x="110" y="44">Checking</text>
+
+        <circle class="node-ring" cx="650" cy="40" r="26"/>
+        <text class="node-label" x="650" y="44">Savings</text>
+
+        <circle class="node-ring" cx="110" cy="180" r="26"/>
+        <text class="node-label" x="110" y="184">Card</text>
+
+        <circle class="node-ring" cx="650" cy="180" r="26"/>
+        <text class="node-label" x="650" y="184">Invest</text>
+      </svg>
+
       <div class="ticker mono" id="ticker">$0.00</div>
       <div class="ticker-label"><span class="dot"></span>net balance · updating live</div>
     </div>
@@ -714,11 +779,6 @@
 <section class="dash-section" id="dash">
   <div class="dash-wrap">
 
-    <div class="views-head">
-      <span class="eyebrow">// the dashboard</span>
-      <h2 class="display">Five views of the same money</h2>
-      <p>A live demo, running on made-up data right here in your browser. Scroll through the views, move a charge to another bucket, and watch every number follow.</p>
-    </div>
 
     <div class="dash-bar">
       <div class="dash-tabs" id="dash-tabs">
@@ -853,6 +913,11 @@
       <div class="dash-dots" id="dash-dots" aria-hidden="true"></div>
       <button class="dash-arrow" id="dash-next" type="button" aria-label="Next view">›</button>
       <span class="dash-note">Demo data · nothing leaves your browser</span>
+    </div>
+    <div class="views-head">
+      <span class="eyebrow">// the dashboard</span>
+      <h2 class="display">Five views of the same money</h2>
+      <p>A live demo, running on made-up data right here in your browser. Scroll through the views, move a charge to another bucket, and watch every number follow.</p>
     </div>
 
   </div>
