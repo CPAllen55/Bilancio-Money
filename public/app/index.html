@@ -93,15 +93,50 @@
   .range-note{ font-family:'IBM Plex Mono', monospace; font-size:11px;
                font-weight:400; color:var(--ink-soft); text-transform:none;
                letter-spacing:0; margin-left:8px; }
-  .snap-grid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px 22px;
-              font-family:'IBM Plex Mono', monospace; font-size:13px; }
-  .snap-grid .k{ color:var(--ink-soft); }
-  .snap-grid .v{ color:var(--ink); font-size:17px; }
-  .snap-grid .v.in{ color:var(--mint); }
-  .snap-grid .v.out{ color:var(--coral); }
-  .snap-cats{ grid-column:1 / -1; border-top:1px solid var(--hair); padding-top:12px; }
-  .snap-cats .row{ display:flex; justify-content:space-between; color:var(--ink-soft); }
-  .snap-cats .row b{ color:var(--ink); font-weight:500; }
+  /* ---------- Overview: the same design as the landing-page demo,
+       running on real data from /api/summary and /api/trend ---------- */
+  :root{ --dash-surface:#0F171F; --dash-grid:#1B2630; --muted:#7E90A2;
+         --good:#00F0A8; --warning:#FAB219; --critical:#FF5C72; }
+
+  .ov-safe{ background:var(--dash-surface); border:1px solid var(--hair);
+            border-radius:6px; padding:20px 22px; margin-bottom:16px; }
+  .ov-eyebrow{ font-family:'IBM Plex Mono', monospace; font-size:11px;
+               letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft); margin:0; }
+  .ov-fig{ font-family:'IBM Plex Sans', sans-serif; font-size:46px; line-height:1.05;
+           font-weight:600; letter-spacing:-.02em; margin:10px 0 2px; }
+  .ov-sub{ font-size:13px; color:var(--ink-soft); margin:0 0 18px; }
+  .ov-sub b{ color:var(--ink); font-weight:600; }
+
+  .meter-track{ position:relative; height:10px; border-radius:2px; background:var(--dash-grid); }
+  .meter-fill{ position:absolute; inset:0 auto 0 0; border-radius:2px 4px 4px 2px; background:var(--mint); }
+  .meter-tick{ position:absolute; top:-5px; bottom:-5px; width:2px; background:var(--ink); border-radius:1px; }
+  .meter-legend{ display:flex; justify-content:space-between; gap:12px; margin-top:9px;
+                 font-size:12px; color:var(--muted); }
+  .meter-legend .mono{ font-family:'IBM Plex Mono', monospace; color:var(--ink-soft); }
+  .status{ display:inline-flex; align-items:center; gap:7px; font-size:13px; font-weight:600; }
+  .status.good{ color:var(--good); }
+  .status.warning{ color:var(--warning); }
+
+  .ov-tiles{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px; }
+  .tile{ background:var(--dash-surface); border:1px solid var(--hair); border-radius:6px;
+         padding:16px 18px; display:flex; flex-direction:column; gap:2px; }
+  .tile .t-label{ font-size:12.5px; color:var(--ink-soft); }
+  .tile .t-value{ font-family:'IBM Plex Sans', sans-serif; font-size:25px; font-weight:600;
+                  letter-spacing:-.015em; margin-top:2px; }
+  .tile .t-foot{ display:flex; align-items:flex-end; justify-content:space-between; gap:10px; margin-top:8px; }
+  .tile .t-delta{ font-size:12.5px; display:flex; align-items:center; gap:5px; }
+  .tile .t-delta.up-good{ color:var(--good); }
+  .tile .t-delta.down-bad{ color:var(--critical); }
+  .tile .t-delta.flat{ color:var(--muted); }
+  .tile .t-delta .vs{ color:var(--muted); }
+  .spark{ display:block; }
+
+  .ov-cats{ margin-top:16px; border-top:1px solid var(--hair); padding-top:14px;
+            font-family:'IBM Plex Mono', monospace; font-size:13px; }
+  .ov-cats .row{ display:flex; justify-content:space-between; color:var(--ink-soft); line-height:1.9; }
+  .ov-cats .row b{ color:var(--ink); font-weight:500; }
+
+  @media (max-width: 560px){ .ov-tiles{ grid-template-columns:minmax(0,1fr); } }
   .range-select{
     font-family:'IBM Plex Mono', monospace; font-size:12px;
     background:var(--bg); color:var(--ink-soft);
@@ -151,8 +186,12 @@
 </div>
 
 <div class="panel" id="snapshot" hidden>
-  <h2>Snapshot <span class="range-note" id="snap-range"></span></h2>
-  <div class="snap-grid" id="snap-grid"></div>
+  <h2>Overview <span class="range-note" id="snap-range"></span></h2>
+
+  <div class="ov-safe" id="ov-safe"></div>
+  <div class="ov-tiles" id="ov-tiles"></div>
+  <div class="ov-cats" id="ov-cats"></div>
+
   <div class="actions">
     <select class="range-select" id="snap-range-select">
       <option value="this-month" selected>This month</option>
@@ -285,9 +324,49 @@ async function check() {
 }
 
 /* ==========================================================================
-   Snapshot — the first real numbers, computed by the Worker from Plaid data.
-   This is not the dashboard; it is proof the aggregate endpoint is right.
+   Overview — the demo's first view, rendered from real Plaid data.
+   Same design language as the landing page; the numbers come from the Worker.
    ========================================================================== */
+
+/** Compact sparkline. Flat series get a flat line rather than a divide-by-zero. */
+function sparkline(values, stroke) {
+  const W = 116, H = 30, P = 4;
+  const lo = Math.min(...values), hi = Math.max(...values);
+  const span = (hi - lo) || 1;
+  const x = i => P + (i / Math.max(1, values.length - 1)) * (W - P * 2);
+  const y = v => H - P - ((v - lo) / span) * (H - P * 2);
+  const d = values.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+  const last = values[values.length - 1];
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true">
+    <path d="${d}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity=".85"/>
+    <circle cx="${x(values.length - 1).toFixed(1)}" cy="${y(last).toFixed(1)}" r="2.5" fill="${stroke}"/>
+  </svg>`;
+}
+
+/**
+ * Direction is not the same as good. More money in is good; more money out is
+ * not. Each tile says which way it reads rather than assuming up means up.
+ */
+function tile(label, value, now, before, betterWhen, spark) {
+  let cls = 'flat', arrow = '', text = 'no prior period';
+  if (before) {
+    const pct = Math.round(((now - before) / Math.abs(before)) * 100);
+    const rose = now >= before;
+    const good = betterWhen === 'up' ? rose : !rose;
+    cls = pct === 0 ? 'flat' : (good ? 'up-good' : 'down-bad');
+    arrow = pct === 0 ? '' : (rose ? '▲' : '▼');
+    text = `${pct >= 0 ? '+' : ''}${pct}%`;
+  }
+  return `<div class="tile">
+    <div class="t-label">${label}</div>
+    <div class="t-value">${value}</div>
+    <div class="t-foot">
+      <span class="t-delta ${cls}">${arrow} ${text} <span class="vs">vs prior</span></span>
+      ${spark || ''}
+    </div>
+  </div>`;
+}
+
 async function loadSnapshot() {
   const range = document.getElementById('snap-range-select').value;
   const status = document.getElementById('snap-status');
@@ -296,92 +375,56 @@ async function loadSnapshot() {
 
   try {
     const s = await authed(`/api/summary?range=${encodeURIComponent(range)}`);
-    const t = s.totals, p = s.previous;
+    const t = s.totals, p = s.previous, safe = s.safeToSpend;
     document.getElementById('snap-range').textContent = `${s.range.start} → ${s.range.end}`;
 
-    const delta = (now, before) => {
-      if (!before) return '';
-      const pct = Math.round(((now - before) / before) * 100);
-      return ` (${pct >= 0 ? '+' : ''}${pct}% vs ${s.comparison.label.toLowerCase()})`;
-    };
+    /* ---- safe to spend, with a pace tick ---- */
+    const spentPct = safe.budget ? Math.min(100, (safe.spent / safe.budget) * 100) : 0;
+    const pacePct  = Math.min(100, (safe.daysElapsed / safe.daysInPeriod) * 100);
+    document.getElementById('ov-safe').innerHTML = `
+      <p class="ov-eyebrow">Safe to spend · rest of period</p>
+      <p class="ov-fig">${money(safe.remaining)}</p>
+      <p class="ov-sub">${safe.daysLeft > 0
+        ? `That is about <b>${money(safe.perDay)} a day</b> for the ${safe.daysLeft} days left.`
+        : 'The period is complete.'}</p>
+      <div class="meter-track">
+        <div class="meter-fill" style="width:${spentPct.toFixed(1)}%"></div>
+        <div class="meter-tick" style="left:${pacePct.toFixed(1)}%"></div>
+      </div>
+      <div class="meter-legend">
+        <span class="mono">${money(safe.spent)} spent of ${money(safe.budget)}</span>
+        <span class="status ${safe.onPace ? 'good' : 'warning'}">${safe.onPace ? '✓ on pace' : '! ahead of pace'}</span>
+      </div>`;
 
-    const grid = document.getElementById('snap-grid');
-    grid.textContent = '';
-    const cell = (k, v, cls) => {
-      const d = document.createElement('div');
-      d.innerHTML = `<div class="k">${k}</div><div class="v ${cls || ''}">${v}</div>`;
-      grid.appendChild(d);
-    };
+    /* ---- four tiles, with sparklines from the trend endpoint ---- */
+    let sp = null;
+    try { sp = (await authed('/api/trend?months=12')).sparklines; } catch { /* tiles still work without */ }
+    const line = (arr, colour) => (sp && arr && arr.some(v => v) ? sparkline(arr, colour) : '');
 
-    cell('Money in',  money(t.income)  + delta(t.income, p.income),   'in');
-    cell('Money out', money(t.expense) + delta(t.expense, p.expense), 'out');
-    cell('Net', money(t.net));
-    cell('Safe to spend',
-      `${money(s.safeToSpend.remaining)} · ${money(s.safeToSpend.perDay)}/day for ${s.safeToSpend.daysLeft}d`);
+    document.getElementById('ov-tiles').innerHTML = [
+      tile('Money in',     money(t.income),  t.income,  p.income,  'up',   line(sp?.income,  'var(--good)')),
+      tile('Money out',    money(t.expense), t.expense, p.expense, 'down', line(sp?.expense, 'var(--critical)')),
+      tile('Kept',         money(t.net),     t.net,     p.net,     'up',   line(sp?.net,     'var(--good)')),
+      tile('Savings rate',
+           t.income ? ((t.net / t.income) * 100).toFixed(1) + '%' : '—',
+           t.income ? (t.net / t.income) * 100 : 0,
+           p.income ? (p.net / p.income) * 100 : 0,
+           'up', line(sp?.savingsRate, 'var(--good)')),
+    ].join('');
 
-    const cats = Object.entries(t.byCategory)
-      .filter(([, v]) => v > 0)
-      .sort((a, b) => b[1] - a[1]);
+    /* ---- where it went ---- */
+    const cats = Object.entries(t.byCategory).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    const label = id => (s.categories.find(c => c.id === id) || {}).label || id;
+    document.getElementById('ov-cats').innerHTML = cats.length
+      ? cats.map(([id, v]) => `<div class="row"><span>${label(id)}</span><b>${money(v)}</b></div>`).join('')
+      : '<div class="row">No categorised spending in this range.</div>';
 
-    const box = document.createElement('div');
-    box.className = 'snap-cats';
-    if (!cats.length) {
-      box.innerHTML = '<div class="row">No categorised spending in this range.</div>';
-    } else {
-      const label = id => (s.categories.find(c => c.id === id) || {}).label || id;
-      box.innerHTML = cats
-        .map(([id, v]) => `<div class="row"><span>${label(id)}</span><b>${money(v)}</b></div>`)
-        .join('');
-    }
-    grid.appendChild(box);
-
-    const note = t.transfersExcluded
+    status.textContent = t.transfersExcluded
       ? `${t.transfersExcluded} transfer${t.transfersExcluded === 1 ? '' : 's'} excluded — moving your own money is not spending.`
       : 'No transfers in this range.';
-    status.textContent = note;
-
-    await loadTrend();
   } catch (err) {
     status.textContent = err.message;
     status.className = 'bank-status bad';
-  }
-}
-
-/**
- * Exercises /api/trend. Rendered as text rather than a chart on purpose — the
- * real charts live on the landing page and get ported onto this data next.
- * This only has to prove the endpoint returns the right shape and numbers.
- */
-async function loadTrend() {
-  const grid = document.getElementById('snap-grid');
-  try {
-    const tr = await authed('/api/trend?months=12');
-    const withData = tr.series.filter(m => m.expense > 0 || m.income > 0);
-
-    const box = document.createElement('div');
-    box.className = 'snap-cats';
-    if (!withData.length) {
-      box.innerHTML = '<div class="row">No monthly data yet.</div>';
-    } else {
-      const priorFor = ym => {
-        const [y, m] = ym.split('-').map(Number);
-        const key = `${y - 1}-${String(m).padStart(2, '0')}`;
-        return (tr.priorSeries.find(p => p.month === key) || {}).expense ?? 0;
-      };
-      box.innerHTML =
-        '<div class="row"><span>Month</span><b>Out · vs a year earlier</b></div>' +
-        withData.map(m => {
-          const prev = priorFor(m.month);
-          const cmp = prev ? ` · ${money(prev)}` : ' · no prior year';
-          return `<div class="row"><span>${m.month}</span><b>${money(m.expense)}${cmp}</b></div>`;
-        }).join('');
-    }
-    grid.appendChild(box);
-  } catch (err) {
-    const box = document.createElement('div');
-    box.className = 'snap-cats';
-    box.innerHTML = `<div class="row" style="color:var(--coral)">trend: ${err.message}</div>`;
-    grid.appendChild(box);
   }
 }
 
