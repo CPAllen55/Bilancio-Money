@@ -11,6 +11,7 @@ import { users, waitlist } from "./db/schema";
 import { requireUser } from "./auth";
 import plaidRoutes from "./plaid-routes";
 import summaryRoutes from "./summary-routes";
+import categoryRoutes from "./category-routes";
 
 // Deliberately loose. The only thing worth rejecting here is input that cannot
 // be an address at all - anything stricter starts refusing real people.
@@ -99,6 +100,7 @@ app.post("/api/waitlist", async (c) => {
 
 app.route("/api/plaid", plaidRoutes);
 app.route("/api", summaryRoutes);
+app.route("/api", categoryRoutes);
 
 // JSON, not an HTML error page — the front end is always expecting JSON here.
 app.all("/api/*", (c) =>

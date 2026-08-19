@@ -116,6 +116,12 @@
   td.num.in{ color:var(--mint); }
   .pill{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft);
          border:1px solid var(--hair); border-radius:99px; padding:2px 8px; white-space:nowrap; }
+  /* The category cell is editable, so it looks editable rather than like text. */
+  select.catsel{ font-family:'IBM Plex Mono', monospace; font-size:12px;
+                 background:var(--bg-panel); color:var(--ink);
+                 border:1px solid var(--hair); border-radius:6px;
+                 padding:5px 8px; max-width:190px; cursor:pointer; }
+  select.catsel:hover{ border-color:var(--mint-dim); }
 
   /* ---------- banks ---------- */
   .bank{ border-top:1px solid var(--hair); padding:14px 0; }
@@ -238,10 +244,18 @@ const CLERK_JS_VERSION = '6';
 const PLAID_LINK_JS = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-const CAT_COLOUR = {
-  home:'var(--cat-home)', groceries:'var(--cat-groceries)', shopping:'var(--cat-shopping)',
-  dining:'var(--cat-dining)', pets:'var(--cat-pets)', transport:'var(--cat-transport)',
-  bills:'var(--cat-bills)'
+/* Colours and labels come from the API now, because a user can invent a
+   category and the front end cannot know it in advance. Filled by every
+   endpoint that returns categories; the fallbacks only show if one is missing. */
+let categoryList = [];
+const CAT_COLOUR = {};
+function rememberColours(list) {
+  (list || []).forEach(c => { CAT_COLOUR[c.slug] = c.colour; });
+}
+const colourOf = slug => CAT_COLOUR[slug] || 'var(--muted)';
+const labelOfSlug = slug => {
+  const found = categoryList.filter(c => c.slug === slug)[0];
+  return found ? found.label : slug;
 };
 
 const $ = id => document.getElementById(id);
@@ -314,6 +328,8 @@ let summaryCache = null;
 async function summaryFor(r) {
   if (summaryCache && summaryCache.range.key === r) return summaryCache;
   summaryCache = await authed('/api/summary?range=' + encodeURIComponent(r));
+  categoryList = summaryCache.categories;
+  rememberColours(categoryList);
   return summaryCache;
 }
 
@@ -417,7 +433,7 @@ async function renderCategories() {
     return found ? found.label : id;
   };
   host.innerHTML = rows.map(pair => {
-    const id = pair[0], v = pair[1], colour = CAT_COLOUR[id] || 'var(--muted)';
+    const id = pair[0], v = pair[1], colour = colourOf(id);
     return '<div class="crow">' +
       '<div class="cname"><span class="swatch" style="background:' + colour + '"></span>' + labelOf(id) + '</div>' +
       '<div class="ctrack"><div class="cfill" style="width:' + ((v / max) * 100).toFixed(1) + '%;background:' + colour + '"></div></div>' +
@@ -425,27 +441,110 @@ async function renderCategories() {
   }).join('');
 }
 
+const NEW_CATEGORY = '__new__';
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+}
+
+function categoryOptions(selectedSlug) {
+  const opts = categoryList.map(c =>
+    '<option value="' + c.id + '"' + (c.slug === selectedSlug ? ' selected' : '') + '>' +
+    escapeHtml(c.label) + (c.isSystem ? '' : ' ·yours') + '</option>').join('');
+  return '<option value="">—</option>' + opts +
+         '<option value="' + NEW_CATEGORY + '">+ New category…</option>';
+}
+
 async function renderTransactions() {
   const r = await authed('/api/transactions?range=' + encodeURIComponent(range()) + '&limit=200');
+  categoryList = r.categories;
   const host = $('tx-list');
   if (!r.transactions.length) { host.innerHTML = '<p class="empty">Nothing in this range.</p>'; return; }
 
-  const rows = r.transactions.map(t =>
-    '<tr><td class="num" style="color:var(--muted)">' + t.date + '</td>' +
-    '<td>' + t.name + (t.pending ? ' <span class="pill">pending</span>' : '') + '</td>' +
-    '<td><span class="pill">' + (t.kind === 'transfer' ? 'transfer' : (t.category || '—')) +
-    (t.categorySource === 'user' ? ' ·edited' : '') + '</span></td>' +
-    '<td class="num' + (t.amount > 0 ? ' in' : '') + '">' + (t.amount > 0 ? '+' : '') + money(t.amount) + '</td></tr>'
-  ).join('');
+  const rows = r.transactions.map(t => {
+    // A transfer is not spending, so it gets a label rather than a bucket —
+    // but it stays editable, because Plaid does mislabel things.
+    const source = t.categorySource === 'user' ? 'edited here'
+                 : t.categorySource === 'rule' ? 'your rule' : '';
+    return '<tr data-id="' + t.id + '" data-merchant="' + escapeHtml(t.name) + '">' +
+      '<td class="num" style="color:var(--muted)">' + t.date + '</td>' +
+      '<td>' + escapeHtml(t.name) + (t.pending ? ' <span class="pill">pending</span>' : '') +
+        (source ? ' <span class="pill">' + source + '</span>' : '') + '</td>' +
+      '<td><select class="catsel" data-id="' + t.id + '">' + categoryOptions(t.category) + '</select></td>' +
+      '<td class="num' + (t.amount > 0 ? ' in' : '') + '">' +
+        (t.amount > 0 ? '+' : '') + money(t.amount) + '</td></tr>';
+  }).join('');
 
   host.innerHTML = '<table class="data"><thead><tr><th>Date</th><th>Description</th>' +
     '<th>Category</th><th style="text-align:right">Amount</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-    '<p class="msg">' + r.transactions.length + ' of ' + r.total + ' shown.</p>';
+    '<p class="msg" id="tx-msg">' + r.transactions.length + ' of ' + r.total + ' shown.</p>';
 }
+
+/**
+ * Re-filing applies to the merchant by default — that is the whole point of
+ * "Starbucks is always Coffee". The undo link narrows it back to one
+ * transaction, so the stronger action stays reversible in one click.
+ */
+async function refile(txId, categoryId, merchantLabel) {
+  const msg = $('tx-msg');
+  const res = await authed('/api/transactions/' + encodeURIComponent(txId) + '/category', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ categoryId: categoryId, applyToMerchant: true })
+  });
+
+  summaryCache = null;
+  if (res.rule) {
+    msg.innerHTML = escapeHtml(res.rule.displayName) + ' is now ' + escapeHtml(res.category.label) +
+      ' — and so is every future one. <a href="#" id="just-one" style="color:var(--mint-dim)">just this one instead</a>';
+    const undo = document.getElementById('just-one');
+    undo.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try {
+        await authed('/api/rules/' + encodeURIComponent(res.rule.id), { method: 'DELETE' });
+        msg.textContent = 'Rule removed — the change applies to this transaction only.';
+        summaryCache = null;
+      } catch (err) { say(msg, err.message, 'bad'); }
+    });
+  } else {
+    msg.textContent = 'Re-filed as ' + res.category.label + '.';
+  }
+}
+
+// Delegated, because the table is rebuilt on every render.
+$('tx-list').addEventListener('change', async (e) => {
+  const sel = e.target.closest('.catsel');
+  if (!sel) return;
+  const row = sel.closest('tr');
+  const txId = sel.dataset.id;
+  const merchant = row ? row.dataset.merchant : '';
+  const previous = categoryList.filter(c => c.id === sel.value)[0];
+
+  try {
+    if (sel.value === NEW_CATEGORY) {
+      const name = window.prompt('Name the new category');
+      if (!name) { await renderTransactions(); return; }
+      const made = await authed('/api/categories', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: name })
+      });
+      categoryList = (await authed('/api/categories')).categories;
+      await refile(txId, made.category.id, merchant);
+      await renderTransactions();
+      return;
+    }
+    if (!sel.value) return;
+    await refile(txId, sel.value, merchant);
+  } catch (err) {
+    say($('tx-msg'), err.message, 'bad');
+  }
+});
 
 async function renderTrend() {
   const months = Number($('trend-range').value);
   const tr = await authed('/api/trend?months=' + months);
+  if (tr.categories) { categoryList = tr.categories; rememberColours(categoryList); }
   const host = $('trend-chart');
   const data = tr.series, prior = tr.priorSeries;
 
@@ -490,7 +589,7 @@ async function renderTrend() {
       const top = y(acc + v), bot = y(acc);
       svg += '<rect x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
              '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 2).toFixed(1) +
-             '" fill="' + (CAT_COLOUR[id] || 'var(--muted)') + '" rx="1"><title>' + id + ': ' + money(v) + '</title></rect>';
+             '" fill="' + colourOf(id) + '" rx="1"><title>' + id + ': ' + money(v) + '</title></rect>';
       acc += v;
     });
 
@@ -514,9 +613,16 @@ async function renderTrend() {
   });
   svg += '</svg>';
 
-  const legend = Object.keys(CAT_COLOUR).map(id =>
+  // Only categories that actually appear — a legend of twenty-two buckets,
+  // most of them empty, tells the reader nothing.
+  const present = new Set();
+  data.concat(prior).forEach(m => Object.keys(m.byCategory).forEach(id => {
+    if (m.byCategory[id] > 0) present.add(id);
+  }));
+  const legend = [...present].map(id =>
     '<span style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;font-size:12.5px;color:var(--ink-soft)">' +
-    '<span style="width:11px;height:11px;border-radius:2px;background:' + CAT_COLOUR[id] + '"></span>' + id + '</span>'
+    '<span style="width:11px;height:11px;border-radius:2px;background:' + colourOf(id) + '"></span>' +
+    escapeHtml(labelOfSlug(id)) + '</span>'
   ).join('');
 
   host.innerHTML = svg + '<div style="margin-top:12px">' + legend +

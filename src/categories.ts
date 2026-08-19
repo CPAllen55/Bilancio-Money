@@ -1,59 +1,76 @@
 /**
- * Plaid's categories are not Bilancio's.
+ * Categories: the buckets spending is sorted into, and how Plaid's guesses map
+ * onto them.
  *
- * Plaid returns a Personal Finance Category — a primary like RENT_AND_UTILITIES
- * and a detailed like RENT_AND_UTILITIES_RENT. The dashboard has seven buckets.
- * This is the translation, and it is a product decision rather than a technical
- * one: it decides what a user sees when they open the app.
+ * The list below is seeded into the database as system categories. Users can
+ * add their own, and a user category behaves identically once it exists — the
+ * only difference is who can edit it.
  *
- * It is deliberately a plain table so it can be argued with. Anything it gets
- * wrong, a user can override per transaction — that is what transaction_overrides
- * is for, and overrides always win.
+ * A category is resolved in this order, most specific first:
+ *   1. a per-transaction override  — "this one is different"
+ *   2. a merchant rule             — "Starbucks is always Coffee"
+ *   3. this mapping                — Plaid's guess
+ * All three resolve at read time. Plaid owns the transaction rows and a resync
+ * overwrites them, so nothing user-owned is ever written into one.
  */
 
-export const CATEGORIES = [
-  { id: "home", label: "Home" },
-  { id: "groceries", label: "Groceries" },
-  { id: "shopping", label: "Shopping" },
-  { id: "dining", label: "Dining" },
-  { id: "pets", label: "Pets" },
-  { id: "transport", label: "Transport" },
-  { id: "bills", label: "Bills" },
-] as const;
+export interface SystemCategory {
+  slug: string;
+  label: string;
+  colour: string;
+  sortOrder: number;
+}
 
-export type CategoryId = (typeof CATEGORIES)[number]["id"];
-export const CATEGORY_IDS: string[] = CATEGORIES.map((c) => c.id);
+// Lives in JSON so the seed script — plain Node, no TypeScript — reads the same
+// list the Worker does. Two copies would drift the first time one is edited.
+import systemCategories from "./db/system-categories.json";
+
+/** Deliberately closer to how people describe money than to Plaid's taxonomy. */
+export const SYSTEM_CATEGORIES: SystemCategory[] = systemCategories;
+
+export const SYSTEM_SLUGS = new Set(SYSTEM_CATEGORIES.map((c) => c.slug));
 
 /**
- * How a row counts. Transfers are the important one: moving your own money
- * between your own accounts is not spending, and counting it inflates both
- * sides of the ledger. A mortgage payment from checking to a linked mortgage
- * account would otherwise appear as $2,000 of "spending" every month.
+ * How a row counts. Transfers matter most: moving your own money between your
+ * own accounts is not spending, and counting it inflates both sides of the
+ * ledger — a mortgage payment into a linked mortgage account would otherwise
+ * read as thousands of pounds of spending every month.
  */
 export type Kind = "spend" | "income" | "transfer";
 
-/** Detailed categories worth splitting out of their primary. */
-const BY_DETAILED: Record<string, CategoryId> = {
+/** Plaid's detailed categories worth splitting out of their primary. */
+const BY_DETAILED: Record<string, string> = {
   FOOD_AND_DRINK_GROCERIES: "groceries",
+  FOOD_AND_DRINK_COFFEE: "coffee",
   GENERAL_MERCHANDISE_PET_SUPPLIES: "pets",
-  RENT_AND_UTILITIES_RENT: "home",
-  // Everything else under RENT_AND_UTILITIES is gas, water, internet, phone.
+  RENT_AND_UTILITIES_RENT: "housing",
+  RENT_AND_UTILITIES_INTERNET_AND_CABLE: "utilities",
+  GENERAL_SERVICES_INSURANCE: "insurance",
+  GENERAL_SERVICES_EDUCATION: "education",
+  GENERAL_SERVICES_CHILDCARE: "kids",
+  GENERAL_SERVICES_ACCOUNTING_AND_FINANCIAL_PLANNING: "business",
+  GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT: "taxes",
+  GOVERNMENT_AND_NON_PROFIT_DONATIONS: "giving",
+  ENTERTAINMENT_TV_AND_MOVIES: "subscriptions",
+  ENTERTAINMENT_MUSIC_AND_AUDIO: "subscriptions",
+  PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS: "personal",
+  TRANSPORTATION_TAXIS_AND_RIDE_SHARES: "transport",
 };
 
-const BY_PRIMARY: Record<string, CategoryId> = {
+const BY_PRIMARY: Record<string, string> = {
   FOOD_AND_DRINK: "dining",
   GENERAL_MERCHANDISE: "shopping",
-  ENTERTAINMENT: "shopping",
-  PERSONAL_CARE: "shopping",
-  HOME_IMPROVEMENT: "home",
-  RENT_AND_UTILITIES: "bills",
+  ENTERTAINMENT: "entertainment",
+  PERSONAL_CARE: "personal",
+  HOME_IMPROVEMENT: "housing",
+  RENT_AND_UTILITIES: "utilities",
   TRANSPORTATION: "transport",
-  TRAVEL: "transport",
-  LOAN_PAYMENTS: "bills",
-  BANK_FEES: "bills",
-  MEDICAL: "bills",
-  GENERAL_SERVICES: "bills",
-  GOVERNMENT_AND_NON_PROFIT: "bills",
+  TRAVEL: "travel",
+  LOAN_PAYMENTS: "loans",
+  BANK_FEES: "fees",
+  MEDICAL: "health",
+  GENERAL_SERVICES: "other",
+  GOVERNMENT_AND_NON_PROFIT: "other",
 };
 
 const INCOME_PRIMARY = new Set(["INCOME"]);
@@ -61,22 +78,38 @@ const TRANSFER_PRIMARY = new Set(["TRANSFER_IN", "TRANSFER_OUT"]);
 
 export interface Classified {
   kind: Kind;
-  /** null for income and transfers — they do not belong to a spending bucket. */
-  category: CategoryId | null;
+  /** null for income and transfers — neither belongs in a spending bucket. */
+  slug: string | null;
 }
 
 export function classify(primary: string | null, detailed: string | null): Classified {
-  if (primary && INCOME_PRIMARY.has(primary)) return { kind: "income", category: null };
-  if (primary && TRANSFER_PRIMARY.has(primary)) return { kind: "transfer", category: null };
+  if (primary && INCOME_PRIMARY.has(primary)) return { kind: "income", slug: null };
+  if (primary && TRANSFER_PRIMARY.has(primary)) return { kind: "transfer", slug: null };
 
   const fromDetailed = detailed ? BY_DETAILED[detailed] : undefined;
-  if (fromDetailed) return { kind: "spend", category: fromDetailed };
+  if (fromDetailed) return { kind: "spend", slug: fromDetailed };
 
   const fromPrimary = primary ? BY_PRIMARY[primary] : undefined;
-  if (fromPrimary) return { kind: "spend", category: fromPrimary };
+  if (fromPrimary) return { kind: "spend", slug: fromPrimary };
 
-  // Unmapped, or Plaid returned nothing. "shopping" is the honest dumping
-  // ground: visible in the UI, so a wrong guess gets noticed and corrected,
-  // rather than silently vanishing from the totals.
-  return { kind: "spend", category: "shopping" };
+  // Unmapped, or Plaid told us nothing. "Other" is visible in the UI, so a
+  // wrong guess gets noticed and re-filed rather than quietly vanishing.
+  return { kind: "spend", slug: "other" };
+}
+
+/**
+ * The key a merchant rule matches on.
+ *
+ * Store numbers and punctuation vary between transactions at the same shop —
+ * STARBUCKS #1234, Starbucks Store 9, SQ *STARBUCKS — so they are stripped.
+ * Short digit runs are kept, or "7 Eleven" would become "Eleven".
+ */
+export function merchantKey(merchantName: string | null, name: string): string {
+  return (merchantName || name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\b\d{3,}\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
 }

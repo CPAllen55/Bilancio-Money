@@ -1,7 +1,8 @@
 import {
   pgTable, uuid, text, timestamp, boolean, bigint, date,
-  jsonb, index, pgEnum,
+  jsonb, index, uniqueIndex, integer, pgEnum,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const itemStatus = pgEnum("item_status", [
   "good", "login_required", "pending_expiration", "pending_disconnect", "revoked",
@@ -103,12 +104,56 @@ export const transactions = pgTable("transactions", {
   index("tx_pending_idx").on(t.pendingTransactionId),
 ]);
 
-// 5. Overrides - user-owned. Kept separate so a resync cannot erase user edits.
+// 5. Categories - the buckets spending is sorted into.
+//
+// user_id NULL means a system category, shared by everyone and not editable.
+// A row with a user_id is that person's own. Keeping both in one table means a
+// category reference is a category reference, wherever it came from.
+export const categories = pgTable("categories", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  slug: text("slug").notNull(),
+  label: text("label").notNull(),
+  colour: text("colour").notNull().default("#7E90A2"),
+  sortOrder: integer("sort_order").notNull().default(500),
+  isSystem: boolean("is_system").notNull().default(false),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  // Two partial indexes rather than one on (user_id, slug): Postgres treats
+  // NULLs as distinct, so a plain composite index would happily allow twenty
+  // system categories all called "coffee".
+  uniqueIndex("categories_system_slug_idx").on(t.slug).where(sql`${t.userId} is null`),
+  uniqueIndex("categories_user_slug_idx").on(t.userId, t.slug).where(sql`${t.userId} is not null`),
+]);
+
+// 6. Merchant rules - "Starbucks is always Coffee".
+//
+// Applied when reading, never by rewriting transactions: Plaid owns those rows
+// and a resync overwrites them. Storing the intent instead means one rule keeps
+// working for every future Starbucks without a backfill.
+export const merchantRules = pgTable("merchant_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // Normalised merchant name - lower-cased, stripped of store numbers and
+  // punctuation - so STARBUCKS #1234 and Starbucks Store 9 land on one rule.
+  matchKey: text("match_key").notNull(),
+  // What the user saw when they made the rule, for showing it back to them.
+  displayName: text("display_name").notNull(),
+  categoryId: uuid("category_id").notNull()
+    .references(() => categories.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("merchant_rules_user_key_idx").on(t.userId, t.matchKey),
+]);
+
+// 7. Overrides - user-owned, and the last word. Kept separate so a resync
+// cannot erase user edits, and beats a merchant rule for that one transaction.
 export const transactionOverrides = pgTable("transaction_overrides", {
   transactionId: uuid("transaction_id").primaryKey()
     .references(() => transactions.id, { onDelete: "cascade" }),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  categoryId: uuid("category_id"),
+  categoryId: uuid("category_id").references(() => categories.id, { onDelete: "set null" }),
   notes: text("notes"),
   tags: text("tags").array(),
   isHidden: boolean("is_hidden").notNull().default(false),
