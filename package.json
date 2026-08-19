@@ -8,8 +8,11 @@
     "start": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:migrate": "node scripts/migrate.mjs dev",
+    "db:migrate:prod": "node scripts/migrate.mjs prod",
+    "db:studio": "drizzle-kit studio",
+    "waitlist": "node scripts/waitlist.mjs prod",
+    "waitlist:dev": "node scripts/waitlist.mjs dev"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",
