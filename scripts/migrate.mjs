@@ -35,6 +35,8 @@ try {
     readFileSync(new URL("../src/db/system-categories.json", import.meta.url), "utf8"),
   );
 
+  // Two passes: every row has to exist before any of them can point at a
+  // parent, and a single pass would depend on the JSON being ordered correctly.
   for (const c of system) {
     await client.query(
       `insert into categories (user_id, slug, label, colour, sort_order, is_system)
@@ -46,7 +48,31 @@ try {
       [c.slug, c.label, c.colour, c.sortOrder],
     );
   }
-  console.log(`${system.length} system categories seeded.`);
+
+  for (const c of system) {
+    if (c.parent) {
+      await client.query(
+        `update categories child
+            set parent_id = parent.id
+           from categories parent
+          where child.slug = $1
+            and child.user_id is null
+            and parent.slug = $2
+            and parent.user_id is null`,
+        [c.slug, c.parent],
+      );
+    } else {
+      // Explicit, so a category promoted to a parent in the JSON actually loses
+      // its old parent rather than silently keeping it.
+      await client.query(
+        `update categories set parent_id = null where slug = $1 and user_id is null`,
+        [c.slug],
+      );
+    }
+  }
+
+  const parents = system.filter((c) => !c.parent).length;
+  console.log(`${system.length} system categories seeded (${parents} parents, ${system.length - parents} sub-categories).`);
 } finally {
   await client.end();
 }

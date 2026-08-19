@@ -117,6 +117,10 @@ export const categories = pgTable("categories", {
   colour: text("colour").notNull().default("#7E90A2"),
   sortOrder: integer("sort_order").notNull().default(500),
   isSystem: boolean("is_system").notNull().default(false),
+  // Two levels, never more: a parent groups leaves, and a leaf is what a
+  // transaction is filed under. Deeper trees make every rollup ambiguous —
+  // "is this total the node, or the node plus everything under it?"
+  parentId: uuid("parent_id").references((): any => categories.id, { onDelete: "set null" }),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [

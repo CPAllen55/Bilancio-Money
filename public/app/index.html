@@ -104,6 +104,13 @@
   .crow .ctrack{ height:8px; background:var(--grid); border-radius:2px; overflow:hidden; }
   .crow .cfill{ height:100%; border-radius:2px; }
   .crow .camt{ text-align:right; font-family:'IBM Plex Mono', monospace; font-size:13px; }
+  /* Sub-categories are indented and quieter, so the parent reads as the total
+     and the children as its makeup rather than as competing rows. */
+  .crow.child{ border-top:none; padding:4px 0; }
+  .crow.child .cname{ padding-left:18px; font-size:12.5px; color:var(--ink-soft); }
+  .crow.child .ctrack{ height:5px; }
+  .crow.child .camt{ font-size:12px; color:var(--ink-soft); }
+  .crow.parent{ padding-top:14px; }
 
   /* ---------- table ---------- */
   table.data{ width:100%; border-collapse:collapse; font-size:13.5px; }
@@ -439,27 +446,47 @@ async function renderOverview() {
   ].join('');
 }
 
+/** Parents ranked by their own total, each with its sub-categories beneath. */
 async function renderCategories() {
   const s = await summaryFor(range());
-  const rows = Object.keys(s.totals.byCategory)
-    .map(id => [id, s.totals.byCategory[id]])
+  const host = $('cat-list');
+
+  const parents = Object.keys(s.totals.byParent || {})
+    .map(slug => [slug, s.totals.byParent[slug]])
+    .filter(p => p[1] > 0)
+    .sort((a, b) => b[1] - a[1]);
+
+  if (!parents.length) { host.innerHTML = '<p class="empty">No categorised spending in this range.</p>'; return; }
+
+  const max = parents[0][1];
+  const childrenOf = parentSlug => categoryList
+    .filter(c => c.parentSlug === parentSlug)
+    .map(c => [c.slug, s.totals.byCategory[c.slug] || 0])
     .filter(pair => pair[1] > 0)
     .sort((a, b) => b[1] - a[1]);
 
-  const host = $('cat-list');
-  if (!rows.length) { host.innerHTML = '<p class="empty">No categorised spending in this range.</p>'; return; }
+  host.innerHTML = parents.map(pair => {
+    const slug = pair[0], total = pair[1], colour = colourOf(slug);
+    const kids = childrenOf(slug);
 
-  const max = rows[0][1];
-  const labelOf = id => {
-    const found = s.categories.filter(c => c.id === id)[0];
-    return found ? found.label : id;
-  };
-  host.innerHTML = rows.map(pair => {
-    const id = pair[0], v = pair[1], colour = colourOf(id);
-    return '<div class="crow">' +
-      '<div class="cname"><span class="swatch" style="background:' + colour + '"></span>' + labelOf(id) + '</div>' +
-      '<div class="ctrack"><div class="cfill" style="width:' + ((v / max) * 100).toFixed(1) + '%;background:' + colour + '"></div></div>' +
-      '<div class="camt">' + money(v) + '</div></div>';
+    const head = '<div class="crow parent">' +
+      '<div class="cname"><span class="swatch" style="background:' + colour + '"></span>' +
+        '<b>' + escapeHtml(labelOfSlug(slug)) + '</b></div>' +
+      '<div class="ctrack"><div class="cfill" style="width:' + ((total / max) * 100).toFixed(1) +
+        '%;background:' + colour + '"></div></div>' +
+      '<div class="camt">' + money(total) + '</div></div>';
+
+    // Only worth breaking out when there is more than one thing inside it.
+    const rows = kids.length > 1 ? kids.map(k =>
+      '<div class="crow child">' +
+        '<div class="cname"><span class="swatch" style="background:' + colourOf(k[0]) + '"></span>' +
+          escapeHtml(labelOfSlug(k[0])) + '</div>' +
+        '<div class="ctrack"><div class="cfill" style="width:' + ((k[1] / max) * 100).toFixed(1) +
+          '%;background:' + colourOf(k[0]) + ';opacity:.75"></div></div>' +
+        '<div class="camt">' + money(k[1]) + '</div></div>'
+    ).join('') : '';
+
+    return head + rows;
   }).join('');
 }
 
@@ -470,12 +497,29 @@ function escapeHtml(s) {
     ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
 }
 
+/**
+ * Grouped by parent, because a flat list of thirty-one is unusable. Parents are
+ * the optgroup labels and are not themselves selectable — a transaction belongs
+ * to a leaf, or the rollup would double-count it.
+ */
 function categoryOptions(selectedSlug) {
-  const opts = categoryList.map(c =>
-    '<option value="' + c.id + '"' + (c.slug === selectedSlug ? ' selected' : '') + '>' +
-    escapeHtml(c.label) + (c.isSystem ? '' : ' ·yours') + '</option>').join('');
-  return '<option value="">—</option>' + opts +
-         '<option value="' + NEW_CATEGORY + '">+ New category…</option>';
+  const parents = categoryList.filter(c => !c.parentSlug);
+  const opt = c => '<option value="' + c.id + '"' +
+    (c.slug === selectedSlug ? ' selected' : '') + '>' +
+    escapeHtml(c.label) + (c.isSystem ? '' : ' ·yours') + '</option>';
+
+  let html = '<option value="">—</option>';
+  for (const p of parents) {
+    const kids = categoryList.filter(c => c.parentSlug === p.slug);
+    if (!kids.length) continue;
+    html += '<optgroup label="' + escapeHtml(p.label) + '">' + kids.map(opt).join('') + '</optgroup>';
+  }
+  // Anything a user created before parents existed, or without one.
+  const orphans = categoryList.filter(c => !c.parentSlug && !parents.some(p => p.slug === c.slug && categoryList.some(k => k.parentSlug === p.slug)));
+  const loose = orphans.filter(c => !categoryList.some(k => k.parentSlug === c.slug));
+  if (loose.length) html += '<optgroup label="Other">' + loose.map(opt).join('') + '</optgroup>';
+
+  return html + '<option value="' + NEW_CATEGORY + '">+ New category…</option>';
 }
 
 async function renderTransactions() {
@@ -565,35 +609,64 @@ $('tx-list').addEventListener('change', async (e) => {
 
 async function renderTrend() {
   const months = Number($('trend-range').value);
-  const tr = await authed('/api/trend?months=' + months);
-  if (tr.categories) { categoryList = tr.categories; rememberColours(categoryList); }
-  const host = $('trend-chart');
-  const data = tr.series, prior = tr.priorSeries;
+  const wantForecast = $('forecast-on').checked;
 
-  if (!data.some(m => m.expense > 0)) {
+  const [tr, fc] = await Promise.all([
+    authed('/api/trend?months=' + months),
+    wantForecast ? authed('/api/forecast').catch(() => null) : Promise.resolve(null)
+  ]);
+  if (tr.categories) { categoryList = tr.categories; rememberColours(categoryList); }
+
+  const host = $('trend-chart');
+  const actual = tr.series, prior = tr.priorSeries;
+
+  // Projected months are appended only where they run past the actual data —
+  // otherwise a forecast for a month already drawn would overwrite it.
+  let projected = [];
+  if (fc && fc.method !== 'insufficient-data') {
+    const lastActual = actual.length ? actual[actual.length - 1].month : '';
+    projected = fc.months.filter(m => m.projected && m.month > lastActual);
+  }
+
+  if (!actual.some(m => m.expense > 0) && !projected.length) {
     host.innerHTML = '<p class="empty">No monthly data yet.</p>';
+    await renderForecast();
     return;
   }
+
+  const all = actual.map(m => ({ month: m.month, byParent: m.byParent || {}, expense: m.expense, projected: false }))
+    .concat(projected.map(m => ({ month: m.month, byParent: m.byParent || {}, expense: m.expense, projected: true })));
 
   const W = Math.max(560, host.clientWidth || 880), H = 320;
   const PL = 66, PR = 14, PT = 20, PB = 38;
   const plotW = W - PL - PR, plotH = H - PT - PB;
   const peak = Math.max(
-    Math.max.apply(null, data.map(m => m.expense)),
-    Math.max.apply(null, prior.map(m => m.expense))
+    Math.max.apply(null, all.map(m => m.expense).concat([0])),
+    Math.max.apply(null, prior.map(m => m.expense).concat([0]))
   ) || 1;
 
-  // round the axis up to something a person would choose
   const mag = Math.pow(10, Math.floor(Math.log10(peak / 4)));
   const stepMul = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].filter(m => m * mag >= peak / 4)[0] || 10;
   const yMax = stepMul * mag * 4;
   const y = v => PT + plotH - (v / yMax) * plotH;
-  const band = plotW / data.length;
+  const band = plotW / all.length;
   const barW = Math.min(26, band * 0.55);
-  const every = Math.ceil(data.length / 12);
+  const every = Math.ceil(all.length / 12);
 
   let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
-            '" role="img" aria-label="Monthly spending against the year before">';
+            '" role="img" aria-label="Monthly spending, with the year before and any forecast">';
+
+  // Shade the forecast region first, so everything else draws on top of it.
+  const firstProjected = all.findIndex(m => m.projected);
+  if (firstProjected > -1) {
+    const x0 = PL + band * firstProjected;
+    svg += '<rect x="' + x0.toFixed(1) + '" y="' + PT + '" width="' + (W - PR - x0).toFixed(1) +
+           '" height="' + plotH + '" fill="var(--mint)" opacity=".05"/>' +
+           '<line x1="' + x0.toFixed(1) + '" x2="' + x0.toFixed(1) + '" y1="' + PT + '" y2="' + (PT + plotH) +
+           '" stroke="var(--mint-dim)" stroke-width="1" stroke-dasharray="3 3" opacity=".7"/>' +
+           '<text x="' + (x0 + 8).toFixed(1) + '" y="' + (PT + 14) + '" font-family="IBM Plex Mono" ' +
+           'font-size="10.5" fill="var(--mint-dim)">forecast</text>';
+  }
 
   for (let i = 0; i <= 4; i++) {
     const v = (yMax / 4) * i, yy = y(v);
@@ -602,45 +675,53 @@ async function renderTrend() {
            'font-size="10.5" fill="var(--muted)">' + money0(v) + '</text>';
   }
 
-  data.forEach((m, i) => {
+  all.forEach((m, i) => {
     const cx = PL + band * i + band / 2;
     let acc = 0;
-    Object.keys(m.byCategory).forEach(id => {
-      const v = m.byCategory[id];
+    // Stacked by parent, not leaf: nine segments read as a shape, twenty-two
+    // read as noise.
+    Object.keys(m.byParent).forEach(id => {
+      const v = m.byParent[id];
       if (!v) return;
       const top = y(acc + v), bot = y(acc);
       svg += '<rect x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
              '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 2).toFixed(1) +
-             '" fill="' + colourOf(id) + '" rx="1"><title>' + id + ': ' + money(v) + '</title></rect>';
+             '" fill="' + colourOf(id) + '" rx="1"' +
+             // Projected bars are the same colours, dimmed and outlined, so the
+             // shape is comparable but never mistaken for something that happened.
+             (m.projected ? ' opacity=".45" stroke="' + colourOf(id) + '" stroke-width="1" stroke-dasharray="2 2"' : '') +
+             '><title>' + escapeHtml(labelOfSlug(id)) + ': ' + money(v) +
+             (m.projected ? ' (projected)' : '') + '</title></rect>';
       acc += v;
     });
 
-    if (i % every === 0 || i === data.length - 1) {
+    if (i % every === 0 || i === all.length - 1) {
       const parts = m.month.split('-');
       const label = MONTH_NAMES[Number(parts[1]) - 1] +
         (parts[1] === '01' || i === 0 ? " '" + parts[0].slice(2) : '');
       svg += '<text x="' + cx + '" y="' + (H - PB + 18) + '" text-anchor="middle" font-family="IBM Plex Mono" ' +
-             'font-size="10.5" fill="var(--muted)">' + label + '</text>';
+             'font-size="10.5" fill="' + (m.projected ? 'var(--mint-dim)' : 'var(--muted)') + '">' + label + '</text>';
     }
   });
 
-  // year-ago line last, so it draws over the bars; dashed so it reads as a reference
-  const pts = prior.map((p, i) => (PL + band * i + band / 2).toFixed(1) + ',' + y(p.expense).toFixed(1));
-  svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--ink)" stroke-width="2" ' +
-         'stroke-dasharray="5 4" opacity=".78"/>';
-  prior.forEach((p, i) => {
-    svg += '<circle cx="' + (PL + band * i + band / 2).toFixed(1) + '" cy="' + y(p.expense).toFixed(1) +
-           '" r="3.5" fill="var(--bg-panel)" stroke="var(--ink)" stroke-width="2">' +
-           '<title>' + p.month + ': ' + money(p.expense) + '</title></circle>';
-  });
+  // Year-ago line spans only the actual months — there is no "last year" for a
+  // month that has not happened.
+  if (prior.length) {
+    const pts = prior.map((p, i) => (PL + band * i + band / 2).toFixed(1) + ',' + y(p.expense).toFixed(1));
+    svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--ink)" stroke-width="2" ' +
+           'stroke-dasharray="5 4" opacity=".78"/>';
+    prior.forEach((p, i) => {
+      svg += '<circle cx="' + (PL + band * i + band / 2).toFixed(1) + '" cy="' + y(p.expense).toFixed(1) +
+             '" r="3.5" fill="var(--bg-panel)" stroke="var(--ink)" stroke-width="2">' +
+             '<title>' + p.month + ': ' + money(p.expense) + '</title></circle>';
+    });
+  }
   svg += '</svg>';
 
-  // Only categories that actually appear — a legend of twenty-two buckets,
-  // most of them empty, tells the reader nothing.
+  // Only the parents that actually appear — a legend of nine mostly-empty
+  // buckets tells the reader nothing.
   const present = new Set();
-  data.concat(prior).forEach(m => Object.keys(m.byCategory).forEach(id => {
-    if (m.byCategory[id] > 0) present.add(id);
-  }));
+  all.forEach(m => Object.keys(m.byParent).forEach(id => { if (m.byParent[id] > 0) present.add(id); }));
   const legend = [...present].map(id =>
     '<span style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;font-size:12.5px;color:var(--ink-soft)">' +
     '<span style="width:11px;height:11px;border-radius:2px;background:' + colourOf(id) + '"></span>' +

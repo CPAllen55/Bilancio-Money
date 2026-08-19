@@ -33,29 +33,36 @@ const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
 export interface CategoryRow {
   id: string; slug: string; label: string; colour: string; sortOrder: number; isSystem: boolean;
+  parentId: string | null;
+  parentSlug: string | null;
+  parentLabel: string | null;
 }
 
 export interface CategoryContext {
   list: CategoryRow[];
   slugById: Map<string, string>;
+  /** leaf slug -> its parent's slug. A parent maps to itself, so rolling up is
+   *  always the same lookup whether the category has a parent or not. */
+  parentOfSlug: Map<string, string>;
   /** normalised merchant key -> category slug */
   ruleBySlugKey: Map<string, string>;
 }
+
+export { ownedAccountIds };
 
 /**
  * A user sees system categories plus their own. Loading both together means the
  * rest of the code never has to care which kind it is holding.
  */
-export { ownedAccountIds };
-
 export async function loadCategories(
   db: ReturnType<typeof getDb>["db"],
   userId: string,
 ): Promise<CategoryContext> {
-  const rows = await db
+  const raw = await db
     .select({
       id: categories.id, slug: categories.slug, label: categories.label,
-      colour: categories.colour, sortOrder: categories.sortOrder, isSystem: categories.isSystem,
+      colour: categories.colour, sortOrder: categories.sortOrder,
+      isSystem: categories.isSystem, parentId: categories.parentId,
     })
     .from(categories)
     .where(
@@ -66,7 +73,20 @@ export async function loadCategories(
     )
     .orderBy(categories.sortOrder, categories.label);
 
+  const byId = new Map(raw.map((r) => [r.id, r]));
+  const rows: CategoryRow[] = raw.map((r) => {
+    const parent = r.parentId ? byId.get(r.parentId) : undefined;
+    return {
+      ...r,
+      parentSlug: parent ? parent.slug : null,
+      parentLabel: parent ? parent.label : null,
+    };
+  });
+
   const slugById = new Map(rows.map((r) => [r.id, r.slug]));
+
+  // A parent maps to itself, so a rollup is one lookup regardless of depth.
+  const parentOfSlug = new Map(rows.map((r) => [r.slug, r.parentSlug ?? r.slug]));
 
   const rules = await db
     .select({ matchKey: merchantRules.matchKey, categoryId: merchantRules.categoryId })
@@ -79,7 +99,22 @@ export async function loadCategories(
     if (slug) ruleBySlugKey.set(r.matchKey, slug);
   }
 
-  return { list: rows, slugById, ruleBySlugKey };
+  return { list: rows, slugById, parentOfSlug, ruleBySlugKey };
+}
+
+/** Rolls leaf totals up to their parents. Leaves with no parent stand alone. */
+export function rollUp(
+  byCategory: Record<string, number>,
+  ctx: CategoryContext,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const c of ctx.list) if (!c.parentId) out[c.slug] = 0;
+  for (const [slug, value] of Object.entries(byCategory)) {
+    if (!value) continue;
+    const parent = ctx.parentOfSlug.get(slug) ?? slug;
+    out[parent] = (out[parent] ?? 0) + value;
+  }
+  return out;
 }
 
 interface Categorisable {
@@ -274,8 +309,8 @@ summary.get("/summary", async (c) => {
       ok: true,
       range: { key: range, label: current.label, start: ymd(current.start), end: ymd(current.end) },
       comparison: { label: previous.label, start: ymd(previous.start), end: ymd(previous.end) },
-      totals: now,
-      previous: before,
+      totals: { ...now, byParent: rollUp(now.byCategory, ctx) },
+      previous: { ...before, byParent: rollUp(before.byCategory, ctx) },
       safeToSpend: {
         remaining,
         perDay: daysLeft > 0 ? Math.round(remaining / daysLeft) : remaining,
@@ -506,7 +541,13 @@ summary.get("/trend", async (c) => {
     ]);
 
     const buckets = await monthlyBuckets(db, auth.user.id, ids, ctx, span);
-    const shape = (keys: string[]) => keys.map((ym) => ({ month: ym, ...buckets.get(ym)! }));
+    // byParent alongside byCategory: nine stacked segments read as a shape,
+    // twenty-two read as noise.
+    const shape = (keys: string[]) =>
+      keys.map((ym) => {
+        const b = buckets.get(ym)!;
+        return { month: ym, ...b, byParent: rollUp(b.byCategory, ctx) };
+      });
     const visibleMonths = shape(visible);
 
     return c.json({
