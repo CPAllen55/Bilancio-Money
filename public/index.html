@@ -1035,11 +1035,17 @@
     submitBtn.textContent = 'Adding…';
 
     try {
-      const res = await fetch('/api/waitlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailInput.value })
-      });
+      let res;
+      try {
+        res = await fetch('/api/waitlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailInput.value })
+        });
+      } catch {
+        // fetch rejects with "Failed to fetch", which tells a visitor nothing.
+        throw new Error('Could not reach the server. Check your connection and try again.');
+      }
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.reason || 'Something went wrong. Try again in a moment.');
 
