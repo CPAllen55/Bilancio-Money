@@ -1,0 +1,27 @@
+{
+  "name": "bilancio-money",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^7.0.2",
+    "wrangler": "^4"
+  },
+  "dependencies": {
+    "@clerk/backend": "^3.16.8",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.3",
+    "pg": "^8.23.0"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  // Bilancio Money — one Worker, two jobs:
+  // static site from public/ at the edge, API on /api/*.
+  //
+  // The name must stay `bilancio-money`: that is the Worker the custom domain
+  // is attached to, and the one this repo's Cloudflare build deploys into.
+  // Renaming it here silently starts deploying to a different Worker, and the
+  // live domain then keeps serving whatever it last had.
+  "name": "bilancio-money",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-18",
+
+  // Required by the `pg` driver, which needs Node APIs.
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // Only /api/* wakes the Worker. Everything else is served
+    // straight from the edge, so the site stays as fast as it is today.
+    "run_worker_first": ["/api/*"]
+  },
+
+  // Points at the Neon `dev` branch. The local connection string lives in
+  // .env as CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE so that
+  // no database password is ever committed to this file.
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "413bf8729d80417a8303051a59e4eb48"
+    }
+  ],
+
+  // Clerk publishable keys are public by design — they ship in the front end
+  // either way, and Clerk's own docs put them in client code. Only
+  // CLERK_SECRET_KEY is a secret, set with `wrangler secret put`.
+  //
+  // This is the DEVELOPMENT instance. Production needs its own Clerk instance
+  // and its own pk_live_ key in the production env below.
+  "vars": {
+    "CLERK_PUBLISHABLE_KEY": "pk_test_bGVuaWVudC10cmVlZnJvZy0yMTQ4LmNsZXJrLmFjY291bnRzLmRldiQ"
+  },
+
+  "observability": {
+    "enabled": true
+  },
+
+  "env": {
+    "production": {
+      // Bindings are not inherited by named environments, so both the
+      // assets binding and the Neon `production` branch are repeated here.
+      "assets": {
+        "directory": "./public",
+        "binding": "ASSETS",
+        "run_worker_first": ["/api/*"]
+      },
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE",
+          "id": "bcda6d421eb84977a4ca51385c6018fb"
+        }
+      ]
+
+      // TODO before production traffic: create a Clerk PRODUCTION instance and
+      // add its key here as
+      //   "vars": { "CLERK_PUBLISHABLE_KEY": "pk_live_..." }
+      // then `wrangler secret put CLERK_SECRET_KEY --env production`.
+      // Development keys have strict usage limits and must not serve real users.
+    }
+  }
+}
