@@ -326,6 +326,13 @@
   .signup-foot{ display:flex; align-items:center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
   .signup-foot .fine{ font-size: 12.5px; color: var(--ink-soft); }
 
+  /* Failures have to be visible now that the form actually submits somewhere. */
+  .signup-error{
+    margin: 10px 0 0; font-family:'IBM Plex Mono', monospace;
+    font-size: 12.5px; color: var(--coral);
+  }
+  .signup-error[hidden]{ display:none; }
+
   .confirm{
     display:none; align-items:center; gap: 12px;
     font-family:'IBM Plex Mono', monospace; font-size: 14px; color: var(--mint);
@@ -935,6 +942,7 @@
           <span class="fine">We'll email you once, when the ledger opens.</span>
           <button type="submit" class="btn-primary">Add to the ledger</button>
         </div>
+        <p class="signup-error" id="signup-error" role="alert" hidden></p>
       </form>
 
       <div class="confirm" id="confirm-msg">
@@ -1009,15 +1017,40 @@
     }, 3200);
   }
 
-  // Signup
+  // Signup — posts to the Worker, which stores the address in Postgres.
+  // Only show the confirmation once the server has actually accepted it:
+  // this promises the reader we will email them, so it must be true.
   const form = document.getElementById('signup-form');
   const confirmMsg = document.getElementById('confirm-msg');
-  form.addEventListener('submit', function(e){
+  const emailInput = document.getElementById('email-input');
+  const errorMsg = document.getElementById('signup-error');
+  const submitBtn = form.querySelector('button[type="submit"]');
+
+  form.addEventListener('submit', async function(e){
     e.preventDefault();
-    // Front-end only for now — wire this up to your waitlist backend
-    // (e.g. a serverless function, Mailchimp, or ConvertKit) before launch.
-    form.style.display = 'none';
-    confirmMsg.style.display = 'flex';
+    errorMsg.hidden = true;
+
+    const original = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Adding…';
+
+    try {
+      const res = await fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailInput.value })
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.reason || 'Something went wrong. Try again in a moment.');
+
+      form.style.display = 'none';
+      confirmMsg.style.display = 'flex';
+    } catch (err) {
+      errorMsg.textContent = err.message;
+      errorMsg.hidden = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = original;
+    }
   });
 </script>
 

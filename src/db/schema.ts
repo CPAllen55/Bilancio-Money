@@ -16,6 +16,23 @@ export const users = pgTable("users", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
+// 1b. Waitlist - people who left an email on the landing page, before any
+// account exists. Deliberately not tied to `users`: most rows will never
+// become one, and the row must survive the account being deleted.
+//
+// `userId` is stamped if and when they convert, so "how many of the waitlist
+// actually signed up" stays answerable.
+export const waitlist = pgTable("waitlist", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Stored lower-cased so Foo@bar.com and foo@bar.com cannot both take a place.
+  email: text("email").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Where the address came from, so a second capture point stays distinguishable.
+  source: text("source").notNull().default("landing"),
+  invitedAt: timestamp("invited_at", { withTimezone: true }),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+});
+
 // 2. Items - one row per bank connection. Holds the encrypted Plaid access token.
 export const items = pgTable("items", {
   id: uuid("id").primaryKey().defaultRandom(),
