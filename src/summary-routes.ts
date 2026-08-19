@@ -318,4 +318,122 @@ summary.get("/transactions", async (c) => {
   }
 });
 
+/* ---------------------------------------------------------------------- trend */
+
+const TREND_RANGES = [3, 6, 9, 12, 24, 36];
+
+/** Month keys, oldest → newest, ending with the current month. */
+function monthKeys(count: number, today: Date): string[] {
+  const out: string[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - i, 1));
+    out.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}
+
+summary.get("/trend", async (c) => {
+  const { db, ready, close } = getDb(c.env);
+  try {
+    await ready;
+    const auth = await requireUser(c, db);
+    if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+
+    const asked = Number(c.req.query("months") ?? 12);
+    const n = TREND_RANGES.includes(asked) ? asked : 12;
+    const account = c.req.query("account") ?? "all";
+
+    const today = new Date();
+    // n months of bars need n+12 months of data: every column is measured
+    // against the same month a year earlier.
+    const span = monthKeys(n + 12, today);
+    const visible = span.slice(-n);
+    const prior = span.slice(0, n);
+
+    const ids = await ownedAccountIds(db, auth.user.id, account, true);
+
+    const monthExpr = sql<string>`to_char(${transactions.date}, 'YYYY-MM')`;
+    const rows = ids.length
+      ? await db
+          .select({
+            ym: monthExpr,
+            primary: transactions.categoryPrimary,
+            detailed: transactions.categoryDetailed,
+            override: sql<string | null>`${transactionOverrides.categoryId}::text`,
+            // Aggregated in SQL so the Worker handles one row per
+            // month/category rather than one per transaction.
+            outCents: sql<string>`coalesce(sum(case when ${transactions.amount} > 0 then ${transactions.amount} else 0 end), 0)::text`,
+            inCents: sql<string>`coalesce(sum(case when ${transactions.amount} < 0 then -${transactions.amount} else 0 end), 0)::text`,
+          })
+          .from(transactions)
+          .leftJoin(
+            transactionOverrides,
+            and(
+              eq(transactionOverrides.transactionId, transactions.id),
+              eq(transactionOverrides.userId, auth.user.id),
+            ),
+          )
+          .where(
+            and(
+              inArray(transactions.accountId, ids),
+              gte(transactions.date, `${span[0]}-01`),
+              eq(transactions.pending, false),
+            ),
+          )
+          .groupBy(monthExpr, transactions.categoryPrimary, transactions.categoryDetailed, sql`${transactionOverrides.categoryId}`)
+      : [];
+
+    const blank = () => ({
+      total: 0,
+      income: 0,
+      expense: 0,
+      byCategory: Object.fromEntries(CATEGORY_IDS.map((id) => [id, 0])) as Record<string, number>,
+    });
+    const buckets = new Map(span.map((ym) => [ym, blank()]));
+
+    for (const r of rows) {
+      const b = buckets.get(r.ym);
+      if (!b) continue; // outside the span
+      const { kind, category } = classify(r.primary, r.detailed);
+      if (kind === "transfer") continue;
+
+      const moneyIn = Number(r.inCents);
+      const moneyOut = Number(r.outCents);
+      b.income += moneyIn;
+
+      if (moneyOut > 0) {
+        b.expense += moneyOut;
+        const bucket = (r.override ?? category) as CategoryId | null;
+        if (bucket && bucket in b.byCategory) b.byCategory[bucket] += moneyOut;
+      }
+    }
+    for (const b of buckets.values()) b.total = b.expense;
+
+    const shape = (keys: string[]) =>
+      keys.map((ym) => ({ month: ym, ...buckets.get(ym)! }));
+
+    const visibleMonths = shape(visible);
+
+    return c.json({
+      ok: true,
+      months: n,
+      series: visibleMonths,
+      // Same months, one year earlier — the comparison line.
+      priorSeries: shape(prior),
+      // Convenience series for the stat-tile sparklines.
+      sparklines: {
+        income: visibleMonths.map((m) => m.income),
+        expense: visibleMonths.map((m) => m.expense),
+        net: visibleMonths.map((m) => m.income - m.expense),
+        savingsRate: visibleMonths.map((m) =>
+          m.income ? Math.round(((m.income - m.expense) / m.income) * 1000) / 10 : 0,
+        ),
+      },
+      categories: CATEGORIES,
+    });
+  } finally {
+    c.executionCtx.waitUntil(close());
+  }
+});
+
 export default summary;

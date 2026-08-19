@@ -339,9 +339,49 @@ async function loadSnapshot() {
       ? `${t.transfersExcluded} transfer${t.transfersExcluded === 1 ? '' : 's'} excluded — moving your own money is not spending.`
       : 'No transfers in this range.';
     status.textContent = note;
+
+    await loadTrend();
   } catch (err) {
     status.textContent = err.message;
     status.className = 'bank-status bad';
+  }
+}
+
+/**
+ * Exercises /api/trend. Rendered as text rather than a chart on purpose — the
+ * real charts live on the landing page and get ported onto this data next.
+ * This only has to prove the endpoint returns the right shape and numbers.
+ */
+async function loadTrend() {
+  const grid = document.getElementById('snap-grid');
+  try {
+    const tr = await authed('/api/trend?months=12');
+    const withData = tr.series.filter(m => m.expense > 0 || m.income > 0);
+
+    const box = document.createElement('div');
+    box.className = 'snap-cats';
+    if (!withData.length) {
+      box.innerHTML = '<div class="row">No monthly data yet.</div>';
+    } else {
+      const priorFor = ym => {
+        const [y, m] = ym.split('-').map(Number);
+        const key = `${y - 1}-${String(m).padStart(2, '0')}`;
+        return (tr.priorSeries.find(p => p.month === key) || {}).expense ?? 0;
+      };
+      box.innerHTML =
+        '<div class="row"><span>Month</span><b>Out · vs a year earlier</b></div>' +
+        withData.map(m => {
+          const prev = priorFor(m.month);
+          const cmp = prev ? ` · ${money(prev)}` : ' · no prior year';
+          return `<div class="row"><span>${m.month}</span><b>${money(m.expense)}${cmp}</b></div>`;
+        }).join('');
+    }
+    grid.appendChild(box);
+  } catch (err) {
+    const box = document.createElement('div');
+    box.className = 'snap-cats';
+    box.innerHTML = `<div class="row" style="color:var(--coral)">trend: ${err.message}</div>`;
+    grid.appendChild(box);
   }
 }
 
