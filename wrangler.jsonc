@@ -33,12 +33,14 @@
 
   // Clerk publishable keys are public by design — they ship in the front end
   // either way, and Clerk's own docs put them in client code. Only
-  // CLERK_SECRET_KEY is a secret, set with `wrangler secret put`.
+  // CLERK_SECRET_KEY is a secret, set on the Worker.
   //
-  // This is the DEVELOPMENT instance. Production needs its own Clerk instance
-  // and its own pk_live_ key in the production env below.
+  // This is the PRODUCTION instance, because the repo's Cloudflare build runs
+  // `wrangler deploy` with no --env and therefore deploys this top-level config
+  // to the live domain. Local development overrides it from .dev.vars, which
+  // still holds the pk_test_/sk_test_ pair.
   "vars": {
-    "CLERK_PUBLISHABLE_KEY": "pk_test_bGVuaWVudC10cmVlZnJvZy0yMTQ4LmNsZXJrLmFjY291bnRzLmRldiQ"
+    "CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuYmlsYW5jaW9tb25leS5jb20k"
   },
 
   "observability": {
@@ -61,11 +63,14 @@
         }
       ]
 
-      // TODO before production traffic: create a Clerk PRODUCTION instance and
-      // add its key here as
-      //   "vars": { "CLERK_PUBLISHABLE_KEY": "pk_live_..." }
-      // then `wrangler secret put CLERK_SECRET_KEY --env production`.
-      // Development keys have strict usage limits and must not serve real users.
+      // WARNING: nothing deploys this block. The Cloudflare build runs
+      // `wrangler deploy` with no --env, so the top-level config above is what
+      // reaches the live domain. Deploying this one would create a SEPARATE
+      // Worker named bilancio-money-production, which owns no custom domain.
+      //
+      // It exists only to record the Neon `production` Hyperdrive id. The open
+      // decision is to point the top-level binding at this id and delete this
+      // block, so the live site stops talking to the Neon dev branch.
     }
   }
 }
