@@ -40,9 +40,10 @@ app.get("/api/me", async (c) => {
   const { db, ready, close } = getDb(c.env);
   try {
     await ready;
-    const user = await requireUser(c, db);
-    if (!user) return c.json({ error: "unauthorized" }, 401);
+    const auth = await requireUser(c, db);
+    if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
 
+    const { user } = auth;
     return c.json({
       ok: true,
       user: { id: user.id, email: user.email, createdAt: user.createdAt },

@@ -207,7 +207,7 @@ async function check() {
   try {
     const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } });
     const body = await res.json();
-    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(body.reason || body.error || `HTTP ${res.status}`);
     step('s-me', 'ok', '200');
     step('s-row', 'ok', body.user.id);
   } catch (err) {
