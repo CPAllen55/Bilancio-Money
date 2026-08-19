@@ -1,7 +1,12 @@
 {
   // Bilancio Money — one Worker, two jobs:
   // static site from public/ at the edge, API on /api/*.
-  "name": "bilancio-api",
+  //
+  // The name must stay `bilancio-money`: that is the Worker the custom domain
+  // is attached to, and the one this repo's Cloudflare build deploys into.
+  // Renaming it here silently starts deploying to a different Worker, and the
+  // live domain then keeps serving whatever it last had.
+  "name": "bilancio-money",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-18",
 
