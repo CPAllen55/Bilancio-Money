@@ -263,35 +263,57 @@ const emptyTotals = (ctx: CategoryContext): Totals => ({
 
 interface AmountRow extends Categorisable { amount: bigint; }
 
+/**
+ * Which line of the Categories tab a single transaction lands on.
+ *
+ * Deliberately shared between the totals and the drill-down, so expanding a
+ * category shows exactly the rows that built its number. Two copies of this
+ * rule would disagree the first time either was edited, and the symptom — a
+ * category whose transactions do not add up to its own total — is precisely
+ * the kind of thing that makes someone stop believing the rest of the app.
+ *
+ * `signed` is normalised on the way out: positive is money in.
+ */
+export function displayBucket(
+  amount: bigint,
+  row: Categorisable,
+  ctx: CategoryContext,
+): { kind: string; bucket: string | null; signed: number } {
+  const signed = -Number(amount); // flip Plaid's sign: negative meant money in
+  const { kind, slug } = resolveSlug(row, ctx);
+
+  // Your own money changing pocket. Reported under its transfer category,
+  // never added to income or expense.
+  if (kind === "transfer") return { kind, bucket: slug, signed };
+
+  // Which bucket a row lands in follows the money, not the label. Somebody
+  // can file a refund under any category they like; it is still money in.
+  return signed > 0
+    ? { kind: "income", bucket: bucketFor(slug, "income", ctx), signed }
+    : { kind: "spend", bucket: bucketFor(slug, "spend", ctx), signed };
+}
+
 function tally(rows: AmountRow[], ctx: CategoryContext): Totals {
   const out = emptyTotals(ctx);
   for (const r of rows) {
-    const signed = -Number(r.amount); // flip Plaid's sign: negative meant money in
-    const { kind, slug } = resolveSlug(r, ctx);
+    const { kind, bucket, signed } = displayBucket(r.amount, r, ctx);
 
     if (kind === "transfer") {
-      // Recorded so it can be shown, never added to income or expense: this is
-      // your own money changing pocket, not money entering or leaving.
       out.transfersExcluded++;
       const moved = Math.abs(signed);
       out.transfersMoved += moved;
-      if (slug && slug in out.byTransferCategory) out.byTransferCategory[slug] += moved;
+      if (bucket && bucket in out.byTransferCategory) out.byTransferCategory[bucket] += moved;
       continue;
     }
 
-    // Which bucket a row lands in follows the money, not the label. Somebody
-    // can file a refund under any category they like; it is still money in.
-    if (signed > 0) {
+    if (kind === "income") {
       out.income += signed;
-      const bucket = bucketFor(slug, "income", ctx);
-      out.byIncomeCategory[bucket] = (out.byIncomeCategory[bucket] ?? 0) + signed;
+      out.byIncomeCategory[bucket!] = (out.byIncomeCategory[bucket!] ?? 0) + signed;
       continue;
     }
 
-    const spent = -signed;
-    out.expense += spent;
-    const bucket = bucketFor(slug, "spend", ctx);
-    out.byCategory[bucket] = (out.byCategory[bucket] ?? 0) + spent;
+    out.expense += -signed;
+    out.byCategory[bucket!] = (out.byCategory[bucket!] ?? 0) + -signed;
   }
   out.net = out.income - out.expense;
   return out;
@@ -408,6 +430,13 @@ summary.get("/summary", async (c) => {
 
 /* ------------------------------------------------------------ transactions -- */
 
+/**
+ * How many rows a drill-down will read before giving up on being exact.
+ * Comfortably above a year of ordinary spending; low enough that a pathological
+ * range cannot stall a request.
+ */
+const DRILL_SCAN_CAP = 4000;
+
 summary.get("/transactions", async (c) => {
   const { db, ready, close } = getDb(c.env);
   try {
@@ -419,6 +448,11 @@ summary.get("/transactions", async (c) => {
     const account = c.req.query("account") ?? "all";
     const limit = Math.min(200, Math.max(1, Number(c.req.query("limit") ?? 50)));
     const offset = Math.max(0, Number(c.req.query("offset") ?? 0));
+    // Drill-down: the rows behind one line of the Categories tab. Not a SQL
+    // filter, because the effective category is not a column — it is resolved
+    // per row from an override, a merchant rule, or Plaid's guess. So the range
+    // is read whole and filtered here, exactly as the totals are.
+    const bucket = c.req.query("bucket") ?? null;
     const { current } = resolveRange(range, new Date());
 
     const [ctx, ids] = await Promise.all([
@@ -433,38 +467,60 @@ summary.get("/transactions", async (c) => {
       lte(transactions.date, ymd(current.end)),
     );
 
-    const [rows, totalRows] = await Promise.all([
-      db
-        .select({
-          id: transactions.id,
-          date: transactions.date,
-          name: transactions.name,
-          merchantName: transactions.merchantName,
-          amount: transactions.amount,
-          pending: transactions.pending,
-          accountId: transactions.accountId,
-          categoryPrimary: transactions.categoryPrimary,
-          categoryDetailed: transactions.categoryDetailed,
-          overrideCategoryId: transactionOverrides.categoryId,
-        })
-        .from(transactions)
-        .leftJoin(
-          transactionOverrides,
-          and(
-            eq(transactionOverrides.transactionId, transactions.id),
-            eq(transactionOverrides.userId, auth.user.id),
-          ),
-        )
-        .where(where)
-        .orderBy(desc(transactions.date))
-        .limit(limit)
-        .offset(offset),
-      db.select({ total: sql<number>`count(*)::int` }).from(transactions).where(where),
-    ]);
+    const page = db
+      .select({
+        id: transactions.id,
+        date: transactions.date,
+        name: transactions.name,
+        merchantName: transactions.merchantName,
+        amount: transactions.amount,
+        pending: transactions.pending,
+        accountId: transactions.accountId,
+        categoryPrimary: transactions.categoryPrimary,
+        categoryDetailed: transactions.categoryDetailed,
+        overrideCategoryId: transactionOverrides.categoryId,
+      })
+      .from(transactions)
+      .leftJoin(
+        transactionOverrides,
+        and(
+          eq(transactionOverrides.transactionId, transactions.id),
+          eq(transactionOverrides.userId, auth.user.id),
+        ),
+      )
+      .where(where)
+      .orderBy(desc(transactions.date));
+
+    let rows;
+    let total;
+
+    if (bucket) {
+      // A parent drills into everything beneath it, a leaf into just itself.
+      // parentOfSlug maps a parent to itself, so one pass covers both.
+      const wanted = new Set<string>([bucket]);
+      for (const [slug, parent] of ctx.parentOfSlug) if (parent === bucket) wanted.add(slug);
+
+      // Capped rather than unbounded: this runs inside a request, and a range
+      // wide enough to exceed the cap is one nobody is reading line by line.
+      const all = await page.limit(DRILL_SCAN_CAP);
+      const matching = all.filter((r) => {
+        const { bucket: landed } = displayBucket(r.amount, r, ctx);
+        return landed !== null && wanted.has(landed);
+      });
+      total = matching.length;
+      rows = matching.slice(offset, offset + limit);
+    } else {
+      const [pageRows, totalRows] = await Promise.all([
+        page.limit(limit).offset(offset),
+        db.select({ total: sql<number>`count(*)::int` }).from(transactions).where(where),
+      ]);
+      rows = pageRows;
+      total = totalRows[0].total;
+    }
 
     return c.json({
       ok: true,
-      total: totalRows[0].total,
+      total,
       categories: ctx.list,
       transactions: rows.map((r) => {
         const { kind, slug } = resolveSlug(r, ctx);

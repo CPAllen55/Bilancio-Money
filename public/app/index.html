@@ -137,6 +137,19 @@
   .kidcount{ font-family:'IBM Plex Mono', monospace; font-size:11px;
              color:var(--muted); border:1px solid var(--hair); border-radius:99px;
              padding:1px 7px; margin-left:2px; }
+  .ctog.sm{ width:15px; height:15px; font-size:11px; }
+  /* Third level of the same tree: parent, category, then the transactions that
+     add up to the number. Quieter again, and monospaced dates so the rows line
+     up into a column the eye can run down. */
+  .crow.txrow{ border-top:none; padding:2px 0; }
+  .crow.txrow .cname{ padding-left:26px; font-family:'IBM Plex Mono', monospace;
+                      font-size:11.5px; color:var(--muted); }
+  .crow.txrow.nested .cname{ padding-left:49px; }
+  .crow.txrow .txname{ min-width:0; font-size:12.5px; color:var(--ink-soft);
+                       overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .crow.txrow .camt{ font-size:12px; color:var(--ink-soft); }
+  .crow.txrow .camt.in{ color:var(--mint); }
+  .crow.txrow.note .txname{ color:var(--muted); }
   /* Transfers sit apart from the ranking above — same money, different meaning. */
   .moved{ margin-top:22px; padding-top:16px; border-top:1px dashed var(--hair-strong); }
   .moved .camt{ color:var(--ink-soft); }
@@ -501,6 +514,115 @@ async function renderOverview() {
    because you looked at last month would be its own small annoyance. */
 const collapsedParents = new Set();
 
+/* Which categories are showing the transactions behind them. Same reasoning as
+   above, and the same lifetime — changing the range keeps your place. */
+const expandedCats = new Set();
+
+/* Enough to read a category without turning the page, and short enough that a
+   busy one does not bury the categories underneath it. The count of what is
+   not shown is displayed, so nothing goes missing silently. */
+const DRILL_LIMIT = 25;
+
+/* Keyed by range as well as category: the same category holds different rows
+   in a different month. Cleared alongside summaryCache, because re-filing a
+   transaction moves it between categories. */
+let txCache = {};
+
+async function txFor(slug) {
+  const key = range() + '|' + slug;
+  if (!txCache[key]) {
+    txCache[key] = await authed('/api/transactions?range=' + encodeURIComponent(range()) +
+      '&bucket=' + encodeURIComponent(slug) + '&limit=' + DRILL_LIMIT);
+  }
+  return txCache[key];
+}
+
+function drillToggle(slug, small) {
+  return '<button class="ctog' + (small ? ' sm' : '') + '" type="button" data-drill="1" ' +
+    'data-slug="' + escapeHtml(slug) + '" aria-expanded="' + expandedCats.has(slug) + '" ' +
+    'aria-label="' + (expandedCats.has(slug) ? 'Hide' : 'Show') + ' transactions in ' +
+    escapeHtml(labelOfSlug(slug)) + '">' + (expandedCats.has(slug) ? '−' : '+') + '</button>';
+}
+
+/* The direct children of the category list, filtered by a data attribute.
+   Matching on the attribute value rather than building a CSS selector out of
+   it, because a slug comes partly from user-named categories and does not have
+   to be selector-safe. */
+function catRows(attr, value) {
+  return Array.from($('cat-list').children).filter(el => el.dataset[attr] === value);
+}
+
+function drillRow(slug, parentSlug, hidden, body, extra) {
+  return '<div class="crow txrow' + (parentSlug ? ' nested' : '') + (extra || '') + '"' +
+    ' data-for="' + escapeHtml(slug) + '"' +
+    (parentSlug ? ' data-parent="' + escapeHtml(parentSlug) + '"' : '') +
+    (hidden ? ' hidden' : '') + '>' + body + '</div>';
+}
+
+function drillNote(slug, parentSlug, hidden, text) {
+  return drillRow(slug, parentSlug, hidden,
+    '<div class="cname"></div><div class="txname">' + escapeHtml(text) + '</div><div class="camt"></div>',
+    ' note');
+}
+
+function drillHtml(slug, parentSlug, hidden, res) {
+  if (!res.transactions.length) return drillNote(slug, parentSlug, hidden, 'No transactions here.');
+
+  const rows = res.transactions.map(t =>
+    drillRow(slug, parentSlug, hidden,
+      '<div class="cname">' + escapeHtml(t.date) + '</div>' +
+      '<div class="txname">' + escapeHtml(t.name) +
+        (t.pending ? ' <span class="pill">pending</span>' : '') + '</div>' +
+      '<div class="camt' + (t.amount > 0 ? ' in' : '') + '">' +
+        (t.amount > 0 ? '+' : '') + money(t.amount) + '</div>')
+  ).join('');
+
+  const rest = res.total - res.transactions.length;
+  return rows + (rest > 0
+    ? drillNote(slug, parentSlug, hidden, rest + ' more not shown — the Transactions tab has all of them.')
+    : '');
+}
+
+/* Opens a category into its transactions, or closes it again. The rows are
+   inserted after the category rather than nested inside it, so they share the
+   grid above and the amounts stay in one column all the way down. */
+async function toggleDrill(btn) {
+  const slug = btn.dataset.slug;
+  const row = btn.closest('.crow');
+  const parentSlug = row.dataset.parent || '';
+  const setState = open => {
+    btn.textContent = open ? '−' : '+';
+    btn.setAttribute('aria-expanded', String(open));
+    btn.setAttribute('aria-label', (open ? 'Hide' : 'Show') + ' transactions in ' + labelOfSlug(slug));
+  };
+
+  if (expandedCats.has(slug)) {
+    expandedCats.delete(slug);
+    catRows('for', slug).forEach(el => el.remove());
+    setState(false);
+    return;
+  }
+
+  expandedCats.add(slug);
+  setState(true);
+  row.insertAdjacentHTML('afterend', drillNote(slug, parentSlug, row.hidden, 'Loading…'));
+
+  try {
+    const res = await txFor(slug);
+    // Closed again while the request was in flight, or the list was rebuilt
+    // underneath it. Either way these rows are no longer wanted.
+    if (!expandedCats.has(slug) || !row.isConnected) return;
+    catRows('for', slug).forEach(el => el.remove());
+    row.insertAdjacentHTML('afterend', drillHtml(slug, parentSlug, row.hidden, res));
+  } catch (err) {
+    expandedCats.delete(slug);
+    if (!row.isConnected) return;
+    catRows('for', slug).forEach(el => el.remove());
+    row.insertAdjacentHTML('afterend', drillNote(slug, parentSlug, row.hidden, err.message));
+    setState(false);
+  }
+}
+
 /** Parents ranked by their own total, each with its sub-categories beneath. */
 async function renderCategories() {
   const s = await summaryFor(range());
@@ -527,12 +649,14 @@ async function renderCategories() {
     const expandable = kids.length > 1;
     const open = expandable && !collapsedParents.has(slug);
 
+    // A parent with more than one child opens into its categories; anything
+    // else has nothing below it but the transactions themselves, so it opens
+    // straight into those. Either way the button means "show what is inside".
     const toggle = expandable
-      ? '<button class="ctog" type="button" data-slug="' + slug + '" aria-expanded="' + open + '" ' +
+      ? '<button class="ctog" type="button" data-slug="' + escapeHtml(slug) + '" aria-expanded="' + open + '" ' +
         'aria-label="' + (open ? 'Hide' : 'Show') + ' categories inside ' + escapeHtml(labelOfSlug(slug)) + '">' +
         (open ? '−' : '+') + '</button>'
-      // Keeps the labels aligned whether or not a parent has a toggle.
-      : '<span class="ctog ghost" aria-hidden="true"></span>';
+      : drillToggle(slug, false);
 
     const head = '<div class="crow parent">' +
       '<div class="cname">' + toggle +
@@ -544,8 +668,9 @@ async function renderCategories() {
       '<div class="camt">' + money(total) + '</div></div>';
 
     const rows = expandable ? kids.map(k =>
-      '<div class="crow child" data-parent="' + slug + '"' + (open ? '' : ' hidden') + '>' +
-        '<div class="cname"><span class="swatch" style="background:' + colourOf(k[0]) + '"></span>' +
+      '<div class="crow child" data-parent="' + escapeHtml(slug) + '"' + (open ? '' : ' hidden') + '>' +
+        '<div class="cname">' + drillToggle(k[0], true) +
+          '<span class="swatch" style="background:' + colourOf(k[0]) + '"></span>' +
           escapeHtml(labelOfSlug(k[0])) + '</div>' +
         '<div class="ctrack"><div class="cfill" style="width:' + ((k[1] / max) * 100).toFixed(1) +
           '%;background:' + colourOf(k[0]) + ';opacity:.75"></div></div>' +
@@ -554,6 +679,7 @@ async function renderCategories() {
 
     return head + rows;
   }).join('');
+
 
   // Transfers, kept visually apart. They are money you still have, so mixing
   // them into the ranking above would overstate spending — but hiding them
@@ -571,6 +697,22 @@ async function renderCategories() {
         '<div class="crow child"><div class="cname">' + escapeHtml(labelOfSlug(p[0])) + '</div>' +
         '<div></div><div class="camt">' + money(p[1]) + '</div></div>'
       ).join('') + '</div>';
+  }
+
+  // Re-open whatever was drilled into before. The rows themselves are gone —
+  // the list was just rebuilt — and for a new range they would be different
+  // rows anyway, so each one refetches.
+  //
+  // Last, after the transfers block: that is appended with innerHTML +=, which
+  // reparses the whole list and would detach anything inserted before it.
+  // Not awaited, because the totals are already on screen and the transactions
+  // can arrive underneath them.
+  for (const slug of Array.from(expandedCats)) {
+    const btn = Array.from(host.querySelectorAll('.ctog[data-drill]'))
+      .find(b => b.dataset.slug === slug);
+    if (!btn) { expandedCats.delete(slug); continue; }
+    expandedCats.delete(slug);  // toggleDrill re-adds it
+    toggleDrill(btn);
   }
 }
 
@@ -654,7 +796,7 @@ async function refile(txId, categoryId, merchantLabel) {
     body: JSON.stringify({ categoryId: categoryId, applyToMerchant: true })
   });
 
-  summaryCache = null;
+  summaryCache = null; txCache = {};
   if (res.rule) {
     msg.innerHTML = escapeHtml(res.rule.displayName) + ' is now ' + escapeHtml(res.category.label) +
       ' — and so is every future one. <a href="#" id="just-one" style="color:var(--mint-dim)">just this one instead</a>';
@@ -664,7 +806,7 @@ async function refile(txId, categoryId, merchantLabel) {
       try {
         await authed('/api/rules/' + encodeURIComponent(res.rule.id), { method: 'DELETE' });
         msg.textContent = 'Rule removed — the change applies to this transaction only.';
-        summaryCache = null;
+        summaryCache = null; txCache = {};
       } catch (err) { say(msg, err.message, 'bad'); }
     });
   } else {
@@ -976,7 +1118,7 @@ $('link-bank').addEventListener('click', async () => {
           } else {
             say(msg, 'Done — ' + sync.added + ' transactions in.', 'good');
           }
-          summaryCache = null;
+          summaryCache = null; txCache = {};
           await renderBanks();
         } catch (err) {
           say(msg, err.message, 'bad');
@@ -1005,7 +1147,7 @@ $('sync-now').addEventListener('click', async () => {
     if (!r.items) say(msg, 'Nothing to sync — no banks linked yet.');
     else if (r.pending && r.pending.length) say(msg, r.pending.join(', ') + ' is still preparing transactions. Try again shortly.');
     else say(msg, r.added + ' added, ' + r.modified + ' updated, ' + r.removed + ' removed.', 'good');
-    summaryCache = null;
+    summaryCache = null; txCache = {};
     await renderBanks();
   } catch (err) {
     say(msg, err.message, 'bad');
@@ -1022,13 +1164,21 @@ $('sync-now').addEventListener('click', async () => {
 $('cat-list').addEventListener('click', (e) => {
   const btn = e.target.closest('.ctog');
   if (!btn || !btn.dataset.slug) return;
+  if (btn.dataset.drill) toggleDrill(btn); else toggleParent(btn);
+});
 
+function toggleParent(btn) {
   const slug = btn.dataset.slug;
   const open = collapsedParents.has(slug);   // about to open if currently collapsed
   if (open) collapsedParents.delete(slug); else collapsedParents.add(slug);
 
-  document.querySelectorAll('#cat-list .crow.child[data-parent="' + slug + '"]')
-    .forEach(row => { row.hidden = !open; });
+  const inside = catRows('parent', slug);
+  inside.forEach(row => {
+    // Closing hides everything underneath. Re-opening restores the categories
+    // but not the transactions under one that was itself closed — that would
+    // open something the reader never asked to see.
+    row.hidden = !open || (row.classList.contains('txrow') && !expandedCats.has(row.dataset.for));
+  });
 
   btn.textContent = open ? '−' : '+';
   btn.setAttribute('aria-expanded', String(open));
@@ -1036,18 +1186,18 @@ $('cat-list').addEventListener('click', (e) => {
   btn.setAttribute('aria-label', (open ? 'Hide' : 'Show') + ' categories inside ' + (label ? label.textContent : slug));
 
   // Count sits next to the name only while hidden, as a reminder of what is
-  // tucked away.
+  // tucked away. Transactions do not count towards it — the badge is about how
+  // many categories are folded up, not how much is behind them.
   const existing = btn.closest('.cname').querySelector('.kidcount');
   if (open) {
     if (existing) existing.remove();
   } else if (!existing && label) {
-    const n = document.querySelectorAll('#cat-list .crow.child[data-parent="' + slug + '"]').length;
     const badge = document.createElement('span');
     badge.className = 'kidcount';
-    badge.textContent = String(n);
+    badge.textContent = String(inside.filter(r => !r.classList.contains('txrow')).length);
     label.after(badge);
   }
-});
+}
 
 $('tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.tab');
@@ -1058,7 +1208,7 @@ $('tabs').addEventListener('click', (e) => {
   refresh();
 });
 
-$('range').addEventListener('change', () => { summaryCache = null; refresh(); });
+$('range').addEventListener('change', () => { summaryCache = null; txCache = {}; refresh(); });
 $('trend-range').addEventListener('change', refresh);
 $('forecast-on').addEventListener('change', renderForecast);
 $('go-signin').addEventListener('click', () =>
