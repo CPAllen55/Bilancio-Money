@@ -1965,6 +1965,9 @@ $('sync-now').addEventListener('click', async () => {
 
     if (!r.items) say(msg, 'Nothing to sync — no banks linked yet.');
     else if (r.pending && r.pending.length) say(msg, r.pending.join(', ') + ' is still preparing transactions. Try again shortly.');
+    else if (r.failed && r.failed.length)
+      say(msg, r.failed.map(function(f){ return f.bank + ': ' + f.message; }).join(' · ') +
+        ' — other banks synced ' + total.added + ' added, ' + total.modified + ' updated.', 'bad');
     else say(msg, total.added + ' added, ' + total.modified + ' updated, ' + total.removed + ' removed.' +
       (r.more ? ' More history is still waiting — sync again.' : ''), 'good');
 

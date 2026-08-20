@@ -185,10 +185,17 @@ plaid.post("/sync", async (c) => {
     if (!mine.length) return c.json({ ok: true, items: 0, added: 0, modified: 0, removed: 0 });
 
     let added = 0, modified = 0, removed = 0;
-    let written = 0, more = false;
+    let more = false;
     const pending: string[] = [];
+    const failed: { bank: string; message: string }[] = [];
 
     for (const item of mine) {
+      // Budget per item, not shared. Shared, the first bank could spend the
+      // whole allowance on every call and the second would never be reached —
+      // which is exactly what happened: two connections sat at "never synced"
+      // through repeated syncs while the first one re-read pages it already had.
+      let written = 0;
+      try {
       const accessToken = await openToken(c.env, item.accessTokenCiphertext, item.accessTokenIv);
 
       // Map Plaid's account ids onto ours once per item, not per transaction.
@@ -250,8 +257,8 @@ plaid.post("/sync", async (c) => {
           .where(eq(items.id, item.id));
 
         written += page.added.length + page.modified.length;
-        // Enough for one request. The rest is still there, the cursor knows
-        // where, and the caller is told to come back.
+        // Enough from this item for one request. The rest is still there, the
+        // cursor knows where, and the caller is told to come back.
         if (written >= SYNC_ROW_BUDGET) { more = true; break; }
       }
 
@@ -259,7 +266,18 @@ plaid.post("/sync", async (c) => {
       // lastSyncedAt unset keeps "never synced" honest.
       if (notReady) continue;
       if (hasMore) more = true;
-      if (more) break;
+
+      } catch (err) {
+        // One bank failing must not abort the others. Previously any error
+        // threw out of the whole route, so a single unhealthy connection
+        // stopped every other connection from ever syncing — and the failure
+        // looked like a general outage rather than one bank needing attention.
+        const detail = err instanceof PlaidError
+          ? `${err.errorCode ?? err.errorType ?? "error"}: ${err.message}`
+          : err instanceof Error ? err.message : String(err);
+        console.error(`sync failed for item ${item.id} (${item.institutionName}):`, detail);
+        failed.push({ bank: item.institutionName ?? "A bank", message: detail });
+      }
     }
 
     return c.json({
@@ -273,6 +291,9 @@ plaid.post("/sync", async (c) => {
       more,
       // Non-empty when Plaid is still preparing history for those institutions.
       pending,
+      // Banks that errored. Reported rather than thrown, so the ones that
+      // worked still count and the user is told which needs attention.
+      failed,
     });
   } catch (err) {
     return c.json(plaidFailure(err), 502);
