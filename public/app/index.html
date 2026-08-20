@@ -136,6 +136,7 @@
   .kitem.static:hover{ background:none; border-color:transparent; color:var(--muted); }
   .kswatch{ width:11px; height:11px; border-radius:2px; flex:none; }
   .kswatch.dash{ height:0; border-top:2px dashed var(--ink); width:15px; opacity:.78; border-radius:0; }
+  .kswatch.shaded{ background:var(--mint-bg); border:1px dashed var(--mint-dim); }
   .klabel{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .kamt{ margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--muted); }
 
@@ -1158,15 +1159,28 @@ function drawTrend() {
   }
 
   // Shade the forecast region first, so everything else draws on top of it.
+  //
+  // Loud enough to be seen at a glance. At the 5% it started on, the panel was
+  // technically present and invisible against the card, which is the same thing
+  // as absent — and a projected month mistaken for a real one is the single
+  // worst misreading this chart can produce. Bordered on all four sides rather
+  // than divided by a line, so it reads as a region with a boundary and not as
+  // a chart that changes character halfway across.
   const firstProjected = all.findIndex(m => m.projected);
   if (firstProjected > -1) {
     const x0 = PL + band * firstProjected;
-    svg += '<rect x="' + x0.toFixed(1) + '" y="' + PT + '" width="' + (W - PR - x0).toFixed(1) +
-           '" height="' + plotH + '" fill="var(--mint)" opacity=".05"/>' +
-           '<line x1="' + x0.toFixed(1) + '" x2="' + x0.toFixed(1) + '" y1="' + PT + '" y2="' + (PT + plotH) +
-           '" stroke="var(--mint-dim)" stroke-width="1" stroke-dasharray="3 3" opacity=".7"/>' +
-           '<text x="' + (x0 + 8).toFixed(1) + '" y="' + (PT + 14) + '" font-family="IBM Plex Mono" ' +
-           'font-size="10.5" fill="var(--mint-dim)">forecast</text>';
+    const bw = W - PR - x0;
+    svg += '<rect x="' + x0.toFixed(1) + '" y="' + PT + '" width="' + bw.toFixed(1) +
+           '" height="' + plotH + '" fill="var(--mint)" opacity=".10"/>' +
+           '<rect x="' + x0.toFixed(1) + '" y="' + PT + '" width="' + bw.toFixed(1) +
+           '" height="' + plotH + '" fill="none" stroke="var(--mint-dim)" stroke-width="1" ' +
+           'stroke-dasharray="4 3" opacity=".55"/>' +
+           // The label sits on its own plate; over a stacked bar it was being
+           // read as part of the bar.
+           '<rect x="' + (x0 + 6).toFixed(1) + '" y="' + (PT + 5) + '" width="60" height="17" rx="3" ' +
+           'fill="var(--bg)" opacity=".72"/>' +
+           '<text x="' + (x0 + 14).toFixed(1) + '" y="' + (PT + 17) + '" font-family="IBM Plex Mono" ' +
+           'font-size="10.5" fill="var(--mint)" letter-spacing=".08em">forecast</text>';
   }
 
   for (let i = 0; i <= 4; i++) {
@@ -1284,6 +1298,10 @@ function drawTrend() {
     (prior.length
       ? '<div class="kitem static"><span class="kswatch dash"></span>' +
         '<span class="klabel">Same month, last year</span></div>'
+      : '') +
+    (all.some(m => m.projected)
+      ? '<div class="kitem static"><span class="kswatch shaded"></span>' +
+        '<span class="klabel">Forecast</span></div>'
       : '');
 
   const maxOffset = n - trendVisible;
