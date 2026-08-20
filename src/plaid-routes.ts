@@ -13,6 +13,7 @@ import { accounts, items, transactions } from "./db/schema";
 import { requireUser } from "./auth";
 import { openToken, sealToken } from "./crypto";
 import {
+  removeItem,
   PlaidError,
   createLinkToken,
   exchangePublicToken,
@@ -29,7 +30,7 @@ const toCents = (n: number | null | undefined): bigint | null =>
 const plaid = new Hono<{ Bindings: Env }>();
 
 /** Turns a PlaidError into a response without leaking our credentials. */
-function plaidFailure(err: unknown) {
+export function plaidFailure(err: unknown) {
   if (err instanceof PlaidError) {
     console.error(`Plaid ${err.errorType ?? "error"} ${err.errorCode ?? ""}: ${err.message} (request_id ${err.requestId ?? "?"})`);
     return {
@@ -365,6 +366,48 @@ plaid.get("/items", async (c) => {
       });
     }
     return c.json({ ok: true, items: out });
+  } finally {
+    c.executionCtx.waitUntil(close());
+  }
+});
+
+/**
+ * Disconnects a bank: revoked at Plaid, then erased here.
+ *
+ * Order matters. Plaid first, because if we deleted our row and then failed to
+ * reach Plaid we would have thrown away the only copy of the token that can
+ * revoke the connection — leaving it live forever with no way to reach it. If
+ * Plaid refuses, nothing is deleted and the caller can try again.
+ *
+ * Everything under the item goes with it by cascade: accounts, their
+ * transactions, and any category overrides on those transactions. Categories
+ * and merchant rules survive, because they are yours rather than the bank's,
+ * and they will be waiting if you reconnect.
+ */
+plaid.delete("/items/:id", async (c) => {
+  const { db, ready, close } = getDb(c.env);
+  try {
+    await ready;
+    const auth = await requireUser(c, db);
+    if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+
+    // Scoped by user as well as id, so an id belonging to someone else reads as
+    // "no such item" rather than as a permission error worth probing.
+    const [item] = await db
+      .select()
+      .from(items)
+      .where(and(eq(items.id, c.req.param("id")), eq(items.userId, auth.user.id)))
+      .limit(1);
+    if (!item) return c.json({ error: "not_found" }, 404);
+
+    try {
+      await removeItem(c.env, await openToken(c.env, item.accessTokenCiphertext, item.accessTokenIv));
+    } catch (err) {
+      return c.json(plaidFailure(err), 502);
+    }
+
+    await db.delete(items).where(eq(items.id, item.id));
+    return c.json({ ok: true, removed: item.institutionName ?? "That bank" });
   } finally {
     c.executionCtx.waitUntil(close());
   }

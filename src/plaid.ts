@@ -154,3 +154,24 @@ export function getInstitution(env: Env, institutionId: string) {
     country_codes: ["US"],
   });
 }
+
+/**
+ * Tells Plaid to forget an Item, and reports whether it worked.
+ *
+ * Deleting our copy is only half of a disconnect. Until /item/remove is called
+ * the access token stays live at Plaid and the connection keeps appearing in
+ * the user's Plaid Portal — so the person who asked to disconnect their bank
+ * would still be connected to it, just invisibly.
+ *
+ * An Item Plaid has already forgotten counts as success: the desired end state
+ * is that it is gone, and it is.
+ */
+export async function removeItem(env: Env, accessToken: string): Promise<void> {
+  try {
+    await plaidPost<Record<string, never>>(env, "/item/remove", { access_token: accessToken });
+  } catch (err) {
+    const code = err instanceof PlaidError ? err.errorCode : null;
+    if (code === "ITEM_NOT_FOUND" || code === "INVALID_ACCESS_TOKEN") return;
+    throw err;
+  }
+}

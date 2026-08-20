@@ -169,6 +169,20 @@
     .trend-key{ flex:none; width:100%; }
   }
 
+  /* ---------- first run, and leaving ---------- */
+  .panel.fr-mode > *:not(.firstrun-host):not(h2):not(.lede){ display:none; }
+  .firstrun{ text-align:center; padding:26px 20px 30px; }
+  .fr-title{ font-family:'Space Grotesk', sans-serif; font-size:19px; margin:0 0 8px; }
+  .fr-body{ color:var(--ink-soft); font-size:14px; margin:0 auto 18px; max-width:46ch; line-height:1.6; }
+  .bank .inst{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .unlink{ font-size:11.5px; padding:5px 10px; flex:none; }
+  .unlink:hover{ color:var(--coral); border-color:var(--coral); }
+  /* Set apart and never the default-looking button on the page: everything here
+     is irreversible and touches somebody's bank. */
+  .danger{ margin-top:34px; padding-top:18px; border-top:1px dashed var(--hair-strong); }
+  .danger-btn{ color:var(--coral); border-color:rgba(255,92,114,.45); }
+  .danger-btn:hover{ color:#fff; background:var(--coral); border-color:var(--coral); }
+
   /* ---------- net activity ---------- */
   .net-head{ display:flex; align-items:flex-start; justify-content:space-between;
              gap:20px; margin-bottom:14px; flex-wrap:wrap; }
@@ -411,6 +425,13 @@
         </span>
       </div>
       <p class="msg" id="bank-msg"></p>
+
+      <div class="danger" id="danger" hidden>
+        <p class="eyebrow">Leaving</p>
+        <p class="fc-method" style="margin:6px 0 12px">Deleting your account revokes every bank connection at Plaid and erases your accounts, transactions, categories and rules. Your sign-in is removed too. There is no undo.</p>
+        <button id="delete-account" type="button" class="danger-btn">Delete my account</button>
+        <p class="msg" id="danger-msg"></p>
+      </div>
     </section>
   </div>
 </main>
@@ -509,12 +530,52 @@ async function summaryFor(r) {
   return summaryCache;
 }
 
+/* Whether this account has any bank at all. Distinct from "no data in this
+   range": one is a new account, the other is a quiet month, and they need
+   different words. */
+let hasBanks = true;
+
+function clearFirstRun() {
+  document.querySelectorAll('.panel.fr-mode').forEach(p => {
+    p.classList.remove('fr-mode');
+    const box = p.querySelector('.firstrun-host');
+    if (box) box.remove();
+  });
+}
+
+/* Keeps the heading and the description — they explain what the tab is for,
+   which is worth reading before you have data — and replaces everything below
+   with the invitation. */
+function showFirstRun(view) {
+  const panel = document.getElementById('v-' + view);
+  if (!panel) return;
+  panel.classList.add('fr-mode');
+  let box = panel.querySelector('.firstrun-host');
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'card firstrun-host';
+    panel.appendChild(box);
+  }
+  box.innerHTML = firstRunHtml('Connect an account');
+}
+
 async function refresh() {
   const current = document.querySelector('.tab[aria-current="true"]');
   const view = current ? current.dataset.view : 'overview';
   const msg = $('global-msg');
   say(msg, 'Loading…');
   try {
+    // Every other tab is a view onto bank data, so with no bank there is
+    // nothing to draw and a grid of $0.00 would read as a statement about
+    // somebody's finances rather than about an empty account. The Banks tab
+    // says it in its own words, and is where the button lives.
+    if (view !== 'banks') {
+      const s = await summaryFor(range());
+      hasBanks = s.accountsCounted > 0;
+      if (!hasBanks) { clearFirstRun(); showFirstRun(view); say(msg, ''); return; }
+    }
+    clearFirstRun();
+
     if (view === 'overview')     await renderOverview();
     if (view === 'trend')        await renderTrend();
     if (view === 'net')          await renderNet();
@@ -1726,19 +1787,106 @@ async function renderForecast() {
 
 async function renderBanks() {
   const res = await authed('/api/plaid/items');
+  hasBanks = res.items.length > 0;
   const host = $('bank-list');
-  if (!res.items.length) { host.innerHTML = '<p class="empty">No banks linked yet.</p>'; return; }
+  $('danger').hidden = false;
+
+  if (!res.items.length) {
+    host.innerHTML = firstRunHtml('Connect your first account');
+    return;
+  }
 
   host.innerHTML = res.items.map(it =>
-    '<div class="bank"><div class="inst">' + (it.institution || 'Bank') + ' — ' + it.accounts.length +
-    ' account' + (it.accounts.length === 1 ? '' : 's') +
-    (it.awaitingFirstSync ? ' <span class="warnpill">· waiting for transactions</span>' : '') + '</div>' +
-    it.accounts.map(a =>
-      '<div class="acct"><span>' + a.name + (a.mask ? ' ••' + a.mask : '') + '</span>' +
-      '<b>' + (a.currentBalance === null ? '—' : money(a.currentBalance)) + '</b></div>'
-    ).join('') + '</div>'
+    '<div class="bank">' +
+      '<div class="inst"><span>' + escapeHtml(it.institution || 'Bank') + ' — ' + it.accounts.length +
+        ' account' + (it.accounts.length === 1 ? '' : 's') +
+        (it.awaitingFirstSync ? ' <span class="warnpill">· waiting for transactions</span>' : '') + '</span>' +
+        '<button class="unlink" type="button" data-item="' + escapeHtml(it.id) + '" ' +
+          'data-name="' + escapeHtml(it.institution || 'this bank') + '">Disconnect</button></div>' +
+      it.accounts.map(a =>
+        '<div class="acct"><span>' + escapeHtml(a.name) + (a.mask ? ' ••' + escapeHtml(a.mask) : '') + '</span>' +
+        '<b>' + (a.currentBalance === null ? '—' : money(a.currentBalance)) + '</b></div>'
+      ).join('') +
+    '</div>'
   ).join('');
 }
+
+/* The same invitation wherever a tab would otherwise show a wall of zeroes.
+   A new account has nothing in it, and "$0.00" is a statement about your
+   finances rather than about the app being empty — the two should not look
+   alike on somebody's first minute. */
+function firstRunHtml(cta) {
+  return '<div class="firstrun">' +
+    '<p class="fr-title">Nothing here yet</p>' +
+    '<p class="fr-body">Bilancio fills up once you connect an account. It reads balances ' +
+      'and transactions through Plaid — it cannot move money, and your bank credentials ' +
+      'go to Plaid, never to us.</p>' +
+    '<button class="primary" type="button" data-goto-banks>' + escapeHtml(cta) + '</button>' +
+    '</div>';
+}
+
+/* Sends any first-run button to the Banks tab, wherever it was rendered. */
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-goto-banks]');
+  if (!btn) return;
+  const tab = document.querySelector('.tab[data-view="banks"]');
+  if (tab) tab.click();
+});
+
+$('bank-list').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.unlink');
+  if (!btn) return;
+  const msg = $('bank-msg');
+
+  // Irreversible and it touches somebody's bank, so it asks, and it says what
+  // will happen rather than "are you sure?".
+  const ok = confirm('Disconnect ' + btn.dataset.name + '?\n\n' +
+    'Bilancio will tell Plaid to revoke access, then delete its accounts and ' +
+    'transactions along with any categories you changed on them.\n\n' +
+    'Your own categories and merchant rules are kept.');
+  if (!ok) return;
+
+  btn.disabled = true;
+  say(msg, 'Disconnecting…');
+  try {
+    const res = await authed('/api/plaid/items/' + encodeURIComponent(btn.dataset.item), { method: 'DELETE' });
+    summaryCache = null; txCache = {}; trendData = null; netData = null;
+    await renderBanks();
+    say(msg, res.removed + ' disconnected and its data deleted.', 'good');
+  } catch (err) {
+    btn.disabled = false;
+    say(msg, err.message, 'bad');
+  }
+});
+
+/* Two confirmations, the second typed. A mis-click cannot take somebody's
+   financial history with it, and the phrase makes you state the outcome rather
+   than click past a warning. */
+$('delete-account').addEventListener('click', async () => {
+  const msg = $('danger-msg');
+  if (!confirm('Delete your Bilancio account?\n\n' +
+      'Every linked bank will be revoked at Plaid, and all of your accounts, ' +
+      'transactions, categories and rules will be deleted. Your sign-in will be ' +
+      'removed too.\n\nThis cannot be undone.')) return;
+
+  const typed = prompt('Type DELETE to confirm.');
+  if (typed !== 'DELETE') { say(msg, 'Not deleted.', ''); return; }
+
+  const btn = $('delete-account');
+  btn.disabled = true;
+  say(msg, 'Deleting…');
+  try {
+    const res = await authed('/api/account', { method: 'DELETE' });
+    alert('Your account has been deleted' +
+      (res.banksRevoked ? ' and ' + res.banksRevoked + ' bank connection' +
+        (res.banksRevoked === 1 ? '' : 's') + ' revoked at Plaid' : '') + '.');
+    try { await window.Clerk.signOut(); } catch (e) { /* the account is gone either way */ }
+    location.href = '/';
+  } catch (err) {
+    btn.disabled = false;
+    say(msg, err.message, 'bad');
+  }
+});
 
 function loadPlaid() {
   if (window.Plaid) return Promise.resolve();
