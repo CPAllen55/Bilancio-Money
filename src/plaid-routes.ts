@@ -186,7 +186,11 @@ async function upsertAccounts(
  * Per item, deliberately. Shared, the first bank could spend the whole
  * allowance on every call and the second would never be reached.
  */
-const SYNC_ROW_BUDGET = 600;
+// Lowered from 600 after a two-item sync still hit the request limit: each
+// row carries the whole Plaid payload in a jsonb column, so a "row" is far
+// heavier than the count suggests. Smaller rounds, more of them — the client
+// loops until done and the cursor makes every round durable.
+const SYNC_ROW_BUDGET = 250;
 
 interface ItemSyncResult {
   added: number;
@@ -452,7 +456,7 @@ async function syncWithRetry(env: Env, accessToken: string, cursor: string | nul
  * cursor — so the next attempt started from the beginning and died in the same
  * place. A backfill that cannot finish is worse than one that is slow.
  */
-const WRITE_BATCH = 200;
+const WRITE_BATCH = 100;
 
 /** Plaid owns these columns, so a resync overwrites them wholesale. */
 const OVERWRITE_ON_CONFLICT = {
