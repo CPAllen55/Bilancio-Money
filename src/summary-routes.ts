@@ -14,7 +14,7 @@
  */
 
 import { Hono } from "hono";
-import { and, asc, desc, eq, gte, isNull, lte, or, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, or, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
 import {
   accounts, categories, items, merchantRules, transactionOverrides, transactions,
@@ -553,13 +553,10 @@ summary.get("/transactions", async (c) => {
     // is read whole and filtered here, exactly as the totals are.
     const bucket = c.req.query("bucket") ?? null;
 
-    // Sorting is on the amount the reader sees, not the one stored. The column
-    // keeps Plaid's convention — positive means money left the account — so
-    // "highest first" in the UI is lowest first in the table, and getting that
-    // backwards would put the biggest purchase at the bottom of a list titled
-    // "largest".
-    const sort = c.req.query("sort") === "amount" ? "amount" : "date";
-    const dir = c.req.query("dir") === "asc" ? "asc" : "desc";
+    // Filter on the description as the reader sees it: the merchant name where
+    // Plaid supplies one, the raw bank string otherwise. Matching on the raw
+    // column instead would offer a menu of names that are not on screen.
+    const merchant = c.req.query("merchant") ?? null;
 
     // An empty period means everything, so the window is simply not applied.
     const allTime = range === "all";
@@ -571,7 +568,11 @@ summary.get("/transactions", async (c) => {
     ]);
     if (!ids.length) return c.json({ ok: true, transactions: [], total: 0, categories: ctx.list });
 
-    const where = allTime
+    const displayName = sql<string>`coalesce(${transactions.merchantName}, ${transactions.name})`;
+
+    // The period, and nothing else. The description menu is built from this, so
+    // that choosing one name does not collapse the menu to that single name.
+    const inPeriod = allTime
       ? inArray(transactions.accountId, ids)
       : and(
           inArray(transactions.accountId, ids),
@@ -579,11 +580,7 @@ summary.get("/transactions", async (c) => {
           lte(transactions.date, ymd(current.end)),
         );
 
-    // date desc = newest first. amount desc = money in at the top, which puts
-    // the largest spend at the bottom — hence the flip against the stored sign.
-    const order = sort === "amount"
-      ? (dir === "desc" ? asc(transactions.amount) : desc(transactions.amount))
-      : (dir === "desc" ? desc(transactions.date) : asc(transactions.date));
+    const where = merchant ? and(inPeriod, eq(displayName, merchant)) : inPeriod;
 
     const page = db
       .select({
@@ -607,9 +604,7 @@ summary.get("/transactions", async (c) => {
         ),
       )
       .where(where)
-      // Date is the tiebreak so a page boundary cannot show the same row twice
-      // when many rows share an amount.
-      .orderBy(order, desc(transactions.date));
+      .orderBy(desc(transactions.date));
 
     let rows;
     let total;
@@ -638,9 +633,19 @@ summary.get("/transactions", async (c) => {
       total = totalRows[0].total;
     }
 
+    // Every description in the period, for the menu on that column. Capped:
+    // past a few hundred a dropdown is not how anybody finds a merchant.
+    const merchantRows = await db
+      .selectDistinct({ name: displayName })
+      .from(transactions)
+      .where(inPeriod)
+      .orderBy(displayName)
+      .limit(400);
+
     return c.json({
       ok: true,
       total,
+      merchants: merchantRows.map((r) => r.name).filter(Boolean),
       categories: ctx.list,
       transactions: rows.map((r) => {
         const { kind, slug } = resolveSlug(r, ctx);
