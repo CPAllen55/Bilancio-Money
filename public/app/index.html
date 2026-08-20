@@ -200,10 +200,16 @@
   .net-figure.down{ color:var(--coral); }
 
   /* ---------- category rows ---------- */
-  .crow{ display:grid; grid-template-columns:120px minmax(0,1fr) 110px; gap:14px;
+  /* The name column was 120px, which "Transportation" and "Entertainment" ran
+     straight past — the label collided with the bar and shorter two-word names
+     wrapped to two lines. Wide enough for the longest label in the tree, and
+     the bar simply gets what is left. */
+  .crow{ display:grid; grid-template-columns:186px minmax(0,1fr) 110px; gap:14px;
          align-items:center; padding:10px 0; border-top:1px solid var(--hair); }
   .crow:first-child{ border-top:none; }
-  .crow .cname{ display:flex; align-items:center; gap:8px; font-size:13.5px; }
+  .crow .cname{ display:flex; align-items:center; gap:8px; font-size:13.5px;
+                min-width:0; white-space:nowrap; }
+  .crow .cname b, .crow .cname > span:last-child{ overflow:hidden; text-overflow:ellipsis; }
   .crow .swatch{ width:10px; height:10px; border-radius:2px; flex:none; }
   .crow .ctrack{ height:8px; background:var(--grid); border-radius:2px; overflow:hidden; }
   .crow .cfill{ height:100%; border-radius:2px; }
@@ -409,7 +415,12 @@
 
     <section class="panel" id="v-categories">
       <h2 class="view">Where it goes</h2>
-      <p class="lede">Every settled transaction sorted into a bucket. Transfers between your own accounts are excluded — moving money is not spending.</p>
+      <p class="lede">Every settled transaction sorted into a bucket. Transfers between your own accounts are excluded — moving money is not spending. Open a category to see what is inside it.</p>
+      <div class="bar" style="padding-top:0">
+        <select class="ctl" id="cat-month" aria-label="Month">
+          <option value="" selected>Use the period above</option>
+        </select>
+      </div>
       <div class="card" id="cat-list"></div>
     </section>
 
@@ -610,7 +621,9 @@ async function refresh() {
     // somebody's finances rather than about an empty account. The Banks tab
     // says it in its own words, and is where the button lives.
     if (view !== 'banks') {
-      const s = await summaryFor(range());
+      // Categories may be looking at a month of its own; asking about the page
+      // range here as well would thrash a cache that only holds one range.
+      const s = await summaryFor(view === 'categories' ? catRange() : range());
       hasBanks = s.accountsCounted > 0;
       if (!hasBanks) { clearFirstRun(); showFirstRun(view); say(msg, ''); return; }
     }
@@ -789,7 +802,16 @@ async function renderOverview() {
 /* Which parents are collapsed. Module-level so it survives a re-render — the
    list rebuilds on every range change, and having your open sections snap shut
    because you looked at last month would be its own small annoyance. */
-const collapsedParents = new Set();
+/* Inverted from "which parents are collapsed" to "which are open", so the
+   default — an empty set — is everything shut. A category list that arrives
+   fully expanded is a wall of thirty rows; shut, it is a dozen totals you can
+   read, and opening one is a deliberate act.
+
+   Cleared on entering the tab, so coming back gives you the same readable list
+   rather than whatever you left open. Range changes do not clear it: having
+   your open sections snap shut because you looked at another month would be
+   its own small annoyance. */
+const expandedParents = new Set();
 
 /* Which categories are showing the transactions behind them. Same reasoning as
    above, and the same lifetime — changing the range keeps your place. */
@@ -806,9 +828,9 @@ const DRILL_LIMIT = 25;
 let txCache = {};
 
 async function txFor(slug) {
-  const key = range() + '|' + slug;
+  const key = catRange() + '|' + slug;
   if (!txCache[key]) {
-    txCache[key] = await authed('/api/transactions?range=' + encodeURIComponent(range()) +
+    txCache[key] = await authed('/api/transactions?range=' + encodeURIComponent(catRange()) +
       '&bucket=' + encodeURIComponent(slug) + '&limit=' + DRILL_LIMIT);
   }
   return txCache[key];
@@ -900,9 +922,30 @@ async function toggleDrill(btn) {
   }
 }
 
+/* Two years of individual months, so "what did March cost me" is answerable.
+   Every other option aggregates to today, which is a different question. */
+function fillCatMonths() {
+  const sel = $('cat-month');
+  if (sel.options.length > 1) return;   // built once
+  const now = new Date();
+  let html = '<option value="">Use the period above</option>';
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    const key = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+    html += '<option value="month:' + key + '">' + MONTH_NAMES[d.getUTCMonth()] + ' ' + d.getUTCFullYear() + '</option>';
+  }
+  sel.innerHTML = html;
+}
+
+/** The range this tab is looking at: its own month if one is chosen, else the page's. */
+function catRange() {
+  return $('cat-month').value || range();
+}
+
 /** Parents ranked by their own total, each with its sub-categories beneath. */
 async function renderCategories() {
-  const s = await summaryFor(range());
+  fillCatMonths();
+  const s = await summaryFor(catRange());
   const host = $('cat-list');
 
   const parents = Object.keys(s.totals.byParent || {})
@@ -957,7 +1000,7 @@ async function renderCategories() {
     const kids = childrenOf(slug);
     // A single child is the parent restated, so there is nothing to expand.
     const expandable = kids.length > 1;
-    const open = expandable && !collapsedParents.has(slug);
+    const open = expandable && expandedParents.has(slug);
 
     // A parent with more than one child opens into its categories; anything
     // else has nothing below it but the transactions themselves, so it opens
@@ -2072,8 +2115,8 @@ $('cat-list').addEventListener('click', (e) => {
 
 function toggleParent(btn) {
   const slug = btn.dataset.slug;
-  const open = collapsedParents.has(slug);   // about to open if currently collapsed
-  if (open) collapsedParents.delete(slug); else collapsedParents.add(slug);
+  const open = !expandedParents.has(slug);   // about to open if currently shut
+  if (open) expandedParents.add(slug); else expandedParents.delete(slug);
 
   const inside = catRows('parent', slug);
   inside.forEach(row => {
@@ -2105,6 +2148,9 @@ function toggleParent(btn) {
 $('tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.tab');
   if (!btn) return;
+  // Revisiting the tab resets what is open — the point of shutting them by
+  // default is that the list is readable when you arrive at it.
+  if (btn.dataset.view === 'categories') { expandedParents.clear(); expandedCats.clear(); }
   document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-current', String(t === btn)));
   document.querySelectorAll('.panel').forEach(p =>
     p.setAttribute('aria-current', String(p.id === 'v-' + btn.dataset.view)));
@@ -2112,6 +2158,7 @@ $('tabs').addEventListener('click', (e) => {
 });
 
 $('range').addEventListener('change', () => { summaryCache = null; txCache = {}; refresh(); });
+$('cat-month').addEventListener('change', () => { summaryCache = null; txCache = {}; refresh(); });
 ['tx-period','tx-category','tx-sort'].forEach(id =>
   $(id).addEventListener('change', () => { refresh(); }));
 $('trend-range').addEventListener('change', refresh);

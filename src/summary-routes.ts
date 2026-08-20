@@ -30,6 +30,9 @@ const SPENDING_ACCOUNT_TYPES = ["depository", "credit"];
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
+const MONTH_LABELS = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+
 /* ------------------------------------------------------- category context -- */
 
 export interface CategoryRow {
@@ -203,6 +206,31 @@ interface Window { start: Date; end: Date; label: string; }
  */
 function resolveRange(range: string, today: Date) {
   const y = today.getFullYear(), m = today.getMonth(), d = today.getDate();
+
+  // month:YYYY-MM — one named calendar month, whole. Every other range is an
+  // aggregate ending today, which cannot answer "what did March cost me".
+  const named = /^month:(\d{4})-(\d{2})$/.exec(range);
+  if (named) {
+    const ny = Number(named[1]), nm = Number(named[2]) - 1;
+    const start = new Date(Date.UTC(ny, nm, 1));
+    const end = new Date(Date.UTC(ny, nm + 1, 0));
+    const days = end.getUTCDate();
+    return {
+      current: {
+        start, end,
+        label: `${MONTH_LABELS[nm]} ${ny}`,
+      },
+      previous: {
+        start: new Date(Date.UTC(ny, nm - 1, 1)),
+        end: new Date(Date.UTC(ny, nm, 0)),
+        label: `${MONTH_LABELS[(nm + 11) % 12]}`,
+      },
+      // A month that has already ended is complete, so pace is not a question.
+      // A month still running is measured against the days gone.
+      daysElapsed: (ny === y && nm === m) ? d : days,
+      daysInPeriod: days,
+    };
+  }
 
   if (range === "last-month") {
     const start = new Date(Date.UTC(y, m - 1, 1)), end = new Date(Date.UTC(y, m, 0));
