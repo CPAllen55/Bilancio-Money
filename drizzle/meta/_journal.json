@@ -36,6 +36,13 @@
       "when": 1787174134580,
       "tag": "0004_cold_doorman",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787246546924,
+      "tag": "0005_cute_tyger_tiger",
+      "breakpoints": true
     }
   ]
 }

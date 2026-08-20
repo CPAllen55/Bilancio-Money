@@ -59,7 +59,13 @@
     // Empty until a bank that needs an OAuth hand-off is in play. Whatever goes
     // here must FIRST be registered under Plaid → Developers → API → Allowed
     // redirect URIs; an unregistered value makes every link attempt fail.
-    "PLAID_REDIRECT_URI": ""
+    "PLAID_REDIRECT_URI": "",
+
+    // Where Plaid posts when an Item has news — most importantly that more
+    // history has finished loading. Must be publicly reachable and HTTPS;
+    // Plaid will not deliver to localhost, so this stays empty in .dev.vars
+    // and webhooks simply are not registered during local development.
+    "PLAID_WEBHOOK_URL": "https://bilanciomoney.com/api/plaid/webhook"
   },
 
   // No named environments on purpose. The Cloudflare build runs

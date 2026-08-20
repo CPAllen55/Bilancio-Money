@@ -47,6 +47,9 @@ export const items = pgTable("items", {
   keyVersion: text("key_version").notNull().default("v1"),
 
   transactionsCursor: text("transactions_cursor"),
+  // The webhook URL Plaid currently has for this item, so registration
+  // happens once rather than on every sync, and re-registers if it changes.
+  webhookUrl: text("webhook_url"),
   status: itemStatus("status").notNull().default("good"),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
   consentExpirationTime: timestamp("consent_expiration_time", { withTimezone: true }),

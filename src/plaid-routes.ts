@@ -13,6 +13,8 @@ import { accounts, items, transactions } from "./db/schema";
 import { requireUser } from "./auth";
 import { openToken, sealToken } from "./crypto";
 import {
+  updateItemWebhook,
+  verifyWebhook,
   removeItem,
   PlaidError,
   createLinkToken,
@@ -173,6 +175,114 @@ async function upsertAccounts(
 
 /* ---------------------------------------------------------------------- sync */
 
+/**
+ * How many rows one /sync request will write per item before handing back.
+ *
+ * A Worker has a request budget, and a two-year backfill can exceed it. Rather
+ * than race that limit, the run stops at a sensible size, saves where it got
+ * to, and reports that there is more — the caller comes back until there is
+ * not. Slower to finish, but it always finishes.
+ *
+ * Per item, deliberately. Shared, the first bank could spend the whole
+ * allowance on every call and the second would never be reached.
+ */
+const SYNC_ROW_BUDGET = 600;
+
+interface ItemSyncResult {
+  added: number;
+  modified: number;
+  removed: number;
+  /** History remains; call again. */
+  more: boolean;
+  /** Plaid is still preparing this item's history. */
+  notReady: boolean;
+}
+
+/**
+ * Pulls one item forward from its cursor.
+ *
+ * Shared by the sync button and the webhook, so "fetch what is new" means the
+ * same thing however it was triggered.
+ */
+async function syncOneItem(
+  env: Env,
+  db: ReturnType<typeof getDb>["db"],
+  item: typeof items.$inferSelect,
+): Promise<ItemSyncResult> {
+  const out: ItemSyncResult = { added: 0, modified: 0, removed: 0, more: false, notReady: false };
+  const accessToken = await openToken(env, item.accessTokenCiphertext, item.accessTokenIv);
+
+  // Register the webhook if Plaid does not already have this URL for the item.
+  // New items carry it from the link token; ones linked before webhooks existed
+  // would otherwise never send anything, and would still be waiting on a button.
+  if (env.PLAID_WEBHOOK_URL && item.webhookUrl !== env.PLAID_WEBHOOK_URL) {
+    try {
+      await updateItemWebhook(env, accessToken, env.PLAID_WEBHOOK_URL);
+      await db.update(items).set({ webhookUrl: env.PLAID_WEBHOOK_URL }).where(eq(items.id, item.id));
+    } catch (err) {
+      // Not fatal: syncing still works by hand. Logged so it is visible.
+      console.error(`could not register webhook for item ${item.id}:`, err);
+    }
+  }
+
+  // Map Plaid's account ids onto ours once per item, not per transaction.
+  const owned = await db.select().from(accounts).where(eq(accounts.itemId, item.id));
+  const byPlaidId = new Map(owned.map((a) => [a.plaidAccountId, a.id]));
+
+  let cursor = item.transactionsCursor;
+  let hasMore = true;
+  let written = 0;
+
+  while (hasMore) {
+    let page;
+    try {
+      page = await syncWithRetry(env, accessToken, cursor);
+    } catch (err) {
+      // Plaid has accepted the item but has not finished pulling history from
+      // the institution yet. That is a wait, not a failure.
+      if (err instanceof PlaidError && err.errorCode === "PRODUCT_NOT_READY") {
+        out.notReady = true;
+        return out;
+      }
+      throw err;
+    }
+
+    out.added += await writeTransactions(db, byPlaidId, page.added);
+    out.modified += await writeTransactions(db, byPlaidId, page.modified);
+
+    if (page.removed.length) {
+      const ids = page.removed.map((r) => r.transaction_id);
+      const gone = await db
+        .delete(transactions)
+        .where(
+          and(
+            inArray(transactions.plaidTransactionId, ids),
+            inArray(transactions.accountId, [...byPlaidId.values()]),
+          ),
+        )
+        .returning({ id: transactions.id });
+      out.removed += gone.length;
+    }
+
+    cursor = page.next_cursor;
+    hasMore = page.has_more;
+
+    // Saved per page, as soon as that page's rows are durably written. A sync
+    // cursor is a position in an ordered stream, so recording it after the page
+    // it belongs to is exactly right — and it makes a long backfill resumable
+    // rather than all-or-nothing.
+    await db
+      .update(items)
+      .set({ transactionsCursor: cursor, lastSyncedAt: new Date(), status: "good" })
+      .where(eq(items.id, item.id));
+
+    written += page.added.length + page.modified.length;
+    if (written >= SYNC_ROW_BUDGET) { out.more = true; return out; }
+  }
+
+  return out;
+}
+
 plaid.post("/sync", async (c) => {
   const { db, ready, close } = getDb(c.env);
   try {
@@ -184,94 +294,20 @@ plaid.post("/sync", async (c) => {
     const mine = await db.select().from(items).where(eq(items.userId, auth.user.id));
     if (!mine.length) return c.json({ ok: true, items: 0, added: 0, modified: 0, removed: 0 });
 
-    let added = 0, modified = 0, removed = 0;
-    let more = false;
+    let added = 0, modified = 0, removed = 0, more = false;
     const pending: string[] = [];
     const failed: { bank: string; message: string }[] = [];
 
     for (const item of mine) {
-      // Budget per item, not shared. Shared, the first bank could spend the
-      // whole allowance on every call and the second would never be reached —
-      // which is exactly what happened: two connections sat at "never synced"
-      // through repeated syncs while the first one re-read pages it already had.
-      let written = 0;
       try {
-      const accessToken = await openToken(c.env, item.accessTokenCiphertext, item.accessTokenIv);
-
-      // Map Plaid's account ids onto ours once per item, not per transaction.
-      const owned = await db.select().from(accounts).where(eq(accounts.itemId, item.id));
-      const byPlaidId = new Map(owned.map((a) => [a.plaidAccountId, a.id]));
-
-      let cursor = item.transactionsCursor;
-      let hasMore = true;
-      let notReady = false;
-
-      while (hasMore) {
-        let page;
-        try {
-          page = await syncWithRetry(c.env, accessToken, cursor);
-        } catch (err) {
-          // Plaid has accepted the item but has not finished pulling history
-          // from the institution yet. That is a wait, not a failure — say so
-          // rather than throwing a 502 at somebody who did nothing wrong.
-          if (err instanceof PlaidError && err.errorCode === "PRODUCT_NOT_READY") {
-            pending.push(item.institutionName ?? "your bank");
-            notReady = true;
-            break;
-          }
-          throw err;
-        }
-
-        added += await writeTransactions(db, byPlaidId, page.added);
-        modified += await writeTransactions(db, byPlaidId, page.modified);
-
-        if (page.removed.length) {
-          const ids = page.removed.map((r) => r.transaction_id);
-          const gone = await db
-            .delete(transactions)
-            .where(
-              and(
-                inArray(transactions.plaidTransactionId, ids),
-                inArray(transactions.accountId, [...byPlaidId.values()]),
-              ),
-            )
-            .returning({ id: transactions.id });
-          removed += gone.length;
-        }
-
-        cursor = page.next_cursor;
-        hasMore = page.has_more;
-
-        // Saved per page, as soon as that page's rows are durably written.
-        //
-        // This used to happen once, after every page of an item had been read.
-        // That sounds safer and is the opposite: two years of history did not
-        // fit in one request, so the run died having written everything and
-        // recorded nothing, and every retry began again from an empty cursor
-        // and died in the same place. A sync cursor is a position in an ordered
-        // stream — saving it after the page it belongs to is exactly correct,
-        // and it makes a long backfill resumable instead of all-or-nothing.
-        await db
-          .update(items)
-          .set({ transactionsCursor: cursor, lastSyncedAt: new Date(), status: "good" })
-          .where(eq(items.id, item.id));
-
-        written += page.added.length + page.modified.length;
-        // Enough from this item for one request. The rest is still there, the
-        // cursor knows where, and the caller is told to come back.
-        if (written >= SYNC_ROW_BUDGET) { more = true; break; }
-      }
-
-      // Nothing was fetched, so there is no progress to record — leaving
-      // lastSyncedAt unset keeps "never synced" honest.
-      if (notReady) continue;
-      if (hasMore) more = true;
-
+        const r = await syncOneItem(c.env, db, item);
+        added += r.added; modified += r.modified; removed += r.removed;
+        if (r.more) more = true;
+        if (r.notReady) pending.push(item.institutionName ?? "your bank");
       } catch (err) {
-        // One bank failing must not abort the others. Previously any error
-        // threw out of the whole route, so a single unhealthy connection
-        // stopped every other connection from ever syncing — and the failure
-        // looked like a general outage rather than one bank needing attention.
+        // One bank failing must not abort the others. Thrown, a single
+        // unhealthy connection stopped every other one from ever syncing and
+        // reported itself as a general outage.
         const detail = err instanceof PlaidError
           ? `${err.errorCode ?? err.errorType ?? "error"}: ${err.message}`
           : err instanceof Error ? err.message : String(err);
@@ -280,21 +316,7 @@ plaid.post("/sync", async (c) => {
       }
     }
 
-    return c.json({
-      ok: true,
-      items: mine.length,
-      added,
-      modified,
-      removed,
-      // True when history remains and the client should call again. A backfill
-      // of two years arrives over several requests rather than one long one.
-      more,
-      // Non-empty when Plaid is still preparing history for those institutions.
-      pending,
-      // Banks that errored. Reported rather than thrown, so the ones that
-      // worked still count and the user is told which needs attention.
-      failed,
-    });
+    return c.json({ ok: true, items: mine.length, added, modified, removed, more, pending, failed });
   } catch (err) {
     return c.json(plaidFailure(err), 502);
   } finally {
@@ -302,15 +324,99 @@ plaid.post("/sync", async (c) => {
   }
 });
 
+/* ------------------------------------------------------------------ webhook */
+
 /**
- * How many rows one /sync request will write before handing back.
+ * POST /api/plaid/webhook — Plaid telling us an item has news.
  *
- * A Worker has a request budget, and a two-year backfill can exceed it. Rather
- * than race that limit, the run stops at a sensible size, saves where it got
- * to, and reports that there is more — the client calls again until there is
- * not. Slower to finish, but it always finishes.
+ * The one that matters is SYNC_UPDATES_AVAILABLE: Plaid finished pulling more
+ * history and there is something to fetch. Without it, the only way to discover
+ * that a backfill had completed was to press the button and see, which is why
+ * four months could sit empty with the item reporting itself fully synced.
+ *
+ * Unauthenticated by necessity — Plaid has no session — so the signature is the
+ * only thing standing between this and anyone who guesses the URL. It is
+ * checked before the body is looked at.
+ *
+ * Returns 200 immediately and syncs in the background. Plaid retries on a slow
+ * or failed response, and a backfill takes far longer than it will wait.
  */
-const SYNC_ROW_BUDGET = 600;
+plaid.post("/webhook", async (c) => {
+  const raw = await c.req.text();
+
+  if (!(await verifyWebhook(c.env, c.req.header("Plaid-Verification"), raw))) {
+    console.error("rejected a webhook that did not verify");
+    return c.json({ error: "bad_signature" }, 401);
+  }
+
+  let body: { webhook_type?: string; webhook_code?: string; item_id?: string };
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return c.json({ error: "bad_json" }, 400);
+  }
+
+  const { webhook_type: type, webhook_code: code, item_id: plaidItemId } = body;
+  if (!plaidItemId) return c.json({ ok: true, ignored: "no item_id" });
+
+  const { db, ready, close } = getDb(c.env);
+  try {
+    await ready;
+    const [item] = await db
+      .select().from(items).where(eq(items.plaidItemId, plaidItemId)).limit(1);
+    // An item we do not hold — most likely one that was disconnected while a
+    // webhook was in flight. Acknowledged so Plaid stops retrying it.
+    if (!item) return c.json({ ok: true, ignored: "unknown item" });
+
+    if (type === "TRANSACTIONS") {
+      // SYNC_UPDATES_AVAILABLE is the modern one; the *_UPDATE codes are the
+      // legacy family and mean the same thing here — go and read the cursor.
+      const wantsSync = code === "SYNC_UPDATES_AVAILABLE" ||
+        code === "INITIAL_UPDATE" || code === "HISTORICAL_UPDATE" ||
+        code === "DEFAULT_UPDATE" || code === "TRANSACTIONS_REMOVED";
+
+      if (wantsSync) {
+        // Drained in the background across as many rounds as it takes, so a
+        // completed backfill lands without anybody pressing anything.
+        c.executionCtx.waitUntil((async () => {
+          try {
+            let round = 0;
+            let current = item;
+            for (;;) {
+              const r = await syncOneItem(c.env, db, current);
+              console.log(`webhook sync ${code} item ${item.id}: +${r.added} ~${r.modified} -${r.removed}`);
+              if (!r.more || ++round >= 40) break;
+              const [fresh] = await db
+                .select().from(items).where(eq(items.id, item.id)).limit(1);
+              if (!fresh) break;   // disconnected mid-backfill
+              current = fresh;     // pick up the cursor the last round saved
+            }
+          } catch (err) {
+            console.error(`webhook sync failed for item ${item.id}:`, err);
+          }
+        })());
+      }
+    }
+
+    if (type === "ITEM") {
+      // The item needs the user to re-authenticate, or has been revoked. Recorded
+      // so the Banks tab can say so instead of showing a connection that quietly
+      // stopped returning anything.
+      const status =
+        code === "ERROR" || code === "USER_PERMISSION_REVOKED" ? "login_required"
+        : code === "PENDING_EXPIRATION" ? "pending_expiration"
+        : null;
+      if (status) {
+        await db.update(items).set({ status }).where(eq(items.id, item.id));
+        console.log(`item ${item.id} marked ${status} by webhook ${code}`);
+      }
+    }
+
+    return c.json({ ok: true });
+  } finally {
+    c.executionCtx.waitUntil(close());
+  }
+});
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

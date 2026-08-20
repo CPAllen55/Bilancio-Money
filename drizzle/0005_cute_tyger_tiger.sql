@@ -1,0 +1,1 @@
+ALTER TABLE "items" ADD COLUMN "webhook_url" text;
