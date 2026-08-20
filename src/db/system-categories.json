@@ -358,5 +358,13 @@
     "sortOrder": 959,
     "parent": "transfers",
     "kind": "transfer"
+  },
+  {
+    "slug": "ignored",
+    "label": "Ignore this",
+    "colour": "#5a6672",
+    "sortOrder": 990,
+    "parent": "transfers",
+    "kind": "transfer"
   }
 ]

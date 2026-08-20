@@ -23,7 +23,11 @@ export interface SystemCategory {
 
 // Lives in JSON so the seed script — plain Node, no TypeScript — reads the same
 // list the Worker does. Two copies would drift the first time one is edited.
-import systemCategories from "./db/system-categories.json";
+// The `with` attribute is required by Node when importing JSON. The Worker
+// bundler does not need it, but without it this module cannot be imported by a
+// plain script — which is how the category mapping gets tested against real
+// data outside the Worker.
+import systemCategories from "./db/system-categories.json" with { type: "json" };
 
 /** Deliberately closer to how people describe money than to Plaid's taxonomy. */
 export const SYSTEM_CATEGORIES: SystemCategory[] = systemCategories;
@@ -87,7 +91,23 @@ const TRANSFER_PRIMARY = new Set(["TRANSFER_IN", "TRANSFER_OUT"]);
  * it means it is visible and re-filable rather than silently vanishing, which
  * is what "where did the other £20,000 go" feels like.
  */
+/**
+ * Whole primaries that are always a transfer, whatever the detail says.
+ *
+ * LOAN_DISBURSEMENTS is how Plaid labels a payment arriving at a credit card —
+ * "Payment Thank You" shows up as a disbursement on the card, money in. Left
+ * unmapped it defaulted to spending, and since the amount is negative it was
+ * counted as INCOME, inflating both earnings and savings rate. Paying a card is
+ * neither: money leaves the current account and lands on the card, and if both
+ * are linked it is visible twice. It is a transfer from both directions.
+ */
+const TRANSFER_PRIMARY_ALWAYS = new Set(["LOAN_DISBURSEMENTS"]);
+
 const TRANSFER_BY_DETAILED: Record<string, string> = {
+  // Both halves of a card payment: leaving the current account, and arriving
+  // at the card.
+  LOAN_PAYMENTS_CREDIT_CARD_PAYMENT: "card-payment",
+  LOAN_DISBURSEMENTS_OTHER_DISBURSEMENT: "card-payment",
   TRANSFER_OUT_SAVINGS: "to-savings",
   TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS: "to-investments",
   TRANSFER_OUT_WITHDRAWAL: "withdrawal",
@@ -123,10 +143,18 @@ export function classify(primary: string | null, detailed: string | null): Class
     const slug = (detailed && INCOME_BY_DETAILED[detailed]) || "other-income";
     return { kind: "income", slug };
   }
-  if (primary && TRANSFER_PRIMARY.has(primary)) {
+  if (primary && (TRANSFER_PRIMARY.has(primary) || TRANSFER_PRIMARY_ALWAYS.has(primary))) {
     const slug = (detailed && TRANSFER_BY_DETAILED[detailed])
-      || (primary === "TRANSFER_IN" ? "transfer-in" : "transfer-other");
+      || (primary === "TRANSFER_IN" ? "transfer-in"
+        : primary === "LOAN_DISBURSEMENTS" ? "card-payment"
+        : "transfer-other");
     return { kind: "transfer", slug };
+  }
+
+  // A credit card payment seen from the paying account, which Plaid files under
+  // LOAN_PAYMENTS rather than as a transfer.
+  if (detailed === "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT") {
+    return { kind: "transfer", slug: "card-payment" };
   }
 
   const fromDetailed = detailed ? BY_DETAILED[detailed] : undefined;

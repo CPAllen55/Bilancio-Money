@@ -565,8 +565,8 @@ async function renderCategories() {
 
   if (moved.length) {
     host.innerHTML += '<div class="moved">' +
-      '<p class="eyebrow">Moved, not spent · ' + money(s.totals.transfersMoved) + '</p>' +
-      '<p class="fc-method" style="margin:6px 0 10px">Between your own accounts — a deposit into savings or a CD is not money leaving your finances, so none of this counts as spending or appears in the trend.</p>' +
+      '<p class="eyebrow">Not counted · ' + money(s.totals.transfersMoved) + '</p>' +
+      '<p class="fc-method" style="margin:6px 0 10px">Money moved between your own accounts, card payments, and anything you have marked <b>Ignore this</b>. None of it counts as income or spending, and none of it appears in the trend.</p>' +
       moved.map(p =>
         '<div class="crow child"><div class="cname">' + escapeHtml(labelOfSlug(p[0])) + '</div>' +
         '<div></div><div class="camt">' + money(p[1]) + '</div></div>'
@@ -587,10 +587,14 @@ function escapeHtml(s) {
  * to a leaf, or the rollup would double-count it.
  */
 function categoryOptions(selectedSlug, side) {
-  // Only the side of the ledger the money actually moved on. A category cannot
-  // change whether cash came in or went out, so offering "Salary" for a payment
-  // just invites filing that the totals will then have to ignore.
-  const pool = side ? categoryList.filter(c => c.kind === side) : categoryList;
+  // The side of the ledger the money actually moved on, plus transfers. A
+  // category cannot change the direction cash travelled, so offering "Salary"
+  // for a payment would only produce a wrong total. But "this should not count
+  // at all" is a legitimate thing to say about any row, whichever way it went,
+  // so the transfer bucket — including Ignore this — is always reachable.
+  const pool = side
+    ? categoryList.filter(c => c.kind === side || c.kind === 'transfer')
+    : categoryList;
   const parents = pool.filter(c => !c.parentSlug);
   const opt = c => '<option value="' + c.id + '"' +
     (c.slug === selectedSlug ? ' selected' : '') + '>' +

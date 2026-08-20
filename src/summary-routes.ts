@@ -66,9 +66,14 @@ export function bucketFor(
   side: "spend" | "income",
   ctx: CategoryContext,
 ): string {
-  const fallback = side === "income" ? "other-income" : "other";
-  if (!slug) return fallback;
-  return ctx.kindOfSlug.get(slug) === side ? slug : fallback;
+  if (slug && ctx.kindOfSlug.get(slug) === side) return slug;
+  if (side === "spend") return "other";
+
+  // Money arriving against a spending category is almost always a refund — a
+  // return to a shop, a reversed charge. Calling it "Other Income" overstates
+  // earnings and quietly lifts the savings rate; "Refunds" is truer, and wrong
+  // in an obvious enough way to get corrected.
+  return slug && ctx.kindOfSlug.get(slug) === "spend" ? "refunds" : "other-income";
 }
 
 export { ownedAccountIds };
