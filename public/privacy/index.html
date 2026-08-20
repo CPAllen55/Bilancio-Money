@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Bilancio Money</title>
+<meta name="description" content="What Bilancio Money collects, why, and what it never does with it.">
+<link rel="icon" href="/brand/icon-32.png" sizes="32x32">
+<link rel="icon" href="/brand/icon-16.png" sizes="16x16">
+<link rel="apple-touch-icon" href="/brand/apple-touch-icon.png">
+<meta name="theme-color" content="#05080B">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#05080B; --hair:rgba(231,238,243,0.10); --hair-strong:rgba(231,238,243,0.18);
+    --ink:#E7EEF3; --ink-soft:#8A9BAC; --muted:#7E90A2;
+    --mint:#00F0A8; --mint-dim:#00A876; --surface:#0F171F;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink);
+        font-family:'IBM Plex Sans', sans-serif; font-size:15.5px; line-height:1.62; }
+  .wrap{ max-width:760px; margin:0 auto; padding:0 24px; }
+  header.top{ border-bottom:1px solid var(--hair); }
+  .top-inner{ display:flex; align-items:center; justify-content:space-between;
+              padding:16px 0; gap:16px; }
+  .wordmark{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:20px;
+             letter-spacing:-.01em; text-decoration:none; color:var(--ink); }
+  .wordmark span{ color:var(--mint); }
+  .top-inner a.back{ font-family:'IBM Plex Mono', monospace; font-size:12px;
+                     color:var(--ink-soft); text-decoration:none; }
+  .top-inner a.back:hover{ color:var(--mint); }
+
+  main{ padding:44px 0 80px; }
+  h1{ font-family:'Space Grotesk', sans-serif; font-size:34px; letter-spacing:-.02em; margin:0 0 8px; }
+  .stamp{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--muted);
+          margin:0 0 34px; }
+  h2{ font-family:'Space Grotesk', sans-serif; font-size:20px; letter-spacing:-.01em;
+      margin:40px 0 10px; padding-top:20px; border-top:1px solid var(--hair); }
+  h3{ font-size:15.5px; margin:24px 0 6px; color:var(--ink); }
+  p, li{ color:var(--ink-soft); }
+  li{ margin-bottom:6px; }
+  strong{ color:var(--ink); font-weight:600; }
+  a{ color:var(--mint-dim); }
+  a:hover{ color:var(--mint); }
+  ul{ padding-left:20px; }
+  .lede{ font-size:17px; color:var(--ink); }
+  .box{ background:var(--surface); border:1px solid var(--hair); border-radius:6px;
+        padding:16px 20px; margin:20px 0; }
+  .box p:first-child{ margin-top:0; } .box p:last-child{ margin-bottom:0; }
+  table{ width:100%; border-collapse:collapse; margin:16px 0; font-size:14px; }
+  th{ text-align:left; font-family:'IBM Plex Mono', monospace; font-size:11px;
+      letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
+      font-weight:500; padding:0 12px 8px 0; }
+  td{ padding:9px 12px 9px 0; border-top:1px solid var(--hair); vertical-align:top;
+      color:var(--ink-soft); }
+  td:first-child{ color:var(--ink); white-space:nowrap; }
+  footer{ border-top:1px solid var(--hair); padding:24px 0 48px;
+          font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--muted); }
+  footer a{ color:var(--ink-soft); text-decoration:none; margin-right:16px; }
+  footer a:hover{ color:var(--mint); }
+  @media (max-width:560px){ h1{ font-size:27px; } body{ font-size:15px; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="wordmark" href="/">bilancio<span>.</span></a>
+    <a class="back" href="/">← back to bilanciomoney.com</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <h1>Privacy Policy</h1>
+  <p class="stamp">Last updated August 20, 2026</p>
+
+  <p class="lede">Bilancio Money reads your bank accounts so it can show you what you
+  have and where it went. That is the only thing it does with your data. It is not sold,
+  it is not shared with advertisers, and it is not used to train anything.</p>
+
+  <p>This policy explains exactly what is collected, where it lives, and who else touches
+  it. It describes the service as it actually works today, not as it might work later; if
+  that changes, this page changes with it.</p>
+
+  <p>Bilancio Money is operated by <strong>Guardiano del Faro LLC</strong>
+  ("Bilancio", "we", "us"). You can reach us at
+  <strong>privacy@bilanciomoney.com</strong>.</p>
+
+  <h2>1. What we collect</h2>
+
+  <h3>Your account</h3>
+  <p>When you sign in, our authentication provider (Clerk) gives us your
+  <strong>email address</strong> and a <strong>user ID</strong>. If you have enabled
+  multi-factor authentication, Clerk holds the phone number or authenticator secret —
+  we never see it.</p>
+
+  <h3>The waitlist</h3>
+  <p>If you enter an email address on the landing page we store that address, the date,
+  which page it came from, and whether an invitation has been sent. Nothing else.</p>
+
+  <h3>Your bank data, through Plaid</h3>
+  <p>Bilancio connects to your bank using <a href="https://plaid.com/legal/"
+  rel="noopener">Plaid</a>. You enter your bank credentials directly into Plaid's own
+  secure interface. <strong>We never see, receive, or store your bank username,
+  password, or security answers.</strong> Plaid returns an access token, which we
+  encrypt before storing (see section 4).</p>
+
+  <p>We request one Plaid product — <strong>transactions</strong> — for accounts in the
+  United States. Through it we receive and store:</p>
+
+  <table>
+    <thead><tr><th>Category</th><th>What is stored</th></tr></thead>
+    <tbody>
+      <tr><td>Institution</td><td>The bank's name and Plaid's identifier for it</td></tr>
+      <tr><td>Accounts</td><td>Account name and official name, the last four digits of the
+        account number, account type and subtype, current and available balance, credit
+        limit where applicable, and currency</td></tr>
+      <tr><td>Transactions</td><td>Amount, date, authorisation date, description, merchant
+        name and identifier, whether it is still pending, payment channel, and the
+        category Plaid assigns</td></tr>
+      <tr><td>Full record</td><td>The complete transaction record as Plaid returns it,
+        kept so that a change in how we categorise things can be applied to your existing
+        history without re-reading your bank</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box">
+    <p><strong>Worth being specific about:</strong> that complete record can include
+    details we do not display, such as the merchant's street address, city, region,
+    postal code and geographic coordinates for a transaction, the merchant's website and
+    logo, and counterparty information. Plaid decides what it contains. We store it as
+    received and it is subject to everything in this policy — but you should know it is
+    there.</p>
+  </div>
+
+  <h3>Things you create</h3>
+  <p>Categories you add, rules you set ("Starbucks is always Coffee"), categories you
+  change on individual transactions, and any notes or tags you attach to them.</p>
+
+  <h2>2. What we do not collect</h2>
+  <ul>
+    <li><strong>Bank credentials.</strong> These go to Plaid, never to us.</li>
+    <li><strong>Full account numbers.</strong> Only the last four digits, as Plaid supplies them.</li>
+    <li><strong>Social Security numbers, dates of birth, or government ID.</strong> Never requested.</li>
+    <li><strong>Payment card details.</strong> Bilancio does not currently charge for anything.</li>
+    <li><strong>Analytics, advertising, or tracking data.</strong> There are no analytics
+      scripts, no advertising pixels, and no third-party trackers anywhere on this site
+      or in the app. We do not know which pages you visit.</li>
+  </ul>
+
+  <h2>3. How we use it</h2>
+  <p>To run the product, and for nothing else:</p>
+  <ul>
+    <li>To show you your balances, transactions, categories, trends and forecasts</li>
+    <li>To keep your data current by syncing with your bank through Plaid</li>
+    <li>To apply the categorisation rules you have set</li>
+    <li>To contact you about your account or about the service itself</li>
+  </ul>
+
+  <div class="box">
+    <p>We do <strong>not</strong> sell or rent your personal information. We do not share
+    it with advertisers or data brokers. We do not use your financial data to train
+    machine-learning models. We do not build a profile of you for anyone else's benefit.</p>
+  </div>
+
+  <h2>4. How it is protected</h2>
+  <ul>
+    <li>Your Plaid access token — the credential that can read your accounts — is
+      <strong>encrypted with AES-256-GCM</strong> before it is written to the database,
+      with a unique initialisation vector for every token. The key is held as an
+      encrypted secret in our hosting platform and is never stored alongside the data
+      it protects.</li>
+    <li>All traffic is over HTTPS.</li>
+    <li>The database requires TLS and is not reachable from the public internet.</li>
+    <li>Every request for your data is authenticated, and queries are scoped to your own
+      user ID so one account cannot read another's.</li>
+  </ul>
+  <p>No system is perfectly secure, and we will not claim otherwise. If we become aware
+  of a breach affecting your data, we will tell you.</p>
+
+  <h2>5. Who else touches your data</h2>
+  <p>We use a small number of service providers. Each is bound by its own agreement and
+  may only process your data to provide its service to us.</p>
+
+  <table>
+    <thead><tr><th>Provider</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td>Plaid</td><td>Connects to your bank and supplies account and transaction
+        data. Governed by <a href="https://plaid.com/legal/" rel="noopener">Plaid's own
+        privacy policy</a>, which you accept when you link an account.</td></tr>
+      <tr><td>Clerk</td><td>Handles sign-in, sessions and multi-factor authentication.</td></tr>
+      <tr><td>Cloudflare</td><td>Serves the website and runs the application.</td></tr>
+      <tr><td>Neon</td><td>Hosts the database.</td></tr>
+      <tr><td>Google Fonts</td><td>Serves the typefaces the site uses. Your browser
+        requests these from Google, which means Google receives your IP address. No other
+        information is sent, and no cookie is set.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>6. How long we keep it</h2>
+  <ul>
+    <li><strong>Transactions and balances</strong> are kept while the bank connection is
+      active. Disconnect the bank and its accounts and transactions are deleted, along
+      with any category changes you made to them.</li>
+    <li><strong>Your account</strong> is kept until you ask us to delete it.</li>
+    <li><strong>Waitlist emails</strong> are kept until you ask us to remove yours, or
+      until we stop operating the waitlist.</li>
+  </ul>
+
+  <h2>7. Your choices and rights</h2>
+  <p>Whatever jurisdiction you are in, you can ask us to:</p>
+  <ul>
+    <li><strong>Disconnect a bank</strong> and delete everything that came from it</li>
+    <li><strong>Delete your account</strong> and all data associated with it</li>
+    <li><strong>Get a copy</strong> of the data we hold about you</li>
+    <li><strong>Correct</strong> anything inaccurate that we control</li>
+    <li><strong>Remove your email</strong> from the waitlist</li>
+  </ul>
+
+  <div class="box">
+    <p><strong>Disconnecting a bank and deleting your account are both in the app</strong>,
+    under <em>Banks</em>. Disconnecting revokes our access at Plaid and then deletes that
+    bank's accounts and transactions. Deleting your account does that for every connected
+    bank, then erases your data and your sign-in. Neither can be undone.</p>
+    <p>For a copy of your data, a correction, or removal from the waitlist, email
+    <strong>privacy@bilanciomoney.com</strong> from the address on your account and we will
+    action it within <strong>30 days</strong>.</p>
+  </div>
+
+  <p>Deleting your account removes your records from our database. It does not by itself
+  revoke Plaid's own copy of your data — to do that, use
+  <a href="https://my.plaid.com" rel="noopener">Plaid Portal</a>, where you can see and
+  revoke every connection you have made through Plaid to anyone.</p>
+
+  <p>If you are a California resident, you have rights under the CCPA/CPRA including
+  access, deletion, correction, and the right to opt out of sale or sharing. We do not
+  sell or share personal information as those terms are defined, so there is nothing to
+  opt out of, but the other rights are exercised as described above. We will not
+  discriminate against you for exercising them.</p>
+
+  <h2>8. Cookies</h2>
+  <p>Bilancio uses cookies only to keep you signed in. There are no advertising cookies,
+  no analytics cookies, and no cross-site tracking.</p>
+
+  <h2>9. Children</h2>
+  <p>Bilancio is not intended for anyone under 18 and we do not knowingly collect data
+  from children. If you believe a child has given us information, email us and we will
+  delete it.</p>
+
+  <h2>10. Where your data is held</h2>
+  <p>Your data is stored and processed in the United States. If you use Bilancio from
+  outside the United States, you are sending your information there.</p>
+
+  <h2>11. Changes to this policy</h2>
+  <p>If this policy changes we will update the date at the top. For a change that
+  materially affects how we handle your data, we will email you before it takes effect.</p>
+
+  <h2>12. Contact</h2>
+  <p>Questions, requests, or concerns: <strong>privacy@bilanciomoney.com</strong>.</p>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <a href="/">Home</a><a href="/terms/">Terms of Service</a><a href="/privacy/">Privacy Policy</a>
+    <p style="margin-top:14px">© 2026 Bilancio Money</p>
+  </div>
+</footer>
+
+</body>
+</html>
