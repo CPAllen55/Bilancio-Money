@@ -74,6 +74,16 @@ export function createLinkToken(env: Env, clerkUserId: string) {
     user: { client_user_id: clerkUserId },
     client_name: "Bilancio Money",
     products: ["transactions"],
+    // Ask for everything the bank will give. Left unset, Plaid backfills 90
+    // days and no more — which is why the first production link produced
+    // exactly ninety days of history and looked like a bank limitation rather
+    // than a default. 730 is the maximum Plaid accepts; institutions supply
+    // what they hold, so less is normal and is not an error.
+    //
+    // This is honoured when the Item is created. An existing connection does
+    // not gain history retroactively: to extend it, disconnect the bank and
+    // link it again.
+    transactions: { days_requested: 730 },
     country_codes: ["US"],
     language: "en",
     ...(env.PLAID_REDIRECT_URI ? { redirect_uri: env.PLAID_REDIRECT_URI } : {}),
