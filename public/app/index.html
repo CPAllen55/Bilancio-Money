@@ -112,6 +112,62 @@
   .t-delta.up-good{ color:var(--mint); } .t-delta.down-bad{ color:var(--coral); }
   .t-delta.flat{ color:var(--muted); } .t-delta .vs{ color:var(--muted); }
 
+  /* ---------- trend chart ---------- */
+  .bar-right{ display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+  .zoomctl{ display:inline-flex; align-items:center; gap:8px; }
+  .zoomctl button{ width:26px; height:26px; padding:0; font-size:14px; line-height:1;
+                   display:inline-flex; align-items:center; justify-content:center; }
+  .zoomlabel{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--muted);
+              min-width:74px; text-align:center; }
+
+  /* Chart and key side by side. The key is a column because it is a list of
+     categories, and a list reads down. */
+  .trend-wrap{ display:flex; gap:20px; align-items:flex-start; }
+  .trend-plot{ flex:1 1 auto; min-width:0; }
+  .trend-key{ flex:0 0 176px; display:flex; flex-direction:column; gap:1px; padding-top:8px; }
+  .kitem{ display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+          font-family:'IBM Plex Sans', sans-serif; font-size:12.5px; color:var(--ink-soft);
+          background:none; border:1px solid transparent; border-radius:5px; padding:5px 7px;
+          cursor:pointer; }
+  .kitem:hover{ background:var(--bg-panel); color:var(--ink); border-color:var(--hair); }
+  .kitem[aria-pressed="true"]{ background:var(--bg-panel); color:var(--ink);
+                               border-color:var(--mint-dim); }
+  .kitem.static{ cursor:default; color:var(--muted); }
+  .kitem.static:hover{ background:none; border-color:transparent; color:var(--muted); }
+  .kswatch{ width:11px; height:11px; border-radius:2px; flex:none; }
+  .kswatch.dash{ height:0; border-top:2px dashed var(--ink); width:15px; opacity:.78; border-radius:0; }
+  .klabel{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .kamt{ margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--muted); }
+
+  /* Hover and selection are the same gesture at different commitments, so they
+     look the same: brighter, glowing in the segment's own colour, and widened
+     a little. transform-box keeps the scale about the segment's own centre
+     rather than the origin of the whole SVG. */
+  .seg{ cursor:pointer; transform-box:fill-box; transform-origin:center;
+        transition:filter .12s ease, transform .12s ease, opacity .12s ease; }
+  .seg:hover, .seg:focus-visible{ filter:brightness(1.35) drop-shadow(0 0 7px currentColor); }
+  .seg:focus-visible{ outline:none; }
+  .seg:hover, .seg:focus-visible, .seg.sel{ transform:scaleX(1.24); }
+  .seg.sel{ filter:brightness(1.45) drop-shadow(0 0 10px currentColor); }
+  .seg.dim{ opacity:.2; }
+
+  .panner{ width:100%; margin-top:10px; accent-color:var(--mint-dim); cursor:grab; }
+
+  .trend-detail{ margin-top:14px; padding-top:14px; border-top:1px solid var(--hair);
+                 min-height:62px; }
+  .trend-detail .hint{ font-size:12.5px; color:var(--muted); }
+  .dt{ display:flex; align-items:center; gap:8px; font-size:14px; }
+  .dswatch{ width:11px; height:11px; border-radius:2px; flex:none; }
+  .dsub{ color:var(--muted); font-size:12.5px; }
+  .dfacts{ display:flex; gap:34px; flex-wrap:wrap; margin-top:9px; }
+  .dvalue{ font-family:'IBM Plex Mono', monospace; font-size:18px; color:var(--ink); }
+  .dlabel{ font-size:11.5px; color:var(--muted); margin-top:1px; }
+
+  @media (max-width:760px){
+    .trend-wrap{ flex-direction:column; }
+    .trend-key{ flex:none; width:100%; }
+  }
+
   /* ---------- category rows ---------- */
   .crow{ display:grid; grid-template-columns:120px minmax(0,1fr) 110px; gap:14px;
          align-items:center; padding:10px 0; border-top:1px solid var(--hair); }
@@ -292,7 +348,14 @@
           <option value="12" selected>Last year</option>
           <option value="24">Last 2 years</option>
         </select>
-        <label class="toggle"><input type="checkbox" id="forecast-on"> Forecast rest of year</label>
+        <span class="bar-right">
+          <label class="toggle"><input type="checkbox" id="forecast-on"> Forecast rest of year</label>
+          <span class="zoomctl" id="trend-zoom" hidden>
+            <button type="button" id="trend-zoom-out" aria-label="Show more months">−</button>
+            <span class="zoomlabel" id="trend-zoom-label" aria-live="polite"></span>
+            <button type="button" id="trend-zoom-in" aria-label="Show fewer months, larger">+</button>
+          </span>
+        </span>
       </div>
       <div class="card"><div id="trend-chart"></div></div>
       <div class="card" id="forecast-box" hidden></div>
@@ -961,6 +1024,24 @@ $('tx-list').addEventListener('change', async (e) => {
   }
 });
 
+/* ----------------------------------------------------------------- trend -- */
+
+/* The chart is drawn from state rather than from the response, because zooming
+   and selecting change what is drawn without changing what is known. Refetching
+   a year of history to show eight months of it would be a round trip for
+   arithmetic the browser has already done. */
+let trendData = null;      // { all, prior }
+let trendVisible = 0;      // months in view
+let trendOffset = 0;       // index of the leftmost visible month
+let trendSel = null;       // { cat, month } | { cat } | null
+
+const MIN_VISIBLE = 3;
+
+function monthLabel(ym) {
+  const p = ym.split('-');
+  return MONTH_NAMES[Number(p[1]) - 1] + ' ' + p[0];
+}
+
 async function renderTrend() {
   const months = Number($('trend-range').value);
   const wantForecast = $('forecast-on').checked;
@@ -971,7 +1052,6 @@ async function renderTrend() {
   ]);
   if (tr.categories) { categoryList = tr.categories; rememberColours(categoryList); }
 
-  const host = $('trend-chart');
   const actual = tr.series, prior = tr.priorSeries;
 
   // Projected months are appended only where they run past the actual data —
@@ -983,7 +1063,9 @@ async function renderTrend() {
   }
 
   if (!actual.some(m => m.expense > 0) && !projected.length) {
-    host.innerHTML = '<p class="empty">No monthly data yet.</p>';
+    trendData = null;
+    $('trend-chart').innerHTML = '<p class="empty">No monthly data yet.</p>';
+    $('trend-zoom').hidden = true;
     await renderForecast();
     return;
   }
@@ -993,27 +1075,87 @@ async function renderTrend() {
     .concat(projected.map(m =>
       ({ month: m.month, byParent: m.byParent || {}, expense: m.expense, income: m.income || 0, projected: true })));
 
-  const W = Math.max(560, host.clientWidth || 880), H = 320;
+  trendData = { all: all, prior: prior };
+  // A new range is a new question, so the view resets to the whole of it.
+  trendVisible = all.length;
+  trendOffset = 0;
+  trendSel = null;
+
+  drawTrend();
+  await renderForecast();
+}
+
+/* How far in the view can go, and where it currently sits. Kept in one place
+   because every control has to agree about the clamp or panning at full zoom
+   silently moves the window off the end of the data. */
+function clampTrendView() {
+  const n = trendData ? trendData.all.length : 0;
+  trendVisible = Math.max(MIN_VISIBLE, Math.min(n, Math.round(trendVisible)));
+  trendOffset = Math.max(0, Math.min(n - trendVisible, Math.round(trendOffset)));
+}
+
+function drawTrend() {
+  if (!trendData) return;
+  const host = $('trend-chart');
+  clampTrendView();
+
+  const n = trendData.all.length;
+  const from = trendOffset, to = trendOffset + trendVisible;
+  const all = trendData.all.slice(from, to);
+  // The year-ago series is indexed against the actual months, so it is windowed
+  // with the same slice and truncated where the window runs into the forecast.
+  const prior = trendData.prior.slice(from, to);
+
+  $('trend-zoom').hidden = false;
+  $('trend-zoom-label').textContent = trendVisible === n
+    ? n + ' months'
+    : trendVisible + ' of ' + n;
+  $('trend-zoom-in').disabled = trendVisible <= MIN_VISIBLE;
+  $('trend-zoom-out').disabled = trendVisible >= n;
+
+  const W = 880, H = 320;
   const PL = 66, PR = 14, PT = 20, PB = 38;
   const plotW = W - PL - PR, plotH = H - PT - PB;
-  // Income is on the same axis as spending — that is the entire point. If it
-  // were scaled separately the gap between them would be meaningless.
-  const peak = Math.max(
-    Math.max.apply(null, all.map(m => m.expense).concat([0])),
-    Math.max.apply(null, all.map(m => m.income).concat([0])),
-    Math.max.apply(null, prior.map(m => m.expense).concat([0]))
-  ) || 1;
+
+  // Scaled to what is on screen, not to the whole series. Zooming in on a quiet
+  // stretch should show that stretch in detail rather than flat against a peak
+  // that is no longer visible — and the axis is always labelled, so the framing
+  // states its own scale instead of implying a fixed one.
+  const highest = rows => Math.max.apply(null, rows.concat([0]));
+  const windowPeak = Math.max(
+    highest(all.map(m => m.expense)),
+    highest(all.map(m => m.income)),
+    highest(prior.map(m => m.expense))
+  );
+
+  // A window with nothing in it would otherwise be given an axis running $0 to
+  // $0, which is not a smaller scale but a meaningless one. Falling back to the
+  // scale of the whole series keeps the framing honest and makes the blank read
+  // as "nothing happened here" rather than as a broken chart.
+  const emptyWindow = windowPeak === 0;
+  const peak = (emptyWindow
+    ? Math.max(highest(trendData.all.map(m => m.expense)), highest(trendData.all.map(m => m.income)))
+    : windowPeak) || 1;
 
   const mag = Math.pow(10, Math.floor(Math.log10(peak / 4)));
   const stepMul = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].filter(m => m * mag >= peak / 4)[0] || 10;
   const yMax = stepMul * mag * 4;
   const y = v => PT + plotH - (v / yMax) * plotH;
   const band = plotW / all.length;
-  const barW = Math.min(26, band * 0.55);
+  // Bars grow as the view narrows — that is what zooming in is for — but stop
+  // short of touching, so the gap still reads as a gap between months.
+  const barW = Math.min(46, band * 0.55);
   const every = Math.ceil(all.length / 12);
 
   let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
-            '" role="img" aria-label="Monthly spending, with the year before and any forecast">';
+            '" preserveAspectRatio="xMidYMid meet" role="img" ' +
+            'aria-label="Monthly spending, with the year before and any forecast">';
+
+  if (emptyWindow) {
+    svg += '<text x="' + (PL + plotW / 2) + '" y="' + (PT + plotH / 2) + '" text-anchor="middle" ' +
+           'font-family="IBM Plex Mono" font-size="12" fill="var(--muted)">' +
+           'Nothing recorded in these months</text>';
+  }
 
   // Shade the forecast region first, so everything else draws on top of it.
   const firstProjected = all.findIndex(m => m.projected);
@@ -1047,10 +1189,10 @@ async function renderTrend() {
     let d = 'M' + PL + ',' + y(all[0].income).toFixed(1);
     d += ' L' + pts[0][0].toFixed(1) + ',' + pts[0][1].toFixed(1);
     for (let i = 1; i < pts.length; i++) {
-      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
-      const mx = (x0 + x1) / 2;
-      d += ' C' + mx.toFixed(1) + ',' + y0.toFixed(1) + ' ' + mx.toFixed(1) + ',' + y1.toFixed(1) +
-           ' ' + x1.toFixed(1) + ',' + y1.toFixed(1);
+      const p0 = pts[i - 1], p1 = pts[i];
+      const mx = (p0[0] + p1[0]) / 2;
+      d += ' C' + mx.toFixed(1) + ',' + p0[1].toFixed(1) + ' ' + mx.toFixed(1) + ',' + p1[1].toFixed(1) +
+           ' ' + p1[0].toFixed(1) + ',' + p1[1].toFixed(1);
     }
     d += ' L' + (W - PR) + ',' + y(all[all.length - 1].income).toFixed(1);
 
@@ -1072,12 +1214,20 @@ async function renderTrend() {
       const v = m.byParent[id];
       if (!v) return;
       const top = y(acc + v), bot = y(acc);
-      svg += '<rect x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
+      const on = trendSel && trendSel.cat === id && (!trendSel.month || trendSel.month === m.month);
+      const off = trendSel && !on;
+      const colour = colourOf(id);
+      svg += '<rect class="seg' + (on ? ' sel' : '') + (off ? ' dim' : '') + '"' +
+             ' data-cat="' + escapeHtml(id) + '" data-month="' + escapeHtml(m.month) + '"' +
+             ' tabindex="0" role="button"' +
+             ' x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
              '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 2).toFixed(1) +
-             '" fill="' + colourOf(id) + '" rx="1"' +
+             // color, not just fill: the hover glow is a drop-shadow in
+             // currentColor, so each segment glows its own colour.
+             '" fill="' + colour + '" style="color:' + colour + '" rx="1"' +
              // Projected bars are the same colours, dimmed and outlined, so the
              // shape is comparable but never mistaken for something that happened.
-             (m.projected ? ' opacity=".45" stroke="' + colourOf(id) + '" stroke-width="1" stroke-dasharray="2 2"' : '') +
+             (m.projected ? ' opacity=".45" stroke="' + colour + '" stroke-width="1" stroke-dasharray="2 2"' : '') +
              '><title>' + escapeHtml(labelOfSlug(id)) + ': ' + money(v) +
              (m.projected ? ' (projected)' : '') + '</title></rect>';
       acc += v;
@@ -1097,39 +1247,168 @@ async function renderTrend() {
   if (prior.length) {
     const pts = prior.map((p, i) => (PL + band * i + band / 2).toFixed(1) + ',' + y(p.expense).toFixed(1));
     svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--ink)" stroke-width="2" ' +
-           'stroke-dasharray="5 4" opacity=".78"/>';
+           'stroke-dasharray="5 4" opacity="' + (trendSel ? '.25' : '.78') + '"/>';
     prior.forEach((p, i) => {
       svg += '<circle cx="' + (PL + band * i + band / 2).toFixed(1) + '" cy="' + y(p.expense).toFixed(1) +
-             '" r="3.5" fill="var(--bg-panel)" stroke="var(--ink)" stroke-width="2">' +
+             '" r="3.5" fill="var(--bg-panel)" stroke="var(--ink)" stroke-width="2"' +
+             (trendSel ? ' opacity=".25"' : '') + '>' +
              '<title>' + p.month + ': ' + money(p.expense) + '</title></circle>';
     });
   }
   svg += '</svg>';
 
-  // Only the parents that actually appear — a legend of nine mostly-empty
-  // buckets tells the reader nothing.
-  const present = new Set();
-  all.forEach(m => Object.keys(m.byParent).forEach(id => { if (m.byParent[id] > 0) present.add(id); }));
-  const legend = [...present].map(id =>
-    '<span style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;font-size:12.5px;color:var(--ink-soft)">' +
-    '<span style="width:11px;height:11px;border-radius:2px;background:' + colourOf(id) + '"></span>' +
-    escapeHtml(labelOfSlug(id)) + '</span>'
+  /* ---- the key, down the side ----
+     Only the categories that actually appear in the window, each with what it
+     came to. A legend of nine mostly-empty buckets tells the reader nothing,
+     and one that lists categories not on screen is actively misleading. */
+  const totals = {};
+  all.forEach(m => Object.keys(m.byParent).forEach(id => {
+    if (m.byParent[id] > 0) totals[id] = (totals[id] || 0) + m.byParent[id];
+  }));
+  const present = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
+
+  const key = present.map(id =>
+    '<button type="button" class="kitem" data-cat="' + escapeHtml(id) + '"' +
+    ' aria-pressed="' + (trendSel && trendSel.cat === id ? 'true' : 'false') + '">' +
+    '<span class="kswatch" style="background:' + colourOf(id) + '"></span>' +
+    '<span class="klabel">' + escapeHtml(labelOfSlug(id)) + '</span>' +
+    '<span class="kamt">' + money0(totals[id]) + '</span></button>'
   ).join('');
 
-  const incomeKey = all.some(m => m.income > 0)
-    ? '<span style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;font-size:12.5px;color:var(--ink-soft)">' +
-      '<span style="width:15px;height:9px;border-radius:2px;background:var(--mint);opacity:.4"></span>income</span>'
-    : '';
-
-  host.innerHTML = svg + '<div style="margin-top:12px">' + incomeKey + legend +
-    '<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)">' +
-    '<span style="width:15px;border-top:2px dashed var(--ink);opacity:.78"></span>same month, last year</span></div>' +
-    (all.some(m => m.income > 0)
-      ? '<p class="fc-method" style="margin-top:8px">The gap between the wave and a bar is what that month kept.</p>'
+  const hasIncome = all.some(m => m.income > 0);
+  const extras =
+    (hasIncome
+      ? '<div class="kitem static"><span class="kswatch" style="background:var(--mint);opacity:.4"></span>' +
+        '<span class="klabel">Income</span></div>'
+      : '') +
+    (prior.length
+      ? '<div class="kitem static"><span class="kswatch dash"></span>' +
+        '<span class="klabel">Same month, last year</span></div>'
       : '');
 
-  await renderForecast();
+  const maxOffset = n - trendVisible;
+  const panner = maxOffset > 0
+    ? '<input type="range" class="panner" id="trend-pan" min="0" max="' + maxOffset +
+      '" value="' + trendOffset + '" step="1" aria-label="Scroll through months">'
+    : '';
+
+  host.innerHTML =
+    '<div class="trend-wrap">' +
+      '<div class="trend-plot">' + svg + panner + '</div>' +
+      '<div class="trend-key">' + key + extras + '</div>' +
+    '</div>' +
+    '<div class="trend-detail" id="trend-detail">' + detailHtml(all, totals) + '</div>';
 }
+
+/* What a selection actually tells you. Without this a click just changes some
+   colours, which is decoration rather than information. */
+function detailHtml(all, totals) {
+  if (!trendSel) {
+    return '<span class="hint">Click a segment for the detail behind it' +
+      (all.some(m => m.income > 0) ? ' — the gap between the wave and a bar is what that month kept.' : '.') +
+      '</span>';
+  }
+
+  const cat = trendSel.cat;
+  const label = labelOfSlug(cat);
+  const windowSpend = all.reduce((s, m) => s + m.expense, 0);
+
+  if (!trendSel.month) {
+    const total = totals[cat] || 0;
+    const months = all.filter(m => (m.byParent[cat] || 0) > 0).length;
+    return '<div class="dt"><span class="dswatch" style="background:' + colourOf(cat) + '"></span>' +
+      '<b>' + escapeHtml(label) + '</b><span class="dsub">across ' + all.length + ' months on screen</span></div>' +
+      '<div class="dfacts">' +
+        fact(money(total), 'total') +
+        fact(months ? money(Math.round(total / months)) : '—', 'a month, when it appears') +
+        fact(windowSpend ? ((total / windowSpend) * 100).toFixed(1) + '%' : '—', 'of spending shown') +
+      '</div>';
+  }
+
+  const m = all.find(x => x.month === trendSel.month);
+  if (!m) return '<span class="hint">That month is no longer in view.</span>';
+  const v = m.byParent[cat] || 0;
+  const i = all.indexOf(m);
+  const before = i > 0 ? (all[i - 1].byParent[cat] || 0) : null;
+  const change = before ? Math.round(((v - before) / before) * 100) : null;
+
+  return '<div class="dt"><span class="dswatch" style="background:' + colourOf(cat) + '"></span>' +
+    '<b>' + escapeHtml(label) + '</b><span class="dsub">' + monthLabel(m.month) +
+    (m.projected ? ' · projected' : '') + '</span></div>' +
+    '<div class="dfacts">' +
+      fact(money(v), 'spent') +
+      fact(m.expense ? ((v / m.expense) * 100).toFixed(1) + '%' : '—', 'of that month') +
+      fact(change === null ? '—' : (change >= 0 ? '+' : '') + change + '%',
+           before === null ? 'no month before' : 'vs ' + monthLabel(all[i - 1].month)) +
+    '</div>';
+}
+
+function fact(value, label) {
+  return '<div class="dfact"><div class="dvalue">' + value + '</div>' +
+         '<div class="dlabel">' + escapeHtml(label) + '</div></div>';
+}
+
+function setTrendSel(next) {
+  const same = trendSel && next && trendSel.cat === next.cat && trendSel.month === next.month;
+  trendSel = same ? null : next;
+  drawTrend();
+}
+
+/* Delegated once, because the chart is rebuilt on every zoom, pan and click —
+   binding per segment would leak a listener a frame. */
+$('trend-chart').addEventListener('click', (e) => {
+  const seg = e.target.closest('.seg');
+  if (seg) { setTrendSel({ cat: seg.dataset.cat, month: seg.dataset.month }); return; }
+
+  const item = e.target.closest('.kitem');
+  if (item && item.dataset.cat) { setTrendSel({ cat: item.dataset.cat, month: null }); return; }
+
+  // A click on the background is how you put a selection down.
+  if (!e.target.closest('.trend-detail') && !e.target.closest('.panner')) setTrendSel(null);
+});
+
+$('trend-chart').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const seg = e.target.closest('.seg');
+  if (!seg) return;
+  e.preventDefault();
+  setTrendSel({ cat: seg.dataset.cat, month: seg.dataset.month });
+});
+
+$('trend-chart').addEventListener('input', (e) => {
+  if (e.target.id !== 'trend-pan') return;
+  trendOffset = Number(e.target.value);
+  drawTrend();
+  // Redrawing replaces the slider, so focus has to be put back or a drag with
+  // the keyboard stops after one step.
+  const again = document.getElementById('trend-pan');
+  if (again) again.focus();
+});
+
+/* Zoom holds one month still and moves the window around it: whatever is
+   selected, or failing that the most recent month.
+
+   Anchoring on the middle of the range instead sounds neutral and is not —
+   most of a twelve-month window is older than the history behind it, so
+   zooming in landed on empty months every time. The newest month is the one
+   nearly everybody is looking at. */
+function zoomTrend(factor) {
+  if (!trendData) return;
+  const all = trendData.all;
+  const selected = trendSel && trendSel.month
+    ? all.findIndex(m => m.month === trendSel.month)
+    : -1;
+  const anchor = selected > -1 ? selected : all.length - 1;
+
+  trendVisible = trendVisible * factor;
+  clampTrendView();
+  trendOffset = Math.round(anchor - trendVisible / 2);
+  clampTrendView();
+  drawTrend();
+}
+
+$('trend-zoom-in').addEventListener('click', () => zoomTrend(0.5));
+$('trend-zoom-out').addEventListener('click', () => zoomTrend(2));
 
 /* -------------------------------------------------------------- forecast -- */
 
@@ -1328,7 +1607,10 @@ $('tabs').addEventListener('click', (e) => {
 
 $('range').addEventListener('change', () => { summaryCache = null; txCache = {}; refresh(); });
 $('trend-range').addEventListener('change', refresh);
-$('forecast-on').addEventListener('change', renderForecast);
+// The chart draws the projected months too, so the toggle has to redraw the
+// chart — renderTrend ends by rendering the forecast box anyway. Wiring it
+// straight to renderForecast left the tick box on and the bars absent.
+$('forecast-on').addEventListener('change', renderTrend);
 $('go-signin').addEventListener('click', () =>
   window.Clerk.redirectToSignIn({ redirectUrl: location.origin + '/app' }));
 $('signout').addEventListener('click', async () => {
