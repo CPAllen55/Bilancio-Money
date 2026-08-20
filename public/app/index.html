@@ -124,6 +124,17 @@
   .thf.on{ color:var(--mint); border-color:var(--mint-dim); text-transform:none;
            letter-spacing:0; font-size:12px; }
   table.data th{ padding-bottom:0; }
+  /* Select on the left, clear pinned to the right edge of the cell. */
+  .thwrap{ display:flex; align-items:center; gap:6px; width:100%; }
+  .thx{ margin-left:auto; flex:none; width:17px; height:17px; padding:0; line-height:1;
+        display:inline-flex; align-items:center; justify-content:center;
+        font-size:13px; border-radius:4px; border:1px solid var(--hair);
+        background:none; color:var(--muted); cursor:pointer; }
+  .thx:hover{ color:var(--ink); border-color:var(--coral); }
+  /* The amount heading orders rather than filters, so it sits over the
+     numbers it sorts — but its clear still belongs at the cell's edge. */
+  table.data th:last-child .thwrap{ justify-content:flex-end; }
+  table.data th:last-child .thx{ margin-left:6px; }
 
   /* ---------- trend chart ---------- */
   .bar-right{ display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
@@ -1101,11 +1112,18 @@ function categoryOptions(selectedSlug, side) {
    of two, and it puts the filter where the thing it filters actually is. They
    are real <select>s dressed as headings rather than a custom popover, so they
    behave like every other menu on the platform — keyboard, touch, and all. */
-const txFilters = { period: '', merchant: '', category: '' };
+const txFilters = { period: '', merchant: '', category: '', amount: '' };
 
 function txHeaderSelect(id, label, value, options) {
-  return '<select class="thf' + (value ? ' on' : '') + '" id="' + id + '" aria-label="Filter by ' + label + '">' +
-    '<option value="">' + label + '</option>' + options + '</select>';
+  // The clear sits at the right edge of the cell and only exists while the
+  // column is doing something. Re-opening the menu to find a blank first
+  // option works, but it is not where anybody looks to undo.
+  return '<span class="thwrap">' +
+    '<select class="thf' + (value ? ' on' : '') + '" id="' + id + '" aria-label="Filter by ' + label + '">' +
+      '<option value="">' + label + '</option>' + options + '</select>' +
+    (value ? '<button class="thx" type="button" data-clear="' + id + '" ' +
+      'title="Clear" aria-label="Clear the ' + label + ' filter">×</button>' : '') +
+    '</span>';
 }
 
 /* Two years of months, most recent first. */
@@ -1148,6 +1166,7 @@ async function renderTransactions() {
     '?range=' + encodeURIComponent(txFilters.period || 'all') +
     (txFilters.merchant ? '&merchant=' + encodeURIComponent(txFilters.merchant) : '') +
     (txFilters.category ? '&bucket=' + encodeURIComponent(txFilters.category) : '') +
+    (txFilters.amount ? '&amount=' + encodeURIComponent(txFilters.amount) : '') +
     '&limit=200');
 
   categoryList = r.categories;
@@ -1157,9 +1176,13 @@ async function renderTransactions() {
     '<th>' + txHeaderSelect('f-date', 'Date', txFilters.period, txMonthOptions(txFilters.period)) + '</th>' +
     '<th>' + txHeaderSelect('f-desc', 'Description', txFilters.merchant, txMerchantOptions(r.merchants, txFilters.merchant)) + '</th>' +
     '<th>' + txHeaderSelect('f-cat', 'Category', txFilters.category, txCategoryOptions(txFilters.category)) + '</th>' +
-    '<th style="text-align:right">Amount</th></tr></thead>';
+    '<th style="text-align:right">' +
+      txHeaderSelect('f-amt', 'Amount', txFilters.amount,
+        '<option value="asc"' + (txFilters.amount === 'asc' ? ' selected' : '') + '>Ascending</option>' +
+        '<option value="desc"' + (txFilters.amount === 'desc' ? ' selected' : '') + '>Descending</option>') +
+      '</th></tr></thead>';
 
-  const filtering = txFilters.period || txFilters.merchant || txFilters.category;
+  const filtering = txFilters.period || txFilters.merchant || txFilters.category || txFilters.amount;
 
   if (!r.transactions.length) {
     // The headings still have to be reachable, or a filter that matches nothing
@@ -1194,7 +1217,7 @@ async function renderTransactions() {
 /* Delegated: the headings are rebuilt on every render, so binding to them
    directly would lose the listener the first time a filter is used. */
 $('tx-list').addEventListener('change', (e) => {
-  const map = { 'f-date': 'period', 'f-desc': 'merchant', 'f-cat': 'category' };
+  const map = { 'f-date': 'period', 'f-desc': 'merchant', 'f-cat': 'category', 'f-amt': 'amount' };
   const key = map[e.target.id];
   if (!key) return;
   txFilters[key] = e.target.value;
@@ -1202,9 +1225,14 @@ $('tx-list').addEventListener('change', (e) => {
 });
 
 $('tx-list').addEventListener('click', (e) => {
-  if (e.target.id !== 'tx-clear') return;
-  e.preventDefault();
-  txFilters.period = ''; txFilters.merchant = ''; txFilters.category = '';
+  const x = e.target.closest('.thx');
+  if (x) {
+    const map = { 'f-date': 'period', 'f-desc': 'merchant', 'f-cat': 'category', 'f-amt': 'amount' };
+    txFilters[map[x.dataset.clear]] = '';
+  } else if (e.target.id === 'tx-clear') {
+    e.preventDefault();
+    txFilters.period = ''; txFilters.merchant = ''; txFilters.category = ''; txFilters.amount = '';
+  } else return;
   renderTransactions().catch(err => say($('global-msg'), err.message, 'bad'));
 });
 

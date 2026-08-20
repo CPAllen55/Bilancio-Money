@@ -14,7 +14,7 @@
  */
 
 import { Hono } from "hono";
-import { and, desc, eq, gte, isNull, lte, or, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, or, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
 import {
   accounts, categories, items, merchantRules, transactionOverrides, transactions,
@@ -558,6 +558,10 @@ summary.get("/transactions", async (c) => {
     // column instead would offer a menu of names that are not on screen.
     const merchant = c.req.query("merchant") ?? null;
 
+    // Absent means "newest first", which is the useful default for a ledger.
+    const amountQ = c.req.query("amount");
+    const amountSort = amountQ === "asc" || amountQ === "desc" ? amountQ : null;
+
     // An empty period means everything, so the window is simply not applied.
     const allTime = range === "all";
     const { current } = resolveRange(allTime ? "this-month" : range, new Date());
@@ -604,7 +608,21 @@ summary.get("/transactions", async (c) => {
         ),
       )
       .where(where)
-      .orderBy(desc(transactions.date));
+      // Ascending and descending mean what the reader sees, not what is stored.
+      // The column keeps Plaid's convention — positive is money LEAVING — so
+      // the displayed value is its negation and the two directions swap here.
+      // Ascending therefore puts the largest spend at the top and income at the
+      // bottom, which is the arithmetic being asked for even though it reads
+      // backwards at a glance.
+      //
+      // Date is the tiebreak, so a page boundary cannot repeat or drop a row
+      // when many share an amount.
+      .orderBy(
+        amountSort === "asc" ? desc(transactions.amount)
+        : amountSort === "desc" ? asc(transactions.amount)
+        : desc(transactions.date),
+        desc(transactions.date),
+      );
 
     let rows;
     let total;
