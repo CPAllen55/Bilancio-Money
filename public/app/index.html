@@ -1385,20 +1385,34 @@ $('trend-chart').addEventListener('input', (e) => {
   if (again) again.focus();
 });
 
-/* Zoom holds one month still and moves the window around it: whatever is
-   selected, or failing that the most recent month.
+/* The most recent month that actually happened.
+ *
+ * Not simply the last month in the series: with forecasting on, that is a
+ * projection, and the end of the range is a forecast month whether or not the
+ * projection means anything. Not the last month present either — the series
+ * carries empty months at both ends. It is the newest month with something
+ * recorded in it.
+ */
+function latestActualIndex(all) {
+  for (let i = all.length - 1; i >= 0; i--) {
+    if (!all[i].projected && (all[i].expense > 0 || all[i].income > 0)) return i;
+  }
+  for (let i = all.length - 1; i >= 0; i--) if (!all[i].projected) return i;
+  return all.length - 1;
+}
 
-   Anchoring on the middle of the range instead sounds neutral and is not —
-   most of a twelve-month window is older than the history behind it, so
-   zooming in landed on empty months every time. The newest month is the one
-   nearly everybody is looking at. */
+/* Zoom always holds the same month still: the latest one with actuals in it.
+   Zooming in therefore closes in on the present, and the history at the far
+   end of the range falls away from the left — which is the direction anybody
+   reading a spending chart is looking.
+
+   A fixed anchor rather than the selection or the middle of the range, so the
+   gesture does the same thing every time. Anchoring on the middle sounds
+   neutral and is not: most of a twelve-month window is older than the history
+   behind it, so zooming in reliably landed on empty months. */
 function zoomTrend(factor) {
   if (!trendData) return;
-  const all = trendData.all;
-  const selected = trendSel && trendSel.month
-    ? all.findIndex(m => m.month === trendSel.month)
-    : -1;
-  const anchor = selected > -1 ? selected : all.length - 1;
+  const anchor = latestActualIndex(trendData.all);
 
   trendVisible = trendVisible * factor;
   clampTrendView();
