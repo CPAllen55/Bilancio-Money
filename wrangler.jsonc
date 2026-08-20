@@ -48,10 +48,13 @@
   "vars": {
     "CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuYmlsYW5jaW9tb25leS5jb20k",
 
-    // Which Plaid host to call. Stays "sandbox" until Plaid grants production
-    // access — the secret and this value have to move together, or the calls
-    // fail with an error that does not say why.
-    "PLAID_ENV": "sandbox",
+    // Which Plaid host to call. This is the DEPLOYED value, so the live site
+    // talks to real banks. Local development overrides it back to sandbox in
+    // .dev.vars, so nothing on this laptop can reach a real account.
+    //
+    // PLAID_SECRET must match this environment. Change one without the other
+    // and every call fails with an error that does not say why.
+    "PLAID_ENV": "production",
 
     // Empty until a bank that needs an OAuth hand-off is in play. Whatever goes
     // here must FIRST be registered under Plaid → Developers → API → Allowed
