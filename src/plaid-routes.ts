@@ -7,7 +7,7 @@
  */
 
 import { Hono } from "hono";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
 import { accounts, items, transactions } from "./db/schema";
 import { requireUser } from "./auth";
@@ -185,6 +185,7 @@ plaid.post("/sync", async (c) => {
     if (!mine.length) return c.json({ ok: true, items: 0, added: 0, modified: 0, removed: 0 });
 
     let added = 0, modified = 0, removed = 0;
+    let written = 0, more = false;
     const pending: string[] = [];
 
     for (const item of mine) {
@@ -233,18 +234,32 @@ plaid.post("/sync", async (c) => {
 
         cursor = page.next_cursor;
         hasMore = page.has_more;
+
+        // Saved per page, as soon as that page's rows are durably written.
+        //
+        // This used to happen once, after every page of an item had been read.
+        // That sounds safer and is the opposite: two years of history did not
+        // fit in one request, so the run died having written everything and
+        // recorded nothing, and every retry began again from an empty cursor
+        // and died in the same place. A sync cursor is a position in an ordered
+        // stream — saving it after the page it belongs to is exactly correct,
+        // and it makes a long backfill resumable instead of all-or-nothing.
+        await db
+          .update(items)
+          .set({ transactionsCursor: cursor, lastSyncedAt: new Date(), status: "good" })
+          .where(eq(items.id, item.id));
+
+        written += page.added.length + page.modified.length;
+        // Enough for one request. The rest is still there, the cursor knows
+        // where, and the caller is told to come back.
+        if (written >= SYNC_ROW_BUDGET) { more = true; break; }
       }
 
       // Nothing was fetched, so there is no progress to record — leaving
       // lastSyncedAt unset keeps "never synced" honest.
       if (notReady) continue;
-
-      // Store the cursor only after the whole item succeeded, so a mid-sync
-      // failure resumes from the last good point rather than skipping a page.
-      await db
-        .update(items)
-        .set({ transactionsCursor: cursor, lastSyncedAt: new Date(), status: "good" })
-        .where(eq(items.id, item.id));
+      if (hasMore) more = true;
+      if (more) break;
     }
 
     return c.json({
@@ -253,6 +268,9 @@ plaid.post("/sync", async (c) => {
       added,
       modified,
       removed,
+      // True when history remains and the client should call again. A backfill
+      // of two years arrives over several requests rather than one long one.
+      more,
       // Non-empty when Plaid is still preparing history for those institutions.
       pending,
     });
@@ -262,6 +280,16 @@ plaid.post("/sync", async (c) => {
     c.executionCtx.waitUntil(close());
   }
 });
+
+/**
+ * How many rows one /sync request will write before handing back.
+ *
+ * A Worker has a request budget, and a two-year backfill can exceed it. Rather
+ * than race that limit, the run stops at a sensible size, saves where it got
+ * to, and reports that there is more — the client calls again until there is
+ * not. Slower to finish, but it always finishes.
+ */
+const SYNC_ROW_BUDGET = 600;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -288,17 +316,48 @@ async function syncWithRetry(env: Env, accessToken: string, cursor: string | nul
   }
 }
 
+/**
+ * How many rows go into one INSERT.
+ *
+ * This used to be one statement per transaction. At ninety days of history that
+ * was 286 round trips and it fit; at two years it was 637 and the request died
+ * partway, having written every row but never reaching the line that saves the
+ * cursor — so the next attempt started from the beginning and died in the same
+ * place. A backfill that cannot finish is worse than one that is slow.
+ */
+const WRITE_BATCH = 200;
+
+/** Plaid owns these columns, so a resync overwrites them wholesale. */
+const OVERWRITE_ON_CONFLICT = {
+  accountId: sql`excluded.account_id`,
+  amount: sql`excluded.amount`,
+  isoCurrencyCode: sql`excluded.iso_currency_code`,
+  date: sql`excluded.date`,
+  authorizedDate: sql`excluded.authorized_date`,
+  name: sql`excluded.name`,
+  merchantName: sql`excluded.merchant_name`,
+  merchantEntityId: sql`excluded.merchant_entity_id`,
+  pending: sql`excluded.pending`,
+  pendingTransactionId: sql`excluded.pending_transaction_id`,
+  paymentChannel: sql`excluded.payment_channel`,
+  categoryPrimary: sql`excluded.category_primary`,
+  categoryDetailed: sql`excluded.category_detailed`,
+  raw: sql`excluded.raw`,
+  syncedAt: sql`excluded.synced_at`,
+};
+
 async function writeTransactions(
   db: ReturnType<typeof getDb>["db"],
   byPlaidId: Map<string, string>,
   list: PlaidTransaction[],
 ): Promise<number> {
-  let n = 0;
+  const now = new Date();
+  const rows = [];
   for (const t of list) {
     const accountId = byPlaidId.get(t.account_id);
     if (!accountId) continue; // an account we do not hold; skip rather than orphan
 
-    const values = {
+    rows.push({
       accountId,
       plaidTransactionId: t.transaction_id,
       amount: BigInt(Math.round(t.amount * 100)),
@@ -314,22 +373,29 @@ async function writeTransactions(
       categoryPrimary: t.personal_finance_category?.primary ?? null,
       categoryDetailed: t.personal_finance_category?.detailed ?? null,
       raw: t,
-      syncedAt: new Date(),
-    };
-
-    await db
-      .insert(transactions)
-      .values(values)
-      // Plaid owns these rows; a resync overwrites them. User edits live in
-      // transaction_overrides precisely so this cannot erase them.
-      .onConflictDoUpdate({ target: transactions.plaidTransactionId, set: values })
-      .catch((e) => {
-        console.error(`transaction ${t.transaction_id} failed to write:`, e);
-        throw e;
-      });
-    n++;
+      syncedAt: now,
+    });
   }
-  return n;
+  if (!rows.length) return 0;
+
+  for (let i = 0; i < rows.length; i += WRITE_BATCH) {
+    const chunk = rows.slice(i, i + WRITE_BATCH);
+    try {
+      await db
+        .insert(transactions)
+        .values(chunk)
+        // User edits live in transaction_overrides precisely so this cannot
+        // erase them.
+        .onConflictDoUpdate({
+          target: transactions.plaidTransactionId,
+          set: OVERWRITE_ON_CONFLICT,
+        });
+    } catch (e) {
+      console.error(`batch of ${chunk.length} transactions failed to write:`, e);
+      throw e;
+    }
+  }
+  return rows.length;
 }
 
 /* --------------------------------------------------------------------- items */

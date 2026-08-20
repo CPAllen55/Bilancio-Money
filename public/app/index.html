@@ -1948,11 +1948,27 @@ $('sync-now').addEventListener('click', async () => {
   btn.disabled = true;
   say(msg, 'Syncing…');
   try {
-    const r = await authed('/api/plaid/sync', { method: 'POST' });
+    // The server writes a bounded number of rows per request and says whether
+    // more is waiting, so a two-year backfill arrives over several calls. The
+    // cap is a backstop: the cursor advances every round, so this terminates on
+    // its own, and stopping early is better than looping if it somehow does not.
+    let total = { added: 0, modified: 0, removed: 0 };
+    let r = null, rounds = 0;
+    do {
+      r = await authed('/api/plaid/sync', { method: 'POST' });
+      total.added += r.added || 0;
+      total.modified += r.modified || 0;
+      total.removed += r.removed || 0;
+      rounds++;
+      if (r.more) say(msg, 'Syncing… ' + total.added + ' so far');
+    } while (r.more && rounds < 40);
+
     if (!r.items) say(msg, 'Nothing to sync — no banks linked yet.');
     else if (r.pending && r.pending.length) say(msg, r.pending.join(', ') + ' is still preparing transactions. Try again shortly.');
-    else say(msg, r.added + ' added, ' + r.modified + ' updated, ' + r.removed + ' removed.', 'good');
-    summaryCache = null; txCache = {};
+    else say(msg, total.added + ' added, ' + total.modified + ' updated, ' + total.removed + ' removed.' +
+      (r.more ? ' More history is still waiting — sync again.' : ''), 'good');
+
+    summaryCache = null; txCache = {}; trendData = null; netData = null;
     await renderBanks();
   } catch (err) {
     say(msg, err.message, 'bad');
