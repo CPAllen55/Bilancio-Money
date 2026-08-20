@@ -125,6 +125,18 @@
   .crow.child .ctrack{ height:5px; }
   .crow.child .camt{ font-size:12px; color:var(--ink-soft); }
   .crow.parent{ padding-top:14px; }
+  /* Expand/collapse. The ghost keeps parents without children aligned with
+     those that have one, so the labels form a single column either way. */
+  .ctog{ width:18px; height:18px; flex:none; padding:0; line-height:1;
+         display:inline-flex; align-items:center; justify-content:center;
+         font-family:'IBM Plex Mono', monospace; font-size:13px;
+         background:none; border:1px solid var(--hair-strong); border-radius:4px;
+         color:var(--ink-soft); cursor:pointer; }
+  .ctog:hover{ color:var(--ink); border-color:var(--mint-dim); }
+  .ctog.ghost{ border-color:transparent; cursor:default; }
+  .kidcount{ font-family:'IBM Plex Mono', monospace; font-size:11px;
+             color:var(--muted); border:1px solid var(--hair); border-radius:99px;
+             padding:1px 7px; margin-left:2px; }
   /* Transfers sit apart from the ranking above — same money, different meaning. */
   .moved{ margin-top:22px; padding-top:16px; border-top:1px dashed var(--hair-strong); }
   .moved .camt{ color:var(--ink-soft); }
@@ -484,6 +496,11 @@ async function renderOverview() {
   ].join('');
 }
 
+/* Which parents are collapsed. Module-level so it survives a re-render — the
+   list rebuilds on every range change, and having your open sections snap shut
+   because you looked at last month would be its own small annoyance. */
+const collapsedParents = new Set();
+
 /** Parents ranked by their own total, each with its sub-categories beneath. */
 async function renderCategories() {
   const s = await summaryFor(range());
@@ -506,17 +523,28 @@ async function renderCategories() {
   host.innerHTML = parents.map(pair => {
     const slug = pair[0], total = pair[1], colour = colourOf(slug);
     const kids = childrenOf(slug);
+    // A single child is the parent restated, so there is nothing to expand.
+    const expandable = kids.length > 1;
+    const open = expandable && !collapsedParents.has(slug);
+
+    const toggle = expandable
+      ? '<button class="ctog" type="button" data-slug="' + slug + '" aria-expanded="' + open + '" ' +
+        'aria-label="' + (open ? 'Hide' : 'Show') + ' categories inside ' + escapeHtml(labelOfSlug(slug)) + '">' +
+        (open ? '−' : '+') + '</button>'
+      // Keeps the labels aligned whether or not a parent has a toggle.
+      : '<span class="ctog ghost" aria-hidden="true"></span>';
 
     const head = '<div class="crow parent">' +
-      '<div class="cname"><span class="swatch" style="background:' + colour + '"></span>' +
-        '<b>' + escapeHtml(labelOfSlug(slug)) + '</b></div>' +
+      '<div class="cname">' + toggle +
+        '<span class="swatch" style="background:' + colour + '"></span>' +
+        '<b>' + escapeHtml(labelOfSlug(slug)) + '</b>' +
+        (expandable && !open ? '<span class="kidcount">' + kids.length + '</span>' : '') + '</div>' +
       '<div class="ctrack"><div class="cfill" style="width:' + ((total / max) * 100).toFixed(1) +
         '%;background:' + colour + '"></div></div>' +
       '<div class="camt">' + money(total) + '</div></div>';
 
-    // Only worth breaking out when there is more than one thing inside it.
-    const rows = kids.length > 1 ? kids.map(k =>
-      '<div class="crow child">' +
+    const rows = expandable ? kids.map(k =>
+      '<div class="crow child" data-parent="' + slug + '"' + (open ? '' : ' hidden') + '>' +
         '<div class="cname"><span class="swatch" style="background:' + colourOf(k[0]) + '"></span>' +
           escapeHtml(labelOfSlug(k[0])) + '</div>' +
         '<div class="ctrack"><div class="cfill" style="width:' + ((k[1] / max) * 100).toFixed(1) +
@@ -983,6 +1011,39 @@ $('sync-now').addEventListener('click', async () => {
 });
 
 /* ---------------------------------------------------------------- wiring -- */
+
+/* Delegated, and it toggles the rows in place rather than re-rendering: the
+   numbers have not changed, so refetching them to show three lines would be
+   a round trip for nothing. */
+$('cat-list').addEventListener('click', (e) => {
+  const btn = e.target.closest('.ctog');
+  if (!btn || !btn.dataset.slug) return;
+
+  const slug = btn.dataset.slug;
+  const open = collapsedParents.has(slug);   // about to open if currently collapsed
+  if (open) collapsedParents.delete(slug); else collapsedParents.add(slug);
+
+  document.querySelectorAll('#cat-list .crow.child[data-parent="' + slug + '"]')
+    .forEach(row => { row.hidden = !open; });
+
+  btn.textContent = open ? '−' : '+';
+  btn.setAttribute('aria-expanded', String(open));
+  const label = btn.closest('.cname').querySelector('b');
+  btn.setAttribute('aria-label', (open ? 'Hide' : 'Show') + ' categories inside ' + (label ? label.textContent : slug));
+
+  // Count sits next to the name only while hidden, as a reminder of what is
+  // tucked away.
+  const existing = btn.closest('.cname').querySelector('.kidcount');
+  if (open) {
+    if (existing) existing.remove();
+  } else if (!existing && label) {
+    const n = document.querySelectorAll('#cat-list .crow.child[data-parent="' + slug + '"]').length;
+    const badge = document.createElement('span');
+    badge.className = 'kidcount';
+    badge.textContent = String(n);
+    label.after(badge);
+  }
+});
 
 $('tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.tab');
