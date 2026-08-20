@@ -112,6 +112,11 @@
   .t-delta.up-good{ color:var(--mint); } .t-delta.down-bad{ color:var(--coral); }
   .t-delta.flat{ color:var(--muted); } .t-delta .vs{ color:var(--muted); }
 
+  /* Filter row for Transactions. Wraps rather than squeezing, so three menus
+     stay readable on a phone. */
+  .txfilters{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .txfilters select{ max-width:100%; }
+
   /* ---------- trend chart ---------- */
   .bar-right{ display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
   .zoomctl{ display:inline-flex; align-items:center; gap:8px; }
@@ -410,7 +415,28 @@
 
     <section class="panel" id="v-transactions">
       <h2 class="view">Every line</h2>
-      <p class="lede">Newest first. Amounts read the way you think about them: money in is positive.</p>
+      <p class="lede">Amounts read the way you think about them: money in is positive. These filters are the tab's own — the period at the top of the page drives the other views.</p>
+      <div class="bar" style="padding-top:0">
+        <span class="txfilters">
+          <select class="ctl" id="tx-period" aria-label="Period">
+            <option value="all" selected>All time</option>
+            <option value="this-month">This month</option>
+            <option value="last-month">Last month</option>
+            <option value="last-3">Last 3 months</option>
+            <option value="last-6">Last 6 months</option>
+            <option value="ytd">Year to date</option>
+          </select>
+          <select class="ctl" id="tx-category" aria-label="Category">
+            <option value="">All categories</option>
+          </select>
+          <select class="ctl" id="tx-sort" aria-label="Sort">
+            <option value="date-desc" selected>Date · newest first</option>
+            <option value="date-asc">Date · oldest first</option>
+            <option value="amount-asc">Amount · largest spend first</option>
+            <option value="amount-desc">Amount · largest income first</option>
+          </select>
+        </span>
+      </div>
       <div class="card" id="tx-list"></div>
     </section>
 
@@ -1040,11 +1066,50 @@ function categoryOptions(selectedSlug, side) {
   return html + '<option value="' + NEW_CATEGORY + '">+ New category…</option>';
 }
 
+/* The category filter offers parents as well as leaves, because "everything
+   under Food" is a question people actually ask. The API resolves a parent to
+   its whole subtree, so selecting one needs nothing special here. */
+function fillTxCategoryFilter() {
+  const sel = $('tx-category');
+  const keep = sel.value;
+  const parents = categoryList.filter(c => !c.parentSlug);
+  let html = '<option value="">All categories</option>';
+  for (const p of parents) {
+    const kids = categoryList.filter(c => c.parentSlug === p.slug);
+    html += '<optgroup label="' + escapeHtml(p.label) + '">' +
+      '<option value="' + escapeHtml(p.slug) + '">All ' + escapeHtml(p.label) + '</option>' +
+      kids.map(k => '<option value="' + escapeHtml(k.slug) + '">' + escapeHtml(k.label) + '</option>').join('') +
+      '</optgroup>';
+  }
+  sel.innerHTML = html;
+  // Rebuilt on every render, so the choice has to be put back or changing the
+  // period would silently reset the category.
+  sel.value = keep;
+  if (sel.value !== keep) sel.value = '';
+}
+
 async function renderTransactions() {
-  const r = await authed('/api/transactions?range=' + encodeURIComponent(range()) + '&limit=200');
+  const period = $('tx-period').value;
+  const cat = $('tx-category').value;
+  const parts = $('tx-sort').value.split('-');
+
+  const r = await authed('/api/transactions' +
+    '?range=' + encodeURIComponent(period || 'all') +
+    '&sort=' + encodeURIComponent(parts[0]) +
+    '&dir=' + encodeURIComponent(parts[1]) +
+    (cat ? '&bucket=' + encodeURIComponent(cat) : '') +
+    '&limit=200');
+
   categoryList = r.categories;
+  fillTxCategoryFilter();
   const host = $('tx-list');
-  if (!r.transactions.length) { host.innerHTML = '<p class="empty">Nothing in this range.</p>'; return; }
+  if (!r.transactions.length) {
+    // Which filter emptied it matters — "nothing here" and "nothing matching"
+    // are different problems and only one of them is fixed by changing a menu.
+    host.innerHTML = '<p class="empty">' +
+      (cat || period !== 'all' ? 'Nothing matches these filters.' : 'No transactions yet.') + '</p>';
+    return;
+  }
 
   const rows = r.transactions.map(t => {
     // A transfer is not spending, so it gets a label rather than a bucket —
@@ -2047,6 +2112,8 @@ $('tabs').addEventListener('click', (e) => {
 });
 
 $('range').addEventListener('change', () => { summaryCache = null; txCache = {}; refresh(); });
+['tx-period','tx-category','tx-sort'].forEach(id =>
+  $(id).addEventListener('change', () => { refresh(); }));
 $('trend-range').addEventListener('change', refresh);
 // The chart draws the projected months too, so the toggle has to redraw the
 // chart — renderTrend ends by rendering the forecast box anyway. Wiring it

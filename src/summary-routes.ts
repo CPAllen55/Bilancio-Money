@@ -14,7 +14,7 @@
  */
 
 import { Hono } from "hono";
-import { and, desc, eq, gte, isNull, lte, or, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, or, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
 import {
   accounts, categories, items, merchantRules, transactionOverrides, transactions,
@@ -524,7 +524,18 @@ summary.get("/transactions", async (c) => {
     // per row from an override, a merchant rule, or Plaid's guess. So the range
     // is read whole and filtered here, exactly as the totals are.
     const bucket = c.req.query("bucket") ?? null;
-    const { current } = resolveRange(range, new Date());
+
+    // Sorting is on the amount the reader sees, not the one stored. The column
+    // keeps Plaid's convention — positive means money left the account — so
+    // "highest first" in the UI is lowest first in the table, and getting that
+    // backwards would put the biggest purchase at the bottom of a list titled
+    // "largest".
+    const sort = c.req.query("sort") === "amount" ? "amount" : "date";
+    const dir = c.req.query("dir") === "asc" ? "asc" : "desc";
+
+    // An empty period means everything, so the window is simply not applied.
+    const allTime = range === "all";
+    const { current } = resolveRange(allTime ? "this-month" : range, new Date());
 
     const [ctx, ids] = await Promise.all([
       loadCategories(db, auth.user.id),
@@ -532,11 +543,19 @@ summary.get("/transactions", async (c) => {
     ]);
     if (!ids.length) return c.json({ ok: true, transactions: [], total: 0, categories: ctx.list });
 
-    const where = and(
-      inArray(transactions.accountId, ids),
-      gte(transactions.date, ymd(current.start)),
-      lte(transactions.date, ymd(current.end)),
-    );
+    const where = allTime
+      ? inArray(transactions.accountId, ids)
+      : and(
+          inArray(transactions.accountId, ids),
+          gte(transactions.date, ymd(current.start)),
+          lte(transactions.date, ymd(current.end)),
+        );
+
+    // date desc = newest first. amount desc = money in at the top, which puts
+    // the largest spend at the bottom — hence the flip against the stored sign.
+    const order = sort === "amount"
+      ? (dir === "desc" ? asc(transactions.amount) : desc(transactions.amount))
+      : (dir === "desc" ? desc(transactions.date) : asc(transactions.date));
 
     const page = db
       .select({
@@ -560,7 +579,9 @@ summary.get("/transactions", async (c) => {
         ),
       )
       .where(where)
-      .orderBy(desc(transactions.date));
+      // Date is the tiebreak so a page boundary cannot show the same row twice
+      // when many rows share an amount.
+      .orderBy(order, desc(transactions.date));
 
     let rows;
     let total;
