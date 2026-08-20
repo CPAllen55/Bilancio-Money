@@ -58,16 +58,38 @@ const BY_DETAILED: Record<string, string> = {
   BANK_FEES_INTEREST_CHARGE: "interest-paid",
   GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT: "taxes",
   GOVERNMENT_AND_NON_PROFIT_DONATIONS: "giving",
+
+  // Shopping. Plaid separates where you bought it, which is the split most
+  // people actually recognise: a marketplace order and a trip to a superstore
+  // do not feel like the same purchase even when they cost the same.
+  GENERAL_MERCHANDISE_ONLINE_MARKETPLACES: "online-shopping",
+  GENERAL_MERCHANDISE_SUPERSTORES: "general-stores",
+  GENERAL_MERCHANDISE_DEPARTMENT_STORES: "general-stores",
+  GENERAL_MERCHANDISE_DISCOUNT_STORES: "general-stores",
+  GENERAL_MERCHANDISE_CONVENIENCE_STORES: "general-stores",
+
+  // Entertainment. A subscription is a standing commitment and a night out is
+  // a decision, so they are worth seeing apart.
   ENTERTAINMENT_TV_AND_MOVIES: "subscriptions",
   ENTERTAINMENT_MUSIC_AND_AUDIO: "subscriptions",
-  PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS: "personal",
-  TRANSPORTATION_TAXIS_AND_RIDE_SHARES: "transport",
+  ENTERTAINMENT_VIDEO_GAMES: "events",
+  ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS: "events",
+  ENTERTAINMENT_CASINOS_AND_GAMBLING: "events",
+
+  PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS: "gym",
+
+  // Transportation. Plaid has one code for taxis and ride-hailing together, so
+  // it goes to the commoner of the two and a genuine cab has to be re-filed —
+  // which sets a merchant rule and fixes every later one.
+  TRANSPORTATION_TAXIS_AND_RIDE_SHARES: "rideshare",
+  TRAVEL_FLIGHTS: "airlines",
+  LOAN_PAYMENTS_CAR_PAYMENT: "car-payment",
 };
 
 const BY_PRIMARY: Record<string, string> = {
   FOOD_AND_DRINK: "dining",
-  GENERAL_MERCHANDISE: "shopping",
-  ENTERTAINMENT: "entertainment",
+  GENERAL_MERCHANDISE: "general-stores",
+  ENTERTAINMENT: "events",
   PERSONAL_CARE: "personal",
   HOME_IMPROVEMENT: "housing",
   RENT_AND_UTILITIES: "utilities",

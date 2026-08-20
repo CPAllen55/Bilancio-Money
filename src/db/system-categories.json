@@ -104,8 +104,8 @@
     "kind": "spend"
   },
   {
-    "slug": "getting-around",
-    "label": "Getting around",
+    "slug": "transportation",
+    "label": "Transportation",
     "colour": "#008a4b",
     "sortOrder": 40,
     "parent": null,
@@ -113,50 +113,114 @@
   },
   {
     "slug": "transport",
-    "label": "Transport",
+    "label": "Fuel & Transit",
     "colour": "#008a4b",
     "sortOrder": 41,
-    "parent": "getting-around",
+    "parent": "transportation",
+    "kind": "spend"
+  },
+  {
+    "slug": "rideshare",
+    "label": "Uber & Lyft",
+    "colour": "#12a85f",
+    "sortOrder": 42,
+    "parent": "transportation",
+    "kind": "spend"
+  },
+  {
+    "slug": "taxi",
+    "label": "Taxi",
+    "colour": "#2fb877",
+    "sortOrder": 43,
+    "parent": "transportation",
+    "kind": "spend"
+  },
+  {
+    "slug": "car-payment",
+    "label": "Car Payment",
+    "colour": "#0f7a52",
+    "sortOrder": 44,
+    "parent": "transportation",
+    "kind": "spend"
+  },
+  {
+    "slug": "car-insurance",
+    "label": "Car Insurance",
+    "colour": "#4c9e80",
+    "sortOrder": 45,
+    "parent": "transportation",
+    "kind": "spend"
+  },
+  {
+    "slug": "airlines",
+    "label": "Airlines",
+    "colour": "#00a2a2",
+    "sortOrder": 46,
+    "parent": "transportation",
     "kind": "spend"
   },
   {
     "slug": "travel",
     "label": "Travel",
-    "colour": "#00a2a2",
-    "sortOrder": 42,
-    "parent": "getting-around",
-    "kind": "spend"
-  },
-  {
-    "slug": "lifestyle",
-    "label": "Lifestyle",
-    "colour": "#199e70",
-    "sortOrder": 50,
-    "parent": null,
+    "colour": "#00b8b8",
+    "sortOrder": 47,
+    "parent": "transportation",
     "kind": "spend"
   },
   {
     "slug": "shopping",
     "label": "Shopping",
     "colour": "#199e70",
+    "sortOrder": 50,
+    "parent": null,
+    "kind": "spend"
+  },
+  {
+    "slug": "general-stores",
+    "label": "General Stores",
+    "colour": "#199e70",
     "sortOrder": 51,
-    "parent": "lifestyle",
+    "parent": "shopping",
+    "kind": "spend"
+  },
+  {
+    "slug": "online-shopping",
+    "label": "Online Shopping",
+    "colour": "#2bb98a",
+    "sortOrder": 52,
+    "parent": "shopping",
+    "kind": "spend"
+  },
+  {
+    "slug": "amazon",
+    "label": "Amazon",
+    "colour": "#4fd4a6",
+    "sortOrder": 53,
+    "parent": "shopping",
     "kind": "spend"
   },
   {
     "slug": "entertainment",
     "label": "Entertainment",
     "colour": "#b4529f",
-    "sortOrder": 52,
-    "parent": "lifestyle",
+    "sortOrder": 55,
+    "parent": null,
+    "kind": "spend"
+  },
+  {
+    "slug": "events",
+    "label": "Events & Outings",
+    "colour": "#c76fb2",
+    "sortOrder": 56,
+    "parent": "entertainment",
     "kind": "spend"
   },
   {
     "slug": "subscriptions",
     "label": "Subscriptions",
     "colour": "#9085e9",
-    "sortOrder": 53,
-    "parent": "lifestyle",
+    "sortOrder": 57,
+    "parent": "entertainment",
     "kind": "spend"
   },
   {
@@ -184,10 +248,26 @@
     "kind": "spend"
   },
   {
+    "slug": "gym",
+    "label": "Gym & Fitness",
+    "colour": "#e0729a",
+    "sortOrder": 63,
+    "parent": "health-care",
+    "kind": "spend"
+  },
+  {
+    "slug": "supplements",
+    "label": "Supplements",
+    "colour": "#c46389",
+    "sortOrder": 64,
+    "parent": "health-care",
+    "kind": "spend"
+  },
+  {
     "slug": "insurance",
     "label": "Insurance",
     "colour": "#7a8ba8",
-    "sortOrder": 63,
+    "sortOrder": 65,
     "parent": "health-care",
     "kind": "spend"
   },

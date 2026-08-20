@@ -72,8 +72,38 @@ try {
     }
   }
 
+  // A category dropped from the JSON has to actually go, or the seed is only
+  // ever additive: it would keep its row, keep appearing in every dropdown, and
+  // — if it was a parent whose children have been reparented — sit in the
+  // Categories tab as an empty heading nobody can get rid of.
+  //
+  // Archived rather than deleted. A transaction override or a merchant rule may
+  // point at it, and those are the user's own decisions; deleting the row would
+  // either break the reference or silently discard them. Archived rows are
+  // filtered out on read, so the effect is the same and nothing is destroyed.
+  // Re-adding a slug to the JSON brings it straight back.
+  const slugs = system.map((c) => c.slug);
+  const { rows: archived } = await client.query(
+    `update categories
+        set archived_at = now()
+      where user_id is null and is_system and archived_at is null
+        and slug <> all($1::text[])
+      returning slug`,
+    [slugs],
+  );
+  const { rows: restored } = await client.query(
+    `update categories
+        set archived_at = null
+      where user_id is null and is_system and archived_at is not null
+        and slug = any($1::text[])
+      returning slug`,
+    [slugs],
+  );
+
   const parents = system.filter((c) => !c.parent).length;
   console.log(`${system.length} system categories seeded (${parents} parents, ${system.length - parents} sub-categories).`);
+  if (archived.length) console.log(`Archived ${archived.length}: ${archived.map((r) => r.slug).join(", ")}`);
+  if (restored.length) console.log(`Restored ${restored.length}: ${restored.map((r) => r.slug).join(", ")}`);
 } finally {
   await client.end();
 }
