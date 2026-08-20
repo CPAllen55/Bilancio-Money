@@ -100,7 +100,10 @@
   .status{ display:inline-flex; align-items:center; gap:7px; font-size:13px; font-weight:600; }
   .status.good{ color:var(--mint); } .status.warn{ color:var(--warning); }
 
-  .tiles{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:16px; margin-top:16px; }
+  /* auto-rows 1fr so the budget row is exactly as tall as the actuals above it
+     — they are the same kind of statement and should not look like a footnote. */
+  .tiles{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr));
+          grid-auto-rows:1fr; gap:16px; margin-top:16px; }
   .tile{ background:var(--surface); border:1px solid var(--hair); border-radius:6px; padding:16px 18px; }
   .t-label{ font-size:12.5px; color:var(--ink-soft); }
   .t-value{ font-size:25px; font-weight:600; letter-spacing:-.015em; margin-top:2px; }
@@ -118,6 +121,17 @@
   .crow .ctrack{ height:8px; background:var(--grid); border-radius:2px; overflow:hidden; }
   .crow .cfill{ height:100%; border-radius:2px; }
   .crow .camt{ text-align:right; font-family:'IBM Plex Mono', monospace; font-size:13px; }
+  /* What the category was expected to cost: a marker on the bar and a quiet
+     second line, not a rival bar. The row answers "how much did this cost" and
+     the budget qualifies that answer rather than competing with it. */
+  /* overflow was hidden for the fill; the marker has to stand proud of the
+     bar to be seen at all, and the fill rounds its own corners anyway. */
+  .crow .ctrack{ position:relative; overflow:visible; }
+  .cbud-tick{ position:absolute; top:-3px; bottom:-3px; width:2px; border-radius:1px;
+              background:var(--ink-soft); }
+  .crow .cbud{ display:block; font-size:10.5px; color:var(--muted); margin-top:1px; }
+  .crow .camt.over{ color:var(--coral); }
+  .crow .camt.over .cbud{ color:var(--coral); opacity:.8; }
   /* Sub-categories are indented and quieter, so the parent reads as the total
      and the children as its makeup rather than as competing rows. */
   .crow.child{ border-top:none; padding:4px 0; }
@@ -262,9 +276,10 @@
 
     <section class="panel" id="v-overview" aria-current="true">
       <h2 class="view">What's actually left</h2>
-      <p class="lede">Safe-to-spend with a pace line, then money in, money out, kept and your savings rate — each against the comparable period before.</p>
+      <p class="lede">Safe-to-spend with a pace line, then money in, money out, kept and your savings rate — each against the comparable period before, and each against what the same period was expected to cost.</p>
       <div class="card" id="ov-safe"></div>
       <div class="tiles" id="ov-tiles"></div>
+      <p class="fc-method" id="budget-note" style="margin:14px 0 0"></p>
     </section>
 
     <section class="panel" id="v-trend">
@@ -435,8 +450,9 @@ function sparkline(values, stroke) {
 }
 
 /** Direction is not the same as good: more in is good, more out is not. */
-function tile(label, value, now, before, betterWhen, spark) {
-  let cls = 'flat', arrow = '', text = 'no prior period';
+function tile(label, value, now, before, betterWhen, spark, opts) {
+  const o = opts || {};
+  let cls = 'flat', arrow = '', text = o.empty || 'no prior period';
   if (before) {
     const pct = Math.round(((now - before) / Math.abs(before)) * 100);
     const rose = now >= before;
@@ -447,8 +463,74 @@ function tile(label, value, now, before, betterWhen, spark) {
   }
   return '<div class="tile"><div class="t-label">' + label + '</div>' +
     '<div class="t-value">' + value + '</div><div class="t-foot">' +
-    '<span class="t-delta ' + cls + '">' + arrow + ' ' + text + ' <span class="vs">vs prior</span></span>' +
+    '<span class="t-delta ' + cls + '">' + arrow + ' ' + text +
+      ' <span class="vs">vs ' + (o.vs || 'prior') + '</span></span>' +
     (spark || '') + '</div></div>';
+}
+
+/**
+ * The four budget tiles, in the same grid and the same shape as the four above.
+ *
+ * The comparison runs the other way round: those measure now against the period
+ * before, these measure what the period was expected to cost against what it
+ * did. So the delta reads "vs actual", and money out is the one tile that wants
+ * its number to be the higher of the two — a budget below what you spent is a
+ * budget you went past.
+ */
+function budgetTiles(t, b) {
+  const rate = t.income ? (t.net / t.income) * 100 : 0;
+
+  // Three of the four need income to mean anything, and income only exists if
+  // an account that receives it is linked. With cards alone the honest answer
+  // is a dash: a budgeted income of $0 is not a plan to earn nothing, it is the
+  // absence of the information, and the two should not look alike.
+  const haveOut = b.available && b.expense > 0;
+  const haveIn = b.available && b.income > 0;
+  const noHistory = b.available ? 'nothing to compare' : 'not enough history';
+
+  const plan = (label, value, budgeted, actual, betterWhen, show, empty) =>
+    tile(label, show ? value : '—', show ? budgeted : 0, show ? actual : 0,
+         betterWhen, '', { vs: 'actual', empty: empty || noHistory });
+
+  return [
+    plan('Money in · budget',  money(b.income),  b.income,  t.income,  'down',
+         haveIn, haveIn ? null : 'no income linked'),
+    plan('Money out · budget', money(b.expense), b.expense, t.expense, 'up',
+         haveOut, null),
+    plan('Kept · budget',      money(b.net),     b.net,     t.net,     'down',
+         haveIn, haveIn ? null : 'needs income'),
+    plan('Savings rate · budget',
+         b.savingsRate === null ? '—' : b.savingsRate.toFixed(1) + '%',
+         b.savingsRate || 0, rate, 'down',
+         haveIn && b.savingsRate !== null, haveIn ? null : 'needs income')
+  ];
+}
+
+/* Says where the number came from. A budget nobody can explain is one nobody
+   argues with, and this one is worth arguing with — it is derived, not chosen. */
+function budgetNote(b) {
+  const span = b.months === 1 ? 'this month' : 'these ' + b.months + ' months';
+  if (b.method === 'seasonal-growth') {
+    return 'Budget · what ' + span + ' cost you a year ago, scaled by how this year is running against last — ' +
+      (b.growthPct >= 0 ? 'up ' : 'down ') + Math.abs(b.growthPct) + '% across ' +
+      b.comparableMonths + ' comparable month' + (b.comparableMonths === 1 ? '' : 's') +
+      '. Nothing to fill in; it moves as your history does.';
+  }
+  if (b.method === 'recent-average') {
+    return 'Budget · the average of your last ' + Math.min(3, b.monthsOfHistory) +
+      ' complete month' + (Math.min(3, b.monthsOfHistory) === 1 ? '' : 's') +
+      '. Once there is a year behind you it will use last year\u2019s shape instead, ' +
+      'which keeps the December spike and the summer holiday where they belong.';
+  }
+  return 'Budget · not yet. One complete month of history is enough to start; ' +
+    'a full year makes it seasonal rather than a flat average.';
+}
+
+/* Said plainly rather than left as three dashes to puzzle over. */
+function incomeNote(b) {
+  return b.available && !b.income
+    ? ' No account that receives income is linked yet, so money in, kept and savings rate have nothing to plan against — connect a current account and they fill in.'
+    : '';
 }
 
 async function renderOverview() {
@@ -506,7 +588,10 @@ async function renderOverview() {
          t.income ? (t.net / t.income) * 100 : 0,
          p.income ? (p.net / p.income) * 100 : 0, 'up',
          line(sp && sp.savingsRate, 'var(--mint)'))
-  ].join('');
+  ].concat(budgetTiles(t, s.budget || { available: false, months: 1, income: 0, expense: 0, net: 0, savingsRate: null })).join('');
+
+  const b = s.budget || { method: 'insufficient-data', months: 1 };
+  $('budget-note').textContent = budgetNote(b) + incomeNote(b);
 }
 
 /* Which parents are collapsed. Module-level so it survives a re-render — the
@@ -635,12 +720,45 @@ async function renderCategories() {
 
   if (!parents.length) { host.innerHTML = '<p class="empty">No categorised spending in this range.</p>'; return; }
 
-  const max = parents[0][1];
+  const bud = s.budget || { available: false, byParent: {}, byCategory: {} };
+  // Zero counts as no budget rather than a budget of nothing: every category
+  // you have never used before would otherwise be reported as overspent.
+  const budgetOf = slug => {
+    if (!bud.available) return null;
+    const v = (bud.byParent && bud.byParent[slug]) || (bud.byCategory && bud.byCategory[slug]) || 0;
+    return v > 0 ? v : null;
+  };
+
+  // The bars are scaled to the biggest thing on screen, and once budgets are
+  // drawn a budget can be the biggest thing on screen. Leaving it out of the
+  // scale would push the marker off the end of an under-spent category.
+  const max = Math.max(
+    parents[0][1],
+    ...parents.map(p => budgetOf(p[0]) || 0)
+  );
+
   const childrenOf = parentSlug => categoryList
     .filter(c => c.parentSlug === parentSlug)
     .map(c => [c.slug, s.totals.byCategory[c.slug] || 0])
     .filter(pair => pair[1] > 0)
     .sort((a, b) => b[1] - a[1]);
+
+  /* Budget as a marker on the bar and a second line under the amount, rather
+     than as a rival bar. The question a category row answers is "how much did
+     this cost"; the budget qualifies that answer, it does not compete with it. */
+  const budgetMark = slug => {
+    const b = budgetOf(slug);
+    if (!b) return '';
+    return '<div class="cbud-tick" style="left:' + Math.min(100, (b / max) * 100).toFixed(1) +
+      '%" title="expected ' + money(b) + '"></div>';
+  };
+  const amount = (slug, spent) => {
+    const b = budgetOf(slug);
+    const over = b !== null && spent > b;
+    return '<div class="camt' + (over ? ' over' : '') + '">' + money(spent) +
+      (b !== null ? '<span class="cbud">' + (over ? money(spent - b) + ' over' : 'of ' + money(b)) + '</span>' : '') +
+      '</div>';
+  };
 
   host.innerHTML = parents.map(pair => {
     const slug = pair[0], total = pair[1], colour = colourOf(slug);
@@ -664,8 +782,8 @@ async function renderCategories() {
         '<b>' + escapeHtml(labelOfSlug(slug)) + '</b>' +
         (expandable && !open ? '<span class="kidcount">' + kids.length + '</span>' : '') + '</div>' +
       '<div class="ctrack"><div class="cfill" style="width:' + ((total / max) * 100).toFixed(1) +
-        '%;background:' + colour + '"></div></div>' +
-      '<div class="camt">' + money(total) + '</div></div>';
+        '%;background:' + colour + '"></div>' + budgetMark(slug) + '</div>' +
+      amount(slug, total) + '</div>';
 
     const rows = expandable ? kids.map(k =>
       '<div class="crow child" data-parent="' + escapeHtml(slug) + '"' + (open ? '' : ' hidden') + '>' +
@@ -673,8 +791,8 @@ async function renderCategories() {
           '<span class="swatch" style="background:' + colourOf(k[0]) + '"></span>' +
           escapeHtml(labelOfSlug(k[0])) + '</div>' +
         '<div class="ctrack"><div class="cfill" style="width:' + ((k[1] / max) * 100).toFixed(1) +
-          '%;background:' + colourOf(k[0]) + ';opacity:.75"></div></div>' +
-        '<div class="camt">' + money(k[1]) + '</div></div>'
+          '%;background:' + colourOf(k[0]) + ';opacity:.75"></div>' + budgetMark(k[0]) + '</div>' +
+        amount(k[0], k[1]) + '</div>'
     ).join('') : '';
 
     return head + rows;

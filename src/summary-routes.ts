@@ -21,6 +21,7 @@ import {
 } from "./db/schema";
 import { requireUser } from "./auth";
 import { classify, merchantKey } from "./categories";
+import { buildPlan } from "./projection";
 
 const summary = new Hono<{ Bindings: Env }>();
 
@@ -361,6 +362,71 @@ function withOverrides(db: ReturnType<typeof getDb>["db"], userId: string) {
     );
 }
 
+/* ------------------------------------------------------------------ budget -- */
+
+/** Every calendar month a window touches, both ends included. */
+function monthsIn(start: Date, end: Date): string[] {
+  const out: string[] = [];
+  let y = start.getUTCFullYear(), m = start.getUTCMonth();
+  const lastY = end.getUTCFullYear(), lastM = end.getUTCMonth();
+  while (y < lastY || (y === lastY && m <= lastM)) {
+    out.push(`${y}-${String(m + 1).padStart(2, "0")}`);
+    if (++m === 12) { m = 0; y++; }
+  }
+  return out;
+}
+
+/**
+ * What the range should have cost, by the same calculation the forecast uses.
+ *
+ * Whole months, not days elapsed. A budget spread across the days so far would
+ * compare a half-finished month against half a budget and report you on track
+ * every single time, which is the one thing a budget exists to prevent. Three
+ * days into the month you have a whole month's expectation and have spent three
+ * days of it, and the number says so.
+ *
+ * Past months are priced at what they were expected to cost, not at what they
+ * did. Otherwise the budget would equal the actual by construction and the
+ * comparison would say nothing at all.
+ */
+async function budgetFor(
+  db: ReturnType<typeof getDb>["db"],
+  userId: string,
+  ids: string[],
+  ctx: CategoryContext,
+  current: Window,
+  today: Date,
+) {
+  const months = monthsIn(current.start, current.end);
+  const plan = await buildPlan(db, userId, ids, ctx, months, today);
+  const planned = months.map((m) => plan.for(m));
+
+  const byCategory: Record<string, number> = {};
+  for (const p of planned) {
+    for (const [slug, v] of Object.entries(p.byCategory)) {
+      byCategory[slug] = (byCategory[slug] ?? 0) + v;
+    }
+  }
+
+  const available = plan.method !== "insufficient-data";
+  const income = planned.reduce((s, p) => s + p.income, 0);
+  const expense = planned.reduce((s, p) => s + p.expense, 0);
+
+  return {
+    available,
+    method: plan.method,
+    growthPct: plan.growthPct,
+    monthsOfHistory: plan.monthsOfHistory,
+    comparableMonths: plan.comparableMonths,
+    months: months.length,
+    income, expense,
+    net: income - expense,
+    savingsRate: income > 0 ? ((income - expense) / income) * 100 : null,
+    byCategory,
+    byParent: rollUp(byCategory, ctx),
+  };
+}
+
 /* ----------------------------------------------------------------- summary -- */
 
 summary.get("/summary", async (c) => {
@@ -391,7 +457,11 @@ summary.get("/summary", async (c) => {
           )
         : Promise.resolve([] as AmountRow[]);
 
-    const [nowRows, prevRows] = await Promise.all([inWindow(current), inWindow(previous)]);
+    const [nowRows, prevRows, budget] = await Promise.all([
+      inWindow(current),
+      inWindow(previous),
+      budgetFor(db, auth.user.id, ids, ctx, current, new Date()),
+    ]);
     const now = tally(nowRows as AmountRow[], ctx);
     const before = tally(prevRows as AmountRow[], ctx);
 
@@ -420,6 +490,7 @@ summary.get("/summary", async (c) => {
         spent: now.expense, budget: now.income,
         onPace: now.expense <= paceTarget,
       },
+      budget,
       categories: ctx.list,
       accountsCounted: ids.length,
     });
