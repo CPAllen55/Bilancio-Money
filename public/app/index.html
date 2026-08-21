@@ -2574,10 +2574,12 @@ $('tabs').addEventListener('click', (e) => {
   // Budgeting sets rules rather than reading a window, and the rules apply to
   // this month onward whatever the page period says. Leaving the control on
   // screen invites the reasonable belief that it changes something here.
-  // Neither tab reads the page period: Budgeting sets rules, and the Tracker
-  // has a month and a trailing span of its own.
-  $('range').closest('.bar').hidden =
-    btn.dataset.view === 'budgeting' || btn.dataset.view === 'tracker';
+  // Only Overview reads the page period. Trend, Net Activity, the Tracker and
+  // Transactions each carry their own, and Budgeting sets rules rather than
+  // reading a window at all — so the control is shown where it does something
+  // and hidden everywhere else. Listing the exception rather than the rule
+  // means a new tab is hidden by default, which is the safer way round.
+  $('range').closest('.bar').hidden = btn.dataset.view !== 'overview';
   refresh();
 });
 
