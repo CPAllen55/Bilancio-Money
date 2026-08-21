@@ -43,6 +43,13 @@
       "when": 1787246546924,
       "tag": "0005_cute_tyger_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787274989145,
+      "tag": "0006_eminent_lockjaw",
+      "breakpoints": true
     }
   ]
 }

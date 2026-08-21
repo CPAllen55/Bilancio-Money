@@ -22,6 +22,8 @@ import {
 import { requireUser } from "./auth";
 import { classify, merchantKey } from "./categories";
 import { buildPlan } from "./projection";
+import type { HistoryLookup } from "./budget-plan";
+import { budgetForLeaf, loadPlanRows, resolveMethod, shareOut } from "./budget-plan";
 
 const summary = new Hono<{ Bindings: Env }>();
 
@@ -450,19 +452,80 @@ async function budgetFor(
   today: Date,
 ) {
   const months = monthsIn(current.start, current.end);
-  const plan = await buildPlan(db, userId, ids, ctx, months, today);
-  const planned = months.map((m) => plan.for(m));
+
+  // Two years of history, so "average" and "previous month" have something to
+  // read that is not the window being budgeted.
+  const historyKeys = monthKeys(24, today);
+  const [plan, buckets, planRows] = await Promise.all([
+    buildPlan(db, userId, ids, ctx, months, today),
+    monthlyBuckets(db, userId, ids, ctx, historyKeys),
+    loadPlanRows(db, userId),
+  ]);
+
+  const currentKey = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}`;
+  const at = (slug: string, month: string) => buckets.get(month)?.byCategory[slug] ?? 0;
+  const completed = historyKeys.filter((k) => k < currentKey && (buckets.get(k)?.expense ?? 0) > 0);
+  const history: HistoryLookup = {
+    at,
+    completed,
+    lastComplete: completed.length ? completed[completed.length - 1] : null,
+  };
+
+  const leaves = ctx.list.filter((c) => c.parentSlug && c.kind === "spend");
+  const parents = ctx.list.filter((c) => !c.parentSlug && c.kind === "spend");
+
+  // What each leaf has cost recently, for splitting a parent's manual amount.
+  const weight = new Map<string, number>();
+  for (const leaf of leaves) {
+    weight.set(leaf.slug, completed.slice(-3).reduce((s, m) => s + at(leaf.slug, m), 0));
+  }
 
   const byCategory: Record<string, number> = {};
-  for (const p of planned) {
-    for (const [slug, v] of Object.entries(p.byCategory)) {
-      byCategory[slug] = (byCategory[slug] ?? 0) + v;
+  const unplanned: string[] = [];
+
+  for (const parent of parents) {
+    const kids = leaves.filter((c) => c.parentSlug === parent.slug);
+    const own = resolveMethod(parent.slug, ctx, planRows);
+
+    // A manual figure on a parent is about the parent, so it is divided among
+    // the children rather than handed to each of them.
+    if (own.method === "manual" && !own.inherited && kids.length) {
+      const share = shareOut(own.manualAmount * months.length, kids.map((k) => k.slug), weight);
+      for (const k of kids) byCategory[k.slug] = share.get(k.slug) ?? 0;
+      continue;
+    }
+
+    for (const kid of kids) {
+      const m = resolveMethod(kid.slug, ctx, planRows);
+      let total = 0;
+      let known = false;
+      for (const month of months) {
+        const v = budgetForLeaf(kid.slug, month, m.method, m.manualAmount, history, plan);
+        if (v === null) continue;
+        known = true;
+        total += v;
+      }
+      if (known) byCategory[kid.slug] = total;
+      else unplanned.push(kid.slug);
+    }
+
+    // A parent that holds spending of its own rather than only children.
+    if (!kids.length) {
+      const m = resolveMethod(parent.slug, ctx, planRows);
+      let total = 0, known = false;
+      for (const month of months) {
+        const v = budgetForLeaf(parent.slug, month, m.method, m.manualAmount, history, plan);
+        if (v === null) continue;
+        known = true;
+        total += v;
+      }
+      if (known) byCategory[parent.slug] = total;
     }
   }
 
-  const available = plan.method !== "insufficient-data";
-  const income = planned.reduce((s, p) => s + p.income, 0);
-  const expense = planned.reduce((s, p) => s + p.expense, 0);
+  const available = plan.method !== "insufficient-data" || planRows.size > 0;
+  const income = months.map((m) => plan.for(m)).reduce((s, p) => s + p.income, 0);
+  const expense = Object.values(byCategory).reduce((s, v) => s + v, 0);
 
   return {
     available,
@@ -476,6 +539,9 @@ async function budgetFor(
     savingsRate: income > 0 ? ((income - expense) / income) * 100 : null,
     byCategory,
     byParent: rollUp(byCategory, ctx),
+    // Categories whose method could not produce a figure, so the UI can say
+    // which ones need a decision rather than showing them as zero.
+    unplanned,
   };
 }
 

@@ -252,6 +252,42 @@
     .pie-tx{ width:100%; }
   }
 
+  /* ---------- budgeting ---------- */
+  .bp-list{ display:flex; flex-direction:column; gap:10px; }
+  .bp-card{ background:var(--surface); border:1px solid var(--hair);
+            border-radius:6px; padding:12px 18px; }
+  .bp-row{ display:grid; grid-template-columns:minmax(0,1fr) 260px 150px; gap:14px;
+           align-items:center; padding:6px 0; }
+  .bp-row.child{ padding:4px 0; }
+  .bp-name{ display:flex; align-items:center; gap:8px; font-size:13.5px; min-width:0; }
+  .bp-row.child .bp-name{ padding-left:16px; font-size:12.5px; color:var(--ink-soft); }
+  .bp-kids{ margin-top:6px; padding-top:6px; border-top:1px solid var(--hair); }
+  /* A child following its parent says so quietly — it is the default, not an
+     event, and it should not look like a warning. */
+  .bp-inherit{ font-family:'IBM Plex Mono', monospace; font-size:10px; color:var(--muted);
+               border:1px solid var(--hair); border-radius:99px; padding:1px 6px; }
+  .bp-method{ display:flex; align-items:center; gap:8px; }
+  .bp-method select{ flex:1 1 auto; min-width:0; }
+  .bp-amount{ flex:0 0 92px; font-family:'IBM Plex Mono', monospace; font-size:12.5px;
+              background:var(--bg-panel); color:var(--ink); border:1px solid var(--hair-strong);
+              border-radius:6px; padding:7px 9px; }
+  .bp-amount:focus{ outline:none; border-color:var(--mint-dim); }
+  .bp-figures{ text-align:right; display:flex; flex-direction:column; gap:1px; }
+  .bp-preview{ font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--mint); }
+  .bp-dim{ color:var(--muted); font-size:11px; font-family:'IBM Plex Mono', monospace; }
+  .bp-none{ font-size:11.5px; color:var(--muted); }
+  .bp-legend{ margin-top:18px; }
+  .bp-defs{ margin:10px 0 0; display:grid; grid-template-columns:150px minmax(0,1fr);
+            gap:8px 16px; font-size:13px; }
+  .bp-defs dt{ color:var(--ink); }
+  .bp-defs dd{ margin:0; color:var(--ink-soft); }
+  @media (max-width:760px){
+    .bp-row{ grid-template-columns:minmax(0,1fr); gap:6px; }
+    .bp-figures{ text-align:left; flex-direction:row; gap:10px; align-items:baseline; }
+    .bp-defs{ grid-template-columns:minmax(0,1fr); gap:2px 0; }
+    .bp-defs dd{ margin-bottom:8px; }
+  }
+
   /* ---------- budget vs actual ---------- */
   /* Each category is its own panel with a little of the page showing between
      them, so a row plainly belongs to one category and to no other. The panel
@@ -408,6 +444,7 @@
       <button class="tab" data-view="trend">Trend</button>
       <button class="tab" data-view="net">Net Activity</button>
       <button class="tab" data-view="tracker">Tracker</button>
+      <button class="tab" data-view="budgeting">Budgeting</button>
       <button class="tab" data-view="transactions">Transactions</button>
       <button class="tab" data-view="banks">Banks</button>
     </div>
@@ -476,6 +513,18 @@
         <select class="ctl" id="bud-range" aria-label="Period"></select>
       </div>
       <div id="bud-list" class="bv-list"></div>
+    </section>
+
+    <section class="panel" id="v-budgeting">
+      <h2 class="view">How the budget is worked out</h2>
+      <p class="lede">Pick a method per category. A parent's choice applies to everything inside it until a child says otherwise. Each row shows what its method produces for this month, so the choice is made by looking rather than guessing.</p>
+      <div id="plan-list" class="bp-list"></div>
+      <p class="msg" id="plan-msg"></p>
+      <p class="fc-method" id="plan-note" style="margin-top:10px"></p>
+      <div class="card bp-legend">
+        <p class="eyebrow">The methods</p>
+        <dl class="bp-defs"></dl>
+      </div>
     </section>
 
     <section class="panel" id="v-transactions">
@@ -653,7 +702,7 @@ async function refresh() {
     // nothing to draw and a grid of $0.00 would read as a statement about
     // somebody's finances rather than about an empty account. The Banks tab
     // says it in its own words, and is where the button lives.
-    if (view !== 'banks') {
+    if (view !== 'banks' && view !== 'budgeting') {
       // Categories may be looking at a month of its own; asking about the page
       // range here as well would thrash a cache that only holds one range.
       const s = await summaryFor(view === 'tracker' ? budgetRange() : range());
@@ -666,6 +715,7 @@ async function refresh() {
     if (view === 'trend')        await renderTrend();
     if (view === 'net')          await renderNet();
     if (view === 'tracker')      await renderBudgetView();
+    if (view === 'budgeting')    await renderBudgeting();
     if (view === 'transactions') await renderTransactions();
     if (view === 'banks')        await renderBanks();
     say(msg, '');
@@ -1727,6 +1777,185 @@ $('net-chart').addEventListener('keydown', (e) => {
 });
 
 $('net-range').addEventListener('change', () => { netSel = null; refresh(); });
+
+/* -------------------------------------------------------------- budgeting -- */
+
+/* Where the budget is decided, as opposed to the Tracker where it is judged.
+ *
+ * Each parent picks how its budget is worked out and its children follow unless
+ * they say otherwise — the same shape as the categories themselves, and the
+ * same shape as how a person actually thinks: "average everything, except
+ * holidays, which are seasonal".
+ *
+ * Every row shows what its current method produces for this month, because
+ * choosing between "average" and "seasonal" is guesswork until you can see what
+ * each one would give you.
+ */
+const METHOD_LABEL = {
+  auto: 'Automatic',
+  average: 'Average month',
+  previous: 'Same as last month',
+  seasonal: 'Seasonal',
+  manual: 'Manual',
+  none: 'Not budgeted',
+};
+
+const METHOD_NOTE = {
+  auto: 'Seasonal where there is a year of history, an average month where there is not.',
+  average: 'A typical month, with the most and least expensive set aside so one unusual month does not become the plan.',
+  previous: 'Whatever the last complete month cost, repeated.',
+  seasonal: 'The same month a year ago, scaled by how this year is running. Keeps the spikes — the only method that expects December to cost more than August.',
+  manual: 'A figure you set. On a parent it is shared across its children in proportion to what they actually cost.',
+  none: 'Deliberately not budgeted. Counts as zero rather than as missing.',
+};
+
+let planData = null;
+const planOpen = new Set();
+
+function methodOptions(selected, inherited, isParent) {
+  let html = '';
+  if (!isParent) {
+    html += '<option value="inherit"' + (inherited ? ' selected' : '') + '>Follow the parent</option>';
+  }
+  for (const m of (planData ? planData.methods : Object.keys(METHOD_LABEL))) {
+    html += '<option value="' + m + '"' + (!inherited && m === selected ? ' selected' : '') + '>' +
+      escapeHtml(METHOD_LABEL[m] || m) + '</option>';
+  }
+  return html;
+}
+
+function planRowHtml(c, isParent, open) {
+  const previewed = c.preview === null
+    ? '<span class="bp-none">nothing to go on</span>'
+    : '<span class="bp-preview">' + money(c.preview) + '<span class="bp-dim"> a month</span></span>';
+
+  const toggle = isParent
+    ? '<button class="ctog" type="button" data-plan-open="' + escapeHtml(c.slug) + '" ' +
+      'aria-expanded="' + open + '">' + (open ? '−' : '+') + '</button>'
+    : '<span class="ctog ghost" aria-hidden="true"></span>';
+
+  return '<div class="bp-row' + (isParent ? ' parent' : ' child') + '" data-slug="' + escapeHtml(c.slug) + '">' +
+    '<div class="bp-name">' + toggle +
+      '<span class="swatch" style="background:' + c.colour + '"></span>' +
+      (isParent ? '<b>' + escapeHtml(c.label) + '</b>' : escapeHtml(c.label)) +
+      (c.inherited && !isParent ? '<span class="bp-inherit">inherited</span>' : '') + '</div>' +
+    '<div class="bp-method">' +
+      '<select class="ctl bp-select" data-slug="' + escapeHtml(c.slug) + '" aria-label="Method for ' +
+        escapeHtml(c.label) + '">' + methodOptions(c.method, c.inherited, isParent) + '</select>' +
+      (c.method === 'manual' && !c.inherited
+        ? '<input class="bp-amount" type="text" inputmode="decimal" data-slug="' + escapeHtml(c.slug) +
+          '" value="' + (c.manualAmount ? (c.manualAmount / 100).toFixed(2) : '') +
+          '" placeholder="0.00" aria-label="Monthly amount for ' + escapeHtml(c.label) + '">'
+        : '') +
+    '</div>' +
+    '<div class="bp-figures">' + previewed +
+      '<span class="bp-dim bp-last">' + (c.spentLastMonth ? money(c.spentLastMonth) + ' last month' : '—') + '</span>' +
+    '</div></div>';
+}
+
+function fillMethodDefs() {
+  const dl = document.querySelector('.bp-defs');
+  if (!dl || dl.children.length) return;
+  dl.innerHTML = Object.keys(METHOD_LABEL).map(m =>
+    '<dt>' + escapeHtml(METHOD_LABEL[m]) + '</dt><dd>' + escapeHtml(METHOD_NOTE[m]) + '</dd>').join('');
+}
+
+async function renderBudgeting() {
+  fillMethodDefs();
+  planData = await authed('/api/budget-plan');
+  const host = $('plan-list');
+  const parents = planData.categories.filter(c => !c.parentSlug);
+
+  if (!parents.length) {
+    host.innerHTML = '<p class="empty">No spending categories yet.</p>';
+    return;
+  }
+
+  host.innerHTML = parents.map(p => {
+    const kids = planData.categories.filter(c => c.parentSlug === p.slug);
+    const open = planOpen.has(p.slug);
+    return '<div class="bp-card">' + planRowHtml(p, true, open) +
+      (kids.length
+        ? '<div class="bp-kids" data-kids="' + escapeHtml(p.slug) + '"' + (open ? '' : ' hidden') + '>' +
+          kids.map(k => planRowHtml(k, false, false)).join('') + '</div>'
+        : '') +
+      '</div>';
+  }).join('');
+
+  const chosen = $('plan-note');
+  const sel = planData.categories.find(c => !c.inherited);
+  chosen.textContent = 'Figures are what each method would give for ' + monthLabel(planData.month) +
+    ', from ' + planData.monthsOfHistory + ' complete month' + (planData.monthsOfHistory === 1 ? '' : 's') +
+    ' of history.' + (planData.basis === 'seasonal-growth' && planData.growthPct !== null
+      ? ' Seasonal is using last year scaled by ' + (planData.growthPct >= 0 ? '+' : '') + planData.growthPct + '%.'
+      : planData.basis === 'recent-average'
+        ? ' There is not yet a full year behind you, so Seasonal falls back to a recent average.'
+        : '');
+  void sel;
+}
+
+async function savePlan(slug, method, manualAmount) {
+  const msg = $('plan-msg');
+  say(msg, 'Saving…');
+  try {
+    await authed('/api/budget-plan', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: slug, method: method, manualAmount: manualAmount })
+    });
+    // The budget these methods produce is what every other tab reads.
+    summaryCache = null;
+    await renderBudgeting();
+    // Switching to manual asks for a number, so the cursor goes where the
+    // number belongs rather than leaving an empty box to be found.
+    if (method === 'manual') {
+      const box = $('plan-list').querySelector('.bp-amount[data-slug="' + slug + '"]');
+      if (box) { box.focus(); box.select(); }
+    }
+    say(msg, 'Saved.', 'good');
+  } catch (err) {
+    say(msg, err.message, 'bad');
+  }
+}
+
+$('plan-list').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-plan-open]');
+  if (!btn) return;
+  const slug = btn.dataset.planOpen;
+  const open = !planOpen.has(slug);
+  if (open) planOpen.add(slug); else planOpen.delete(slug);
+  const kids = $('plan-list').querySelector('[data-kids="' + CSS.escape(slug) + '"]');
+  if (kids) kids.hidden = !open;
+  btn.textContent = open ? '−' : '+';
+  btn.setAttribute('aria-expanded', String(open));
+});
+
+$('plan-list').addEventListener('change', (e) => {
+  const sel = e.target.closest('.bp-select');
+  if (!sel) return;
+  const slug = sel.dataset.slug;
+  const cat = planData.categories.find(c => c.slug === slug);
+  // Switching to manual keeps whatever was typed before, so flipping away and
+  // back does not lose the number.
+  savePlan(slug, sel.value, cat ? cat.manualAmount : 0);
+});
+
+/* Saved when the field is left rather than on every keystroke — one request per
+   decision, not one per digit. */
+$('plan-list').addEventListener('change', (e) => {
+  const input = e.target.closest('.bp-amount');
+  if (!input) return;
+  const raw = input.value.trim().replace(/[$,\s]/g, '');
+  const n = Number(raw);
+  if (!raw || !isFinite(n) || n < 0) { say($('plan-msg'), 'That needs to be a number, zero or more.', 'bad'); return; }
+  savePlan(input.dataset.slug, 'manual', Math.round(n * 100));
+});
+
+$('plan-list').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const input = e.target.closest('.bp-amount');
+  if (input) { e.preventDefault(); input.blur(); }
+});
 
 /* ------------------------------------------------------- budget vs actual -- */
 

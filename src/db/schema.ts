@@ -170,3 +170,25 @@ export const transactionOverrides = pgTable("transaction_overrides", {
   isHidden: boolean("is_hidden").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// 9. Budget plans - how each category's budget is arrived at.
+//
+// One row per category the user has expressed an opinion about. No row means
+// "inherit": from the parent if it has one, otherwise from the default. So the
+// table stays small - a handful of rows, not one per category - and adding a
+// category later does not need backfilling.
+//
+// `method` is resolved per category at read time, exactly like categories
+// themselves. `manualAmount` is cents per month and only read when the method
+// is "manual"; it is kept when switching away so flipping back does not lose
+// the number that was typed.
+export const budgetPlans = pgTable("budget_plans", {
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  categoryId: uuid("category_id").notNull()
+    .references(() => categories.id, { onDelete: "cascade" }),
+  method: text("method").notNull().default("auto"),
+  manualAmount: bigint("manual_amount", { mode: "number" }).notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("budget_plans_user_category_idx").on(t.userId, t.categoryId),
+]);
