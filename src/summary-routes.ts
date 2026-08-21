@@ -241,10 +241,13 @@ function resolveRange(range: string, today: Date) {
     };
   }
 
-  if (range === "last-3" || range === "last-6") {
-    const months = range === "last-3" ? 3 : 6;
+  // last-N months, N being any of the offered spans. Generalised from a pair of
+  // hard-coded cases so a new span is an entry in a menu rather than a branch.
+  const lastN = /^last-(3|6|12|24)$/.exec(range);
+  if (lastN) {
+    const months = Number(lastN[1]);
     return {
-      current: { start: new Date(Date.UTC(y, m - months + 1, 1)), end: new Date(Date.UTC(y, m, d)), label: `Last ${months} months` },
+      current: { start: new Date(Date.UTC(y, m - months + 1, 1)), end: new Date(Date.UTC(y, m, d)), label: months === 24 ? "Last 2 years" : months === 12 ? "Last 12 months" : `Last ${months} months` },
       previous: { start: new Date(Date.UTC(y, m - months * 2 + 1, 1)), end: new Date(Date.UTC(y, m - months + 1, 0)), label: `The ${months} months before` },
       daysElapsed: months * 30, daysInPeriod: months * 30,
     };

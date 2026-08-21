@@ -222,6 +222,33 @@
   .danger-btn{ color:var(--coral); border-color:rgba(255,92,114,.45); }
   .danger-btn:hover{ color:#fff; background:var(--coral); border-color:var(--coral); }
 
+  /* ---------- budget vs actual ---------- */
+  .bv-card{ padding:16px 0 4px; border-top:1px solid var(--hair); }
+  .bv-card:first-child{ border-top:none; padding-top:4px; }
+  .bv-head{ display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:10px; }
+  .bv-head b{ font-weight:600; }
+  /* The verdict is the answer to the question the two bars pose, so it sits on
+     the same line as the name rather than under the bars. */
+  .bv-verdict{ margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:12px; }
+  .bv-verdict.good{ color:var(--mint); }
+  .bv-verdict.bad{ color:var(--coral); }
+  .bv-none{ margin-left:auto; font-size:11.5px; color:var(--muted); }
+  .bv-row{ display:grid; grid-template-columns:52px minmax(0,1fr) 104px; gap:12px;
+           align-items:center; margin-bottom:6px; }
+  /* Budget is drawn as an outline rather than a solid: it is the expectation,
+     not a thing that happened, and it should not compete with the bar above it. */
+  .bv-budget{ background:transparent; border:1px dashed var(--hair-strong); }
+  .bv-dim{ color:var(--muted); }
+  .bv-kids{ margin:10px 0 2px 26px; padding-left:14px; border-left:1px solid var(--hair); }
+  .bv-kid{ padding:8px 0; }
+  .bv-kid .bv-head{ font-size:12.5px; margin-bottom:7px; }
+  .bv-kid .bv-row{ margin-bottom:5px; }
+  .bv-kid .btrack{ height:7px; }
+  @media (max-width:560px){
+    .bv-row{ grid-template-columns:44px minmax(0,1fr) 84px; gap:8px; }
+    .bv-kids{ margin-left:8px; }
+  }
+
   /* ---------- net activity ---------- */
   .net-head{ display:flex; align-items:flex-start; justify-content:space-between;
              gap:20px; margin-bottom:14px; flex-wrap:wrap; }
@@ -386,6 +413,7 @@
       <button class="tab" data-view="overview" aria-current="true">Overview</button>
       <button class="tab" data-view="trend">Trend</button>
       <button class="tab" data-view="net">Net Activity</button>
+      <button class="tab" data-view="budget">Budget</button>
       <button class="tab" data-view="categories">Categories</button>
       <button class="tab" data-view="transactions">Transactions</button>
       <button class="tab" data-view="banks">Banks</button>
@@ -445,6 +473,15 @@
         </select>
       </div>
       <div class="card"><div id="net-chart"></div></div>
+    </section>
+
+    <section class="panel" id="v-budget">
+      <h2 class="view">Against the plan</h2>
+      <p class="lede">What each category cost, over what it was expected to cost. Every bar shares one scale, so a longer bar is more money wherever it appears — and the gap between a pair is the whole point.</p>
+      <div class="bar" style="padding-top:0">
+        <select class="ctl" id="bud-range" aria-label="Period"></select>
+      </div>
+      <div class="card" id="bud-list"></div>
     </section>
 
     <section class="panel" id="v-categories">
@@ -636,7 +673,8 @@ async function refresh() {
     if (view !== 'banks') {
       // Categories may be looking at a month of its own; asking about the page
       // range here as well would thrash a cache that only holds one range.
-      const s = await summaryFor(view === 'categories' ? catRange() : range());
+      const s = await summaryFor(
+        view === 'categories' ? catRange() : view === 'budget' ? budgetRange() : range());
       hasBanks = s.accountsCounted > 0;
       if (!hasBanks) { clearFirstRun(); showFirstRun(view); say(msg, ''); return; }
     }
@@ -645,6 +683,7 @@ async function refresh() {
     if (view === 'overview')     await renderOverview();
     if (view === 'trend')        await renderTrend();
     if (view === 'net')          await renderNet();
+    if (view === 'budget')       await renderBudgetView();
     if (view === 'categories')   await renderCategories();
     if (view === 'transactions') await renderTransactions();
     if (view === 'banks')        await renderBanks();
@@ -1972,6 +2011,129 @@ $('net-chart').addEventListener('keydown', (e) => {
 });
 
 $('net-range').addEventListener('change', () => { netSel = null; refresh(); });
+
+/* ------------------------------------------------------- budget vs actual -- */
+
+/* One block per category: what it cost on top, what it was expected to cost
+   underneath, on a shared scale so the gap between the two bars is the whole
+   message. Ordered by what was actually spent, because the question is "where
+   did the money go" before it is "was that the plan".
+
+   Shut by default like the Categories tab, for the same reason — a dozen
+   headline comparisons read; forty rows do not. */
+const budgetOpen = new Set();
+
+function budgetRange() { return $('bud-range').value || 'this-month'; }
+
+function fillBudgetRanges() {
+  const sel = $('bud-range');
+  if (sel.options.length) return;
+  const now = new Date();
+  const thisMonth = 'month:' + now.getUTCFullYear() + '-' + String(now.getUTCMonth() + 1).padStart(2, '0');
+  let html = '<optgroup label="Aggregate">' +
+    '<option value="last-3">Last 3 months</option>' +
+    '<option value="last-6">Last 6 months</option>' +
+    '<option value="last-12">Last 12 months</option>' +
+    '<option value="last-24">Last 2 years</option>' +
+    '</optgroup><optgroup label="Single month">';
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    const key = 'month:' + d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+    html += '<option value="' + key + '"' + (key === thisMonth ? ' selected' : '') + '>' +
+      MONTH_NAMES[d.getUTCMonth()] + ' ' + d.getUTCFullYear() + '</option>';
+  }
+  sel.innerHTML = html + '</optgroup>';
+}
+
+/* Actual over budget, both against the same width. */
+function budgetPair(label, colour, actual, budget, max, expandable, slug, open) {
+  const w = v => Math.min(100, max ? (v / max) * 100 : 0).toFixed(1);
+  const over = budget > 0 && actual > budget;
+  const verdict = budget <= 0
+    ? '<span class="bv-none">no budget yet</span>'
+    : '<span class="bv-verdict ' + (over ? 'bad' : 'good') + '">' +
+      money(Math.abs(actual - budget)) + (over ? ' over' : ' under') + '</span>';
+
+  const toggle = expandable
+    ? '<button class="ctog" type="button" data-bud="' + escapeHtml(slug) + '" ' +
+      'aria-expanded="' + open + '" aria-label="' + (open ? 'Hide' : 'Show') + ' what is inside ' +
+      escapeHtml(label) + '">' + (open ? '−' : '+') + '</button>'
+    : '<span class="ctog ghost" aria-hidden="true"></span>';
+
+  return '<div class="bv-head">' + toggle +
+      '<span class="swatch" style="background:' + colour + '"></span>' +
+      '<b>' + escapeHtml(label) + '</b>' + verdict + '</div>' +
+    '<div class="bv-row"><span class="blabel">Actual</span>' +
+      '<div class="btrack"><div class="bfill" style="width:' + w(actual) +
+        '%;background:' + (over ? 'var(--coral)' : colour) + '"></div></div>' +
+      '<span class="bamt' + (over ? ' out' : '') + '">' + money(actual) + '</span></div>' +
+    '<div class="bv-row"><span class="blabel">Budget</span>' +
+      '<div class="btrack"><div class="bfill bv-budget" style="width:' + w(budget) + '%"></div></div>' +
+      '<span class="bamt bv-dim">' + (budget > 0 ? money(budget) : '—') + '</span></div>';
+}
+
+async function renderBudgetView() {
+  fillBudgetRanges();
+  const s = await summaryFor(budgetRange());
+  const host = $('bud-list');
+  const bud = s.budget || { available: false, byParent: {}, byCategory: {} };
+
+  const actualByParent = s.totals.byParent || {};
+  const parents = Object.keys(actualByParent)
+    .map(slug => [slug, actualByParent[slug], (bud.byParent && bud.byParent[slug]) || 0])
+    .filter(p => p[1] > 0 || p[2] > 0)
+    .sort((a, b) => b[1] - a[1]);
+
+  if (!parents.length) {
+    host.innerHTML = '<p class="empty">Nothing spent in this period.</p>';
+    return;
+  }
+
+  // One scale for every bar on screen, so a longer bar means more money
+  // wherever it appears — within a category and between them.
+  const max = Math.max.apply(null, parents.map(p => Math.max(p[1], p[2])));
+
+  host.innerHTML = parents.map(pair => {
+    const slug = pair[0], actual = pair[1], budget = pair[2];
+    const kids = categoryList
+      .filter(c => c.parentSlug === slug)
+      .map(c => [c.slug, (s.totals.byCategory[c.slug] || 0), (bud.byCategory && bud.byCategory[c.slug]) || 0])
+      .filter(k => k[1] > 0 || k[2] > 0)
+      .sort((a, b) => b[1] - a[1]);
+    const expandable = kids.length > 1;
+    const open = expandable && budgetOpen.has(slug);
+
+    return '<div class="bv-card">' +
+      budgetPair(labelOfSlug(slug), colourOf(slug), actual, budget, max, expandable, slug, open) +
+      (expandable
+        ? '<div class="bv-kids" data-bud-kids="' + escapeHtml(slug) + '"' + (open ? '' : ' hidden') + '>' +
+          kids.map(k => '<div class="bv-kid">' +
+            budgetPair(labelOfSlug(k[0]), colourOf(k[0]), k[1], k[2], max, false, k[0], false) +
+            '</div>').join('') + '</div>'
+        : '') +
+      '</div>';
+  }).join('');
+
+  if (!bud.available) {
+    host.innerHTML += '<p class="fc-method" style="margin-top:16px">' +
+      escapeHtml(budgetNote(bud)) + '</p>';
+  }
+}
+
+$('bud-list').addEventListener('click', (e) => {
+  const btn = e.target.closest('.ctog');
+  if (!btn || !btn.dataset.bud) return;
+  const slug = btn.dataset.bud;
+  const open = !budgetOpen.has(slug);
+  if (open) budgetOpen.add(slug); else budgetOpen.delete(slug);
+
+  const kids = $('bud-list').querySelector('[data-bud-kids="' + CSS.escape(slug) + '"]');
+  if (kids) kids.hidden = !open;
+  btn.textContent = open ? '−' : '+';
+  btn.setAttribute('aria-expanded', String(open));
+});
+
+$('bud-range').addEventListener('change', () => { summaryCache = null; txCache = {}; refresh(); });
 
 /* -------------------------------------------------------------- forecast -- */
 
