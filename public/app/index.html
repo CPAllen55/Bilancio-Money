@@ -204,6 +204,24 @@
   .seg:hover, .seg:focus-visible, .seg.sel{ transform:scaleX(1.24); }
   .seg.sel{ filter:brightness(1.45) drop-shadow(0 0 10px currentColor); }
   .seg.dim{ opacity:.2; }
+  /* Glows on hover like any other segment, but is not a button: the bar chart
+     below shows a shape, and the way into the transactions is the share view. */
+  .seg.noclick{ cursor:default; }
+
+  /* The hover box. Bigger than a native tooltip because it is doing more than
+     naming a thing — it gives the amount at a size worth reading and says what
+     share of the month it was. */
+  .charttip{ position:absolute; z-index:6; pointer-events:none;
+             min-width:172px; padding:11px 14px 12px;
+             background:var(--bg-panel); border:1px solid var(--hair-strong);
+             border-radius:8px; box-shadow:0 10px 28px rgba(0,0,0,.55); }
+  .ct-head{ display:flex; align-items:baseline; gap:10px; font-size:13px; color:var(--ink);
+            font-weight:600; }
+  .ct-month{ margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:11px;
+             color:var(--muted); font-weight:400; }
+  .ct-amount{ font-family:'IBM Plex Mono', monospace; font-size:21px; color:var(--ink);
+              letter-spacing:-.02em; margin-top:6px; }
+  .ct-share{ font-size:11.5px; color:var(--ink-soft); margin-top:3px; }
 
   .panner{ width:100%; margin-top:10px; accent-color:var(--mint-dim); cursor:grab; }
 
@@ -240,6 +258,10 @@
   /* The breakdown is a separate thought from the chart it describes, so it
      gets air rather than sitting flush against it. */
   .trend-below{ margin-top:22px; }
+  .pie-title{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+  .pie-title b{ font-family:'Space Grotesk', sans-serif; font-size:17px; letter-spacing:-.01em; }
+  .pie-range{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--muted);
+              letter-spacing:.06em; text-transform:uppercase; }
   .pie-head{ display:flex; align-items:flex-start; justify-content:space-between;
              gap:16px; margin-bottom:14px; flex-wrap:wrap; }
   .pie-nav{ display:flex; align-items:center; gap:2px; flex:none; }
@@ -510,7 +532,7 @@
       <p class="fc-method" id="budget-note" style="margin:14px 0 0"></p>
     </section>
 
-    <section class="panel" id="v-trend">
+    <section class="panel" id="v-trend" style="position:relative">
       <h2 class="view">A year, against the year before</h2>
       <p class="lede">Where the money went each month, stacked by category, with a dashed line showing what that same month cost you a year earlier. Switch on the budget to carry the rest of the year at what you have planned.</p>
       <div class="bar" style="padding-top:0">
@@ -1237,6 +1259,25 @@ let trendSel = null;       // { cat, month } | { cat } | null
 
 const MIN_VISIBLE = 3;
 
+/* What the hover box reads, carried on the shape itself so one listener can
+   serve every chart without knowing which one it is looking at. */
+function tipAttrs(label, month, amount, ofTotal) {
+  return 'data-tip="1"' +
+    ' data-tip-label="' + escapeHtml(label) + '"' +
+    ' data-tip-month="' + escapeHtml(monthLabel(month)) + '"' +
+    ' data-tip-amount="' + amount + '"' +
+    ' data-tip-of="' + (ofTotal || 0) + '"';
+}
+
+/* The month's total, above its bar. Skipped where the bars are too close
+   together for the numbers to sit apart — a row of overlapping figures is worse
+   than no figures. */
+function stackTotal(cx, topY, total, band) {
+  if (band < 52) return '';
+  return '<text x="' + cx.toFixed(1) + '" y="' + (topY - 7).toFixed(1) + '" text-anchor="middle" ' +
+    'font-family="IBM Plex Mono" font-size="10.5" fill="var(--ink-soft)">' + money0(total) + '</text>';
+}
+
 function monthLabel(ym) {
   const p = ym.split('-');
   return MONTH_NAMES[Number(p[1]) - 1] + ' ' + p[0];
@@ -1435,6 +1476,7 @@ function drawTrend() {
       const colour = colourOf(id);
       svg += '<rect class="seg' + (on ? ' sel' : '') + (off ? ' dim' : '') + '"' +
              ' data-cat="' + escapeHtml(id) + '" data-month="' + escapeHtml(m.month) + '"' +
+             ' ' + tipAttrs(labelOfSlug(id), m.month, v, m.expense) +
              ' tabindex="0" role="button"' +
              ' x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
              '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 2).toFixed(1) +
@@ -1448,6 +1490,8 @@ function drawTrend() {
              (m.projected ? ' (projected)' : '') + '</title></rect>';
       acc += v;
     });
+
+    if (m.expense > 0) svg += stackTotal(cx, y(m.expense), m.expense, band);
 
     if (i % every === 0 || i === all.length - 1) {
       const parts = m.month.split('-');
@@ -1575,6 +1619,49 @@ function setTrendSel(next) {
   trendSel = same ? null : next;
   drawTrend();
 }
+
+/* One hover box for every chart on the tab.
+ *
+ * The native <title> tooltip could not be styled, arrived after a delay, and
+ * put a system-grey box over a dark chart. This is the app's own: it follows
+ * the pointer, names the category and the month, gives the amount at a size
+ * worth reading, and says what share of that month it was.
+ */
+(() => {
+  const tip = document.createElement('div');
+  tip.className = 'charttip';
+  tip.hidden = true;
+  document.getElementById('v-trend').appendChild(tip);
+
+  const show = (el, x, y) => {
+    const amount = Number(el.dataset.tipAmount);
+    const of = Number(el.dataset.tipOf);
+    tip.innerHTML =
+      '<div class="ct-head">' + escapeHtml(el.dataset.tipLabel) +
+        '<span class="ct-month">' + escapeHtml(el.dataset.tipMonth) + '</span></div>' +
+      '<div class="ct-amount">' + money(amount) + '</div>' +
+      (of > 0 ? '<div class="ct-share">' + ((amount / of) * 100).toFixed(1) +
+        '% of that month</div>' : '');
+    tip.hidden = false;
+
+    // Kept inside the panel: near the cursor, flipped when it would run off the
+    // right edge, and above the pointer rather than under it where the hand is.
+    const host = document.getElementById('v-trend').getBoundingClientRect();
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    let left = x - host.left + 14;
+    if (left + w > host.width - 8) left = x - host.left - w - 14;
+    tip.style.left = Math.max(8, left) + 'px';
+    tip.style.top = Math.max(8, y - host.top - h - 12) + 'px';
+  };
+
+  document.getElementById('v-trend').addEventListener('mousemove', (e) => {
+    const el = e.target.closest('[data-tip]');
+    if (!el) { tip.hidden = true; return; }
+    show(el, e.clientX, e.clientY);
+  });
+  document.getElementById('v-trend').addEventListener('mouseleave', () => { tip.hidden = true; });
+  document.getElementById('v-trend').addEventListener('click', () => { tip.hidden = true; });
+})();
 
 /* Delegated once, because the chart is rebuilt on every zoom, pan and click —
    binding per segment would leak a listener a frame. */
@@ -2246,6 +2333,21 @@ function pieWindow() {
 
   // Per month as well as totalled: the donut wants the sum, the bars want the
   // shape over time, and both are the same set of categories.
+  // The same month a year earlier, for the dashed line. priorSeries is indexed
+  // against the actual months, so each scoped month is looked up by its position
+  // in the full series rather than by counting.
+  const priorOf = (month) => {
+    const idx = trendData.all.findIndex(x => x.month === month);
+    const row = idx > -1 ? trendData.prior[idx] : null;
+    if (!row) return null;
+    const cat = trendSel && trendSel.cat;
+    const kids = cat ? categoryList.filter(c => c.parentSlug === cat).map(c => c.slug) : null;
+    if (!kids) return row.expense || 0;
+    let sum = (row.byCategory || {})[cat] || 0;
+    for (const slug of kids) sum += (row.byCategory || {})[slug] || 0;
+    return sum;
+  };
+
   const perMonth = scoped.map(m => {
     const row = {};
     if (kids) {
@@ -2255,7 +2357,7 @@ function pieWindow() {
     } else {
       for (const [slug, v] of Object.entries(m.byParent || {})) if (v) row[slug] = v;
     }
-    return { month: m.month, row };
+    return { month: m.month, row, prior: priorOf(m.month) };
   });
 
   return { months: scoped, perMonth, byCat, title: cat ? labelOfSlug(cat) : 'Everything', label,
@@ -2320,17 +2422,20 @@ function pieBarsSvg(entries, w) {
   const order = entries.map(e => e[0]);
   months.forEach((m, idx) => {
     const cx = PL + band * idx + band / 2;
+    const monthTotal = totals[idx];
     let acc = 0;
     for (const slug of order) {
       const v = m.row[slug] || 0;
       if (!v) continue;
       const top = y(acc + v), bot = y(acc);
-      svg += '<rect x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
+      svg += '<rect class="seg noclick" ' + tipAttrs(labelOfSlug(slug), m.month, v, monthTotal) +
+        ' x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
         '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 2).toFixed(1) +
-        '" fill="' + colourOf(slug) + '" rx="1">' +
-        '<title>' + escapeHtml(labelOfSlug(slug)) + ': ' + money(v) + '</title></rect>';
+        '" fill="' + colourOf(slug) + '" style="color:' + colourOf(slug) + '" rx="1"></rect>';
       acc += v;
     }
+
+    if (monthTotal > 0) svg += stackTotal(cx, y(monthTotal), monthTotal, band);
 
     if (idx % every === 0 || idx === months.length - 1) {
       const parts = m.month.split('-');
@@ -2340,6 +2445,21 @@ function pieBarsSvg(entries, w) {
         'font-family="IBM Plex Mono" font-size="10.5" fill="var(--muted)">' + label + '</text>';
     }
   });
+
+  // The same month a year earlier, on the same axis, drawn exactly as above.
+  const priorPts = months.filter(m => m.prior !== null);
+  if (priorPts.length > 1) {
+    const pts = months.map((m, idx) => m.prior === null ? null
+      : (PL + band * idx + band / 2).toFixed(1) + ',' + y(m.prior).toFixed(1)).filter(Boolean);
+    svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--ink)" ' +
+      'stroke-width="2" stroke-dasharray="5 4" opacity=".78"/>';
+    months.forEach((m, idx) => {
+      if (m.prior === null) return;
+      svg += '<circle class="seg noclick" ' + tipAttrs('A year earlier', m.month, m.prior, 0) +
+        ' cx="' + (PL + band * idx + band / 2).toFixed(1) + '" cy="' + y(m.prior).toFixed(1) +
+        '" r="3.5" fill="var(--bg-panel)" stroke="var(--ink)" stroke-width="2"></circle>';
+    });
+  }
 
   return svg + '</svg>';
 }
@@ -2419,7 +2539,13 @@ function drawPie() {
   const body = pieView === 'bars'
     ? '<div class="trend-wrap">' +
         '<div class="trend-plot">' + pieBarsSvg(entries, w) + '</div>' +
-        '<div class="trend-key">' + legend + '</div>' +
+        '<div class="trend-key">' + legend +
+          // The dashed line is drawn here too, so it is named here too.
+          (w.perMonth.some(m => m.prior !== null)
+            ? '<div class="kitem static"><span class="kswatch dash"></span>' +
+              '<span class="klabel">Same month, last year</span></div>'
+            : '') +
+        '</div>' +
       '</div>'
     : '<div class="pie-wrap">' +
         '<div class="pie-chart">' + donut + '<div class="pie-key">' + legend + '</div></div>' +
@@ -2428,8 +2554,16 @@ function drawPie() {
 
   host.innerHTML =
     '<div class="pie-head">' +
-      '<div><p class="eyebrow">' + escapeHtml(w.title) + ' · ' + escapeHtml(w.label) + '</p>' +
-      '<p class="fc-method" style="margin:5px 0 0">' + note + '</p></div>' +
+      // The parent this panel is about, named at the top left in its own colour
+      // and at a size that reads as a title. As a muted eyebrow it was easy to
+      // miss which category the bars below belonged to.
+      '<div class="pie-title">' +
+        (trendSel && trendSel.cat
+          ? '<span class="swatch" style="background:' + colourOf(trendSel.cat) + '"></span>'
+          : '') +
+        '<b>' + escapeHtml(w.title) + '</b>' +
+        '<span class="pie-range">' + escapeHtml(w.label) + '</span>' +
+        '<p class="fc-method" style="margin:5px 0 0;width:100%">' + note + '</p></div>' +
       step +
     '</div>' + body;
 
