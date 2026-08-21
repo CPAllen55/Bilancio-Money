@@ -489,7 +489,7 @@
 
     <section class="panel" id="v-trend">
       <h2 class="view">A year, against the year before</h2>
-      <p class="lede">Where the money went each month, stacked by category, with a dashed line showing what that same month cost you a year earlier.</p>
+      <p class="lede">Where the money went each month, stacked by category, with a dashed line showing what that same month cost you a year earlier. Switch on the budget to carry the rest of the year at what you have planned.</p>
       <div class="bar" style="padding-top:0">
         <select class="ctl" id="trend-range">
           <option value="3">Last 3 months</option>
@@ -498,7 +498,7 @@
           <option value="24">Last 2 years</option>
         </select>
         <span class="bar-right">
-          <label class="toggle"><input type="checkbox" id="forecast-on"> Forecast rest of year</label>
+          <label class="toggle"><input type="checkbox" id="forecast-on"> Budget rest of year</label>
           <span class="zoomctl" id="trend-zoom" hidden>
             <button type="button" id="trend-zoom-out" aria-label="Show more months">−</button>
             <span class="zoomlabel" id="trend-zoom-label" aria-live="polite"></span>
@@ -1345,7 +1345,7 @@ function drawTrend() {
            '<rect x="' + (x0 + 6).toFixed(1) + '" y="' + (PT + 5) + '" width="60" height="17" rx="3" ' +
            'fill="var(--bg)" opacity=".72"/>' +
            '<text x="' + (x0 + 14).toFixed(1) + '" y="' + (PT + 17) + '" font-family="IBM Plex Mono" ' +
-           'font-size="10.5" fill="var(--mint)" letter-spacing=".08em">forecast</text>';
+           'font-size="10.5" fill="var(--mint)" letter-spacing=".08em">budget</text>';
   }
 
   for (let i = 0; i <= 4; i++) {
@@ -1466,7 +1466,7 @@ function drawTrend() {
       : '') +
     (all.some(m => m.projected)
       ? '<div class="kitem static"><span class="kswatch shaded"></span>' +
-        '<span class="klabel">Forecast</span></div>'
+        '<span class="klabel">Budget ahead</span></div>'
       : '');
 
   const maxOffset = n - trendVisible;

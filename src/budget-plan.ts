@@ -217,3 +217,90 @@ export function shareOut(
   });
   return out;
 }
+
+export interface CategoryLike {
+  slug: string;
+  parentSlug: string | null;
+  kind: string;
+}
+
+export interface MonthlyBudget {
+  /** month -> leaf slug -> cents */
+  byMonth: Map<string, Record<string, number>>;
+  /** Leaves whose method could not produce a figure for any month. */
+  unplanned: string[];
+}
+
+/**
+ * The budget for every leaf, month by month.
+ *
+ * Kept per month rather than summed, because two callers want different things
+ * from it: the Tracker adds the months up to judge a window, and the Trend
+ * chart draws one bar per month. Summing first and dividing back would smear a
+ * seasonal December across the autumn, which is the one thing the seasonal
+ * method exists to avoid.
+ *
+ * Pure — the database work happens above it, so the arithmetic can be tested
+ * without one.
+ */
+export function computeBudgets(
+  categories: CategoryLike[],
+  months: string[],
+  planRows: Map<string, PlanRow>,
+  history: HistoryLookup,
+  plan: Plan,
+  ctx: CategoryContext,
+): MonthlyBudget {
+  const leaves = categories.filter((c) => c.parentSlug && c.kind === "spend");
+  const parents = categories.filter((c) => !c.parentSlug && c.kind === "spend");
+
+  // What each leaf has cost lately, for dividing a parent's manual amount.
+  const weight = new Map<string, number>();
+  const recent = history.completed.slice(-3);
+  for (const leaf of leaves) {
+    weight.set(leaf.slug, recent.reduce((s, m) => s + history.at(leaf.slug, m), 0));
+  }
+
+  const byMonth = new Map<string, Record<string, number>>();
+  for (const m of months) byMonth.set(m, {});
+  const unplanned = new Set<string>();
+
+  for (const parent of parents) {
+    const kids = leaves.filter((c) => c.parentSlug === parent.slug);
+    const own = resolveMethod(parent.slug, ctx, planRows);
+
+    // A manual figure on a parent is per month, and is divided among the
+    // children so the parts still add to the whole.
+    if (own.method === "manual" && !own.inherited && kids.length) {
+      const share = shareOut(own.manualAmount, kids.map((k) => k.slug), weight);
+      for (const month of months) {
+        const row = byMonth.get(month)!;
+        for (const k of kids) row[k.slug] = share.get(k.slug) ?? 0;
+      }
+      continue;
+    }
+
+    for (const kid of kids) {
+      const m = resolveMethod(kid.slug, ctx, planRows);
+      let known = false;
+      for (const month of months) {
+        const v = budgetForLeaf(kid.slug, month, m.method, m.manualAmount, history, plan);
+        if (v === null) continue;
+        known = true;
+        byMonth.get(month)![kid.slug] = v;
+      }
+      if (!known) unplanned.add(kid.slug);
+    }
+
+    // A parent holding spending of its own rather than only children.
+    if (!kids.length) {
+      const m = resolveMethod(parent.slug, ctx, planRows);
+      for (const month of months) {
+        const v = budgetForLeaf(parent.slug, month, m.method, m.manualAmount, history, plan);
+        if (v !== null) byMonth.get(month)![parent.slug] = v;
+      }
+    }
+  }
+
+  return { byMonth, unplanned: [...unplanned] };
+}

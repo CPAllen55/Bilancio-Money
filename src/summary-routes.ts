@@ -23,7 +23,7 @@ import { requireUser } from "./auth";
 import { classify, merchantKey } from "./categories";
 import { buildPlan } from "./projection";
 import type { HistoryLookup } from "./budget-plan";
-import { budgetForLeaf, loadPlanRows, resolveMethod, shareOut } from "./budget-plan";
+import { computeBudgets, loadPlanRows } from "./budget-plan";
 
 const summary = new Hono<{ Bindings: Env }>();
 
@@ -472,56 +472,13 @@ async function budgetFor(
     before: (month) => completed.filter((k) => k < month),
   };
 
-  const leaves = ctx.list.filter((c) => c.parentSlug && c.kind === "spend");
-  const parents = ctx.list.filter((c) => !c.parentSlug && c.kind === "spend");
+  const { byMonth, unplanned } = computeBudgets(ctx.list, months, planRows, history, plan, ctx);
 
-  // What each leaf has cost recently, for splitting a parent's manual amount.
-  const weight = new Map<string, number>();
-  for (const leaf of leaves) {
-    weight.set(leaf.slug, completed.slice(-3).reduce((s, m) => s + at(leaf.slug, m), 0));
-  }
-
+  // Summed for the window this call is about; the per-month shape is what the
+  // trend chart wants and is computed by the same function.
   const byCategory: Record<string, number> = {};
-  const unplanned: string[] = [];
-
-  for (const parent of parents) {
-    const kids = leaves.filter((c) => c.parentSlug === parent.slug);
-    const own = resolveMethod(parent.slug, ctx, planRows);
-
-    // A manual figure on a parent is about the parent, so it is divided among
-    // the children rather than handed to each of them.
-    if (own.method === "manual" && !own.inherited && kids.length) {
-      const share = shareOut(own.manualAmount * months.length, kids.map((k) => k.slug), weight);
-      for (const k of kids) byCategory[k.slug] = share.get(k.slug) ?? 0;
-      continue;
-    }
-
-    for (const kid of kids) {
-      const m = resolveMethod(kid.slug, ctx, planRows);
-      let total = 0;
-      let known = false;
-      for (const month of months) {
-        const v = budgetForLeaf(kid.slug, month, m.method, m.manualAmount, history, plan);
-        if (v === null) continue;
-        known = true;
-        total += v;
-      }
-      if (known) byCategory[kid.slug] = total;
-      else unplanned.push(kid.slug);
-    }
-
-    // A parent that holds spending of its own rather than only children.
-    if (!kids.length) {
-      const m = resolveMethod(parent.slug, ctx, planRows);
-      let total = 0, known = false;
-      for (const month of months) {
-        const v = budgetForLeaf(parent.slug, month, m.method, m.manualAmount, history, plan);
-        if (v === null) continue;
-        known = true;
-        total += v;
-      }
-      if (known) byCategory[parent.slug] = total;
-    }
+  for (const row of byMonth.values()) {
+    for (const [slug, v] of Object.entries(row)) byCategory[slug] = (byCategory[slug] ?? 0) + v;
   }
 
   const available = plan.method !== "insufficient-data" || planRows.size > 0;

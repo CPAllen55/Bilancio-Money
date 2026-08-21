@@ -1,17 +1,18 @@
 /**
- * /api/forecast — what the rest of the year looks like on current behaviour.
+ * /api/forecast — the rest of the year at the budget.
  *
- * The projection itself lives in ./projection, because the budget is the same
- * calculation asked a different question: the forecast wants "what will the
- * rest of the year cost", the budget wants "what should this month have cost".
- * One implementation, so the two can never quietly disagree about the growth
- * rate they are both built on.
+ * The months ahead are the budget, category by category, not a second guess at
+ * them. It used to be a projection of its own, which meant two different
+ * answers to "what will next month cost" — and the budget is the one somebody
+ * actually chose, while the forecast was only ever guessing at what the budget
+ * now states outright.
  *
- * What stays here is what is particular to a forecast: rolling categories up to
- * their parents for the stacked bars, and treating the current month's actual
- * spending as a floor. Projecting less than has demonstrably already happened
- * would be nonsense — though it is exactly what a budget should do, which is
- * why the floor is applied here and not in the shared projection.
+ * Income keeps the projection, because income has no budget to read.
+ *
+ * What stays here is what is particular to drawing a year: rolling categories
+ * up to their parents for the stacked bars, and treating the current month's
+ * actual spending as a floor. Showing less than has demonstrably happened would
+ * be nonsense, and going past the budget is the thing most worth seeing.
  */
 
 import { Hono } from "hono";
@@ -19,6 +20,8 @@ import { getDb } from "./db/client";
 import { requireUser } from "./auth";
 import { loadCategories, monthlyBuckets, ownedAccountIds, rollUp } from "./summary-routes";
 import { buildPlan } from "./projection";
+import type { HistoryLookup } from "./budget-plan";
+import { computeBudgets, loadPlanRows } from "./budget-plan";
 
 const forecast = new Hono<{ Bindings: Env }>();
 
@@ -47,12 +50,32 @@ forecast.get("/forecast", async (c) => {
     // The plan loads the surrounding years itself; the actuals are read again
     // here because the past months of the chart are what happened, not what was
     // expected to happen.
-    const [plan, buckets] = await Promise.all([
+    const [plan, buckets, planRows] = await Promise.all([
       buildPlan(db, auth.user.id, ids, ctx, thisYearKeys, today),
       monthlyBuckets(db, auth.user.id, ids, ctx, thisYearKeys),
+      loadPlanRows(db, auth.user.id),
     ]);
     const at = (key: string) =>
       buckets.get(key) ?? { income: 0, expense: 0, total: 0, byCategory: {} };
+
+    // The months ahead are drawn from the budget rather than from a separate
+    // projection. Two different numbers for "what will next month cost" is one
+    // too many, and the budget is the one somebody chose — the forecast was
+    // only ever guessing at what the budget now states.
+    const history: HistoryLookup = (() => {
+      const hb = plan.buckets;
+      const hAt = (slug: string, month: string) => hb.get(month)?.byCategory[slug] ?? 0;
+      const completed = [...hb.keys()].sort()
+        .filter((k) => k < currentKey && (hb.get(k)?.expense ?? 0) > 0);
+      return {
+        at: hAt, completed,
+        lastComplete: completed.length ? completed[completed.length - 1] : null,
+        before: (month) => completed.filter((k) => k < month),
+      };
+    })();
+
+    const monthsAhead = thisYearKeys.filter((k) => k >= currentKey);
+    const budgets = computeBudgets(ctx.list, monthsAhead, planRows, history, plan, ctx);
 
     const months = thisYearKeys.map((key) => {
       const actual = at(key);
@@ -68,21 +91,24 @@ forecast.get("/forecast", async (c) => {
         };
       }
 
-      const expected = plan.for(key);
+      const planned = budgets.byMonth.get(key) ?? {};
+      const plannedExpense = Object.values(planned).reduce((s, v) => s + v, 0);
 
-      // The current month already has spending in it. Projecting less than has
-      // demonstrably happened would be nonsense, so it is a floor.
+      // The current month already has spending in it. Showing less than has
+      // demonstrably happened would be nonsense, so what happened is a floor —
+      // and going past the budget is exactly the thing worth seeing.
       const isCurrent = key === currentKey;
-      const expense = Math.max(expected.expense, isCurrent ? actual.expense : 0);
-      const income = Math.max(expected.income, isCurrent ? actual.income : 0);
+      const expense = Math.max(plannedExpense, isCurrent ? actual.expense : 0);
+      // Income has no budget of its own, so it stays on the projection.
+      const income = Math.max(plan.for(key).income, isCurrent ? actual.income : 0);
 
       return {
         month: key, projected: true,
         income, expense,
         net: income - expense,
-        byParent: isCurrent && actual.expense > expected.expense
+        byParent: isCurrent && actual.expense > plannedExpense
           ? actualByParent
-          : rollUp(expected.byCategory, ctx),
+          : rollUp(planned, ctx),
         actualSoFar: isCurrent ? { income: actual.income, expense: actual.expense } : null,
       };
     });
@@ -102,6 +128,10 @@ forecast.get("/forecast", async (c) => {
         monthsOfHistory: plan.monthsOfHistory,
         usesPriorYear: plan.method === "seasonal-growth",
       },
+      // Categories with no budget behind them, so the chart can say the bars
+      // ahead are short because nothing is planned rather than because nothing
+      // is expected to be spent.
+      unplanned: budgets.unplanned,
       firstProjectedMonth: ahead.length ? ahead[0].month : null,
       months,
       categories: ctx.list,
