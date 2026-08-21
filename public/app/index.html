@@ -247,8 +247,13 @@
   }
 
   /* ---------- budget vs actual ---------- */
-  .bv-card{ padding:16px 0 4px; border-top:1px solid var(--hair); }
-  .bv-card:first-child{ border-top:none; padding-top:4px; }
+  /* Each category is its own panel with a little of the page showing between
+     them, so a row plainly belongs to one category and to no other. The panel
+     grows with its children rather than the children spilling into a shared
+     list — which is the point of separating them at all. */
+  .bv-list{ display:flex; flex-direction:column; gap:10px; }
+  .bv-card{ background:var(--surface); border:1px solid var(--hair);
+            border-radius:6px; padding:15px 20px 13px; }
   .bv-head{ display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:10px; }
   .bv-head b{ font-weight:600; }
   /* The verdict is the answer to the question the two bars pose, so it sits on
@@ -516,7 +521,7 @@
       <div class="bar" style="padding-top:0">
         <select class="ctl" id="bud-range" aria-label="Period"></select>
       </div>
-      <div class="card" id="bud-list"></div>
+      <div id="bud-list" class="bv-list"></div>
     </section>
 
     <section class="panel" id="v-categories">
@@ -2183,7 +2188,7 @@ async function renderBudgetView() {
   }).join('');
 
   if (!bud.available) {
-    host.innerHTML += '<p class="fc-method" style="margin-top:16px">' +
+    host.innerHTML += '<p class="fc-method" style="margin:4px 2px 0">' +
       escapeHtml(budgetNote(bud)) + '</p>';
   }
 }
