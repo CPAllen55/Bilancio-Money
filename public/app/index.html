@@ -208,6 +208,15 @@
      below shows a shape, and the way into the transactions is the share view. */
   .seg.noclick{ cursor:default; }
 
+  /* The year-ago marker, which reacts like a segment but not identically: a
+     segment widens, and a circle stretched sideways reads as a smear rather
+     than a highlight, so this one grows evenly. Dimmed behind a selection like
+     the line it sits on, and brought back while the pointer is on it. */
+  .priordot{ cursor:default; transform-box:fill-box; transform-origin:center;
+             transition:transform .12s ease, filter .12s ease, opacity .12s ease; }
+  .priordot:hover{ transform:scale(1.5); opacity:1;
+                   filter:drop-shadow(0 0 7px var(--ink)); }
+
   /* The figure above a stack reacts like the stack does — grown and brightened
      rather than glowing, because a drop-shadow on 10px type reads as a smudge. */
   .stacktotal{ transform-box:fill-box; transform-origin:center; cursor:default;
@@ -1284,6 +1293,28 @@ function tipAttrs(label, month, amount, ofTotal) {
     ' data-tip-of="' + (ofTotal || 0) + '"';
 }
 
+/* The year-ago marker, in both charts.
+ *
+ * It raises the same box a segment does, because it answers the same kind of
+ * question, and a point on a chart that stays silent while everything around
+ * it responds reads as decoration.
+ *
+ * Drawn as a pair: a transparent disc wide enough to actually hit with a
+ * pointer, and the 3.5px ring you can see. Hovering a seven-pixel target is a
+ * game, not an interaction.
+ *
+ * The month named is the prior year's own — March 2025, not the March 2026 it
+ * sits above — since the amount belongs to that month and labelling it with
+ * this one would simply be wrong.
+ */
+function priorDot(cx, cy, label, month, amount, dim) {
+  return '<g class="priordot"' + (dim ? ' opacity=".25"' : '') + ' ' +
+    tipAttrs(label, month, amount, 0) + '>' +
+    '<circle cx="' + cx + '" cy="' + cy + '" r="9" fill="transparent"></circle>' +
+    '<circle cx="' + cx + '" cy="' + cy + '" r="3.5" fill="var(--bg-panel)" ' +
+    'stroke="var(--ink)" stroke-width="2"></circle></g>';
+}
+
 /* The month's total, above its bar, and live like the bar is.
  *
  * It stands for the whole stack, so hovering it should behave the way hovering
@@ -1535,11 +1566,12 @@ function drawTrend() {
     const pts = prior.map((p, i) => (PL + band * i + band / 2).toFixed(1) + ',' + y(p.expense).toFixed(1));
     svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--ink)" stroke-width="2" ' +
            'stroke-dasharray="5 4" opacity="' + (trendSel ? '.25' : '.78') + '"/>';
+    // "Everything" because the year-ago line is the whole month either way —
+    // it does not narrow when a category is selected, and saying so keeps it
+    // from being read as that category's own history.
     prior.forEach((p, i) => {
-      svg += '<circle cx="' + (PL + band * i + band / 2).toFixed(1) + '" cy="' + y(p.expense).toFixed(1) +
-             '" r="3.5" fill="var(--bg-panel)" stroke="var(--ink)" stroke-width="2"' +
-             (trendSel ? ' opacity=".25"' : '') + '>' +
-             '<title>' + p.month + ': ' + money(p.expense) + '</title></circle>';
+      svg += priorDot((PL + band * i + band / 2).toFixed(1), y(p.expense).toFixed(1),
+        'Everything, a year earlier', p.month, p.expense, !!trendSel);
     });
   }
   svg += '</svg>';
@@ -2367,12 +2399,13 @@ function pieWindow() {
     const idx = trendData.all.findIndex(x => x.month === month);
     const row = idx > -1 ? trendData.prior[idx] : null;
     if (!row) return null;
+    const at = row.month;
     const cat = trendSel && trendSel.cat;
     const kids = cat ? categoryList.filter(c => c.parentSlug === cat).map(c => c.slug) : null;
-    if (!kids) return row.expense || 0;
+    if (!kids) return { month: at, amount: row.expense || 0 };
     let sum = (row.byCategory || {})[cat] || 0;
     for (const slug of kids) sum += (row.byCategory || {})[slug] || 0;
-    return sum;
+    return { month: at, amount: sum };
   };
 
   const perMonth = scoped.map(m => {
@@ -2384,7 +2417,9 @@ function pieWindow() {
     } else {
       for (const [slug, v] of Object.entries(m.byParent || {})) if (v) row[slug] = v;
     }
-    return { month: m.month, row, prior: priorOf(m.month) };
+    const pr = priorOf(m.month);
+    return { month: m.month, row, prior: pr ? pr.amount : null,
+             priorMonth: pr ? pr.month : null };
   });
 
   return { months: scoped, perMonth, byCat, title: cat ? labelOfSlug(cat) : 'Everything', label,
@@ -2482,9 +2517,8 @@ function pieBarsSvg(entries, w) {
       'stroke-width="2" stroke-dasharray="5 4" opacity=".78"/>';
     months.forEach((m, idx) => {
       if (m.prior === null) return;
-      svg += '<circle class="seg noclick" ' + tipAttrs('A year earlier', m.month, m.prior, 0) +
-        ' cx="' + (PL + band * idx + band / 2).toFixed(1) + '" cy="' + y(m.prior).toFixed(1) +
-        '" r="3.5" fill="var(--bg-panel)" stroke="var(--ink)" stroke-width="2"></circle>';
+      svg += priorDot((PL + band * idx + band / 2).toFixed(1), y(m.prior).toFixed(1),
+        w.title + ', a year earlier', m.priorMonth, m.prior, false);
     });
   }
 
