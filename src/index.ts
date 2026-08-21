@@ -101,6 +101,25 @@ app.post("/api/waitlist", async (c) => {
   }
 });
 
+/**
+ * Nothing under /api is cacheable.
+ *
+ * These responses carried no cache headers at all, which does not mean "do
+ * not cache" — it means the browser may decide for itself, and for a 200 GET
+ * at a stable URL it generally decides yes. /api/budget-plan is the only
+ * endpoint with no query string, so it was the one that visibly broke: a
+ * method was saved, the row was written, and the next read replayed the
+ * response from before the change, showing the old method back again.
+ *
+ * It is also simply wrong to leave somebody's bank balances sitting in a
+ * shared browser cache, so this covers every route rather than the one that
+ * showed the symptom.
+ */
+app.use("/api/*", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "no-store");
+});
+
 app.route("/api/plaid", plaidRoutes);
 app.route("/api", summaryRoutes);
 app.route("/api", categoryRoutes);
