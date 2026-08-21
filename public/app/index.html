@@ -151,6 +151,16 @@
      numbers it sorts, its clear following it as everywhere else. */
   table.data th:last-child .thwrap{ justify-content:flex-end; }
 
+  /* A total for the filtered set, set apart from the rows it totals. */
+  table.data tfoot td{ border-top:1px solid var(--hair-strong); padding-top:11px;
+                       font-size:12.5px; }
+  .tx-total-label{ color:var(--muted); font-family:'IBM Plex Mono', monospace; font-size:11.5px; }
+  .tx-total-label .in{ color:var(--mint); }
+  .tx-total-label .out{ color:var(--coral); }
+  .tx-total{ font-size:14px; color:var(--ink); }
+  .tx-total.in{ color:var(--mint); }
+  .tx-total.out{ color:var(--coral); }
+
   /* ---------- trend chart ---------- */
   .bar-right{ display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
   .zoomctl{ display:inline-flex; align-items:center; gap:8px; }
@@ -1072,7 +1082,21 @@ async function renderTransactions() {
         (t.amount > 0 ? '+' : '') + money(t.amount) + '</td></tr>';
   }).join('');
 
-  host.innerHTML = '<table class="data">' + head + '<tbody>' + rows + '</tbody></table>' +
+  /* The total belongs in the table, on the column it totals, and it counts
+     everything the filters matched rather than the rows that fit on the page.
+     Both sides are named when both exist — a net of zero across a salary and a
+     month of spending is true and tells you nothing. */
+  const s = r.sum || { in: 0, out: 0, net: 0 };
+  const parts = [];
+  if (s.in) parts.push('<span class="in">+' + money(s.in) + ' in</span>');
+  if (s.out) parts.push('<span class="out">' + money(-s.out) + ' out</span>');
+  const foot = '<tfoot><tr>' +
+    '<td class="tx-total-label" colspan="3">' + r.total + ' transaction' + (r.total === 1 ? '' : 's') +
+      (parts.length > 1 ? ' · ' + parts.join(' · ') : '') + '</td>' +
+    '<td class="num tx-total' + (s.net > 0 ? ' in' : s.net < 0 ? ' out' : '') + '">' +
+      (s.net > 0 ? '+' : '') + money(s.net) + '</td></tr></tfoot>';
+
+  host.innerHTML = '<table class="data">' + head + '<tbody>' + rows + '</tbody>' + foot + '</table>' +
     '<p class="msg" id="tx-msg">' + r.transactions.length + ' of ' + r.total + ' shown' +
     (filtering ? ' · <a href="#" id="tx-clear" style="color:var(--mint-dim)">clear filters</a>' : '') + '.</p>';
 }

@@ -674,6 +674,11 @@ summary.get("/transactions", async (c) => {
 
     let rows;
     let total;
+    // Totals for everything the filters match, not for the page being shown.
+    // Summing the visible rows would read as the answer and quietly be the
+    // answer to a different question whenever the list is capped.
+    let moneyIn = 0;
+    let moneyOut = 0;
 
     if (bucket) {
       // A parent drills into everything beneath it, a leaf into just itself.
@@ -690,13 +695,28 @@ summary.get("/transactions", async (c) => {
       });
       total = matching.length;
       rows = matching.slice(offset, offset + limit);
+      for (const r of matching) {
+        const signed = -Number(r.amount);   // normalised: positive is money in
+        if (signed > 0) moneyIn += signed; else moneyOut += -signed;
+      }
     } else {
-      const [pageRows, totalRows] = await Promise.all([
+      const [pageRows, totals] = await Promise.all([
         page.limit(limit).offset(offset),
-        db.select({ total: sql<number>`count(*)::int` }).from(transactions).where(where),
+        db
+          .select({
+            total: sql<number>`count(*)::int`,
+            // The column is Plaid's way round — positive means money left — so
+            // "in" is the negative side of it and the signs swap here.
+            moneyIn: sql<string>`coalesce(sum(case when ${transactions.amount} < 0 then -${transactions.amount} else 0 end), 0)::text`,
+            moneyOut: sql<string>`coalesce(sum(case when ${transactions.amount} > 0 then ${transactions.amount} else 0 end), 0)::text`,
+          })
+          .from(transactions)
+          .where(where),
       ]);
       rows = pageRows;
-      total = totalRows[0].total;
+      total = totals[0].total;
+      moneyIn = Number(totals[0].moneyIn);
+      moneyOut = Number(totals[0].moneyOut);
     }
 
     // Every description in the period, for the menu on that column. Capped:
@@ -711,6 +731,8 @@ summary.get("/transactions", async (c) => {
     return c.json({
       ok: true,
       total,
+      // Across everything matched, in the reader's convention: positive is in.
+      sum: { in: moneyIn, out: moneyOut, net: moneyIn - moneyOut },
       merchants: merchantRows.map((r) => r.name).filter(Boolean),
       categories: ctx.list,
       transactions: rows.map((r) => {
