@@ -151,15 +151,19 @@
      numbers it sorts, its clear following it as everywhere else. */
   table.data th:last-child .thwrap{ justify-content:flex-end; }
 
-  /* A total for the filtered set, set apart from the rows it totals. */
-  table.data tfoot td{ border-top:1px solid var(--hair-strong); padding-top:11px;
+  /* A total for the filtered set, set apart the way a total is: ruled off
+     above, heavier than the rows, and in plain ink. Mint and coral are the
+     app's verdict colours — good and bad — and a sum is neither. Colouring it
+     made a filtered list of ordinary spending look like a warning. */
+  table.data tfoot td{ border-top:2px solid var(--hair-strong); padding-top:12px;
                        font-size:12.5px; }
-  .tx-total-label{ color:var(--muted); font-family:'IBM Plex Mono', monospace; font-size:11.5px; }
-  .tx-total-label .in{ color:var(--mint); }
-  .tx-total-label .out{ color:var(--coral); }
-  .tx-total{ font-size:14px; color:var(--ink); }
-  .tx-total.in{ color:var(--mint); }
-  .tx-total.out{ color:var(--coral); }
+  .tx-total-label{ color:var(--muted); font-family:'IBM Plex Mono', monospace;
+                   font-size:11.5px; letter-spacing:.06em; text-transform:uppercase; }
+  /* Qualified by the cell, or "table.data tfoot td" outranks it and the total
+     renders smaller than the rows it is totalling. */
+  table.data tfoot td.tx-total{ font-family:'IBM Plex Mono', monospace;
+                                font-size:15px; font-weight:600;
+                                color:var(--ink); letter-spacing:-.01em; }
 
   /* ---------- trend chart ---------- */
   .bar-right{ display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
@@ -1088,12 +1092,12 @@ async function renderTransactions() {
      month of spending is true and tells you nothing. */
   const s = r.sum || { in: 0, out: 0, net: 0 };
   const parts = [];
-  if (s.in) parts.push('<span class="in">+' + money(s.in) + ' in</span>');
-  if (s.out) parts.push('<span class="out">' + money(-s.out) + ' out</span>');
+  if (s.in) parts.push('+' + money(s.in) + ' in');
+  if (s.out) parts.push(money(-s.out) + ' out');
   const foot = '<tfoot><tr>' +
     '<td class="tx-total-label" colspan="3">' + r.total + ' transaction' + (r.total === 1 ? '' : 's') +
       (parts.length > 1 ? ' · ' + parts.join(' · ') : '') + '</td>' +
-    '<td class="num tx-total' + (s.net > 0 ? ' in' : s.net < 0 ? ' out' : '') + '">' +
+    '<td class="num tx-total">' +
       (s.net > 0 ? '+' : '') + money(s.net) + '</td></tr></tfoot>';
 
   host.innerHTML = '<table class="data">' + head + '<tbody>' + rows + '</tbody>' + foot + '</table>' +
