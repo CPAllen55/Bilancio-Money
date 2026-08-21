@@ -241,7 +241,28 @@ function resolveRange(range: string, today: Date) {
     };
   }
 
-  // last-N months, N being any of the offered spans. Generalised from a pair of
+  // span:YYYY-MM..YYYY-MM — an explicit run of whole months. The trend chart is
+  // zoomed to an arbitrary window, and "the transactions behind what I am
+  // looking at" has to mean exactly the months on screen, not the nearest
+  // named range to them.
+  const span = /^span:(\d{4})-(\d{2})\.\.(\d{4})-(\d{2})$/.exec(range);
+  if (span) {
+    const [sy, sm, ey, em] = [Number(span[1]), Number(span[2]) - 1, Number(span[3]), Number(span[4]) - 1];
+    const start = new Date(Date.UTC(sy, sm, 1));
+    const end = new Date(Date.UTC(ey, em + 1, 0));
+    const months = (ey - sy) * 12 + (em - sm) + 1;
+    return {
+      current: { start, end, label: `${MONTH_LABELS[sm]} ${sy} to ${MONTH_LABELS[em]} ${ey}` },
+      previous: {
+        start: new Date(Date.UTC(sy, sm - months, 1)),
+        end: new Date(Date.UTC(sy, sm, 0)),
+        label: "The period before",
+      },
+      daysElapsed: months * 30, daysInPeriod: months * 30,
+    };
+  }
+
+  // last-N months, N being any of the offered spans.
   // hard-coded cases so a new span is an entry in a menu rather than a branch.
   const lastN = /^last-(3|6|12|24)$/.exec(range);
   if (lastN) {

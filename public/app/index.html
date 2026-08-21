@@ -222,6 +222,30 @@
   .danger-btn{ color:var(--coral); border-color:rgba(255,92,114,.45); }
   .danger-btn:hover{ color:#fff; background:var(--coral); border-color:var(--coral); }
 
+  /* ---------- pie ---------- */
+  .pie-head{ margin-bottom:14px; }
+  .pie-wrap{ display:flex; gap:24px; align-items:flex-start; }
+  .pie-chart{ flex:0 0 auto; }
+  .pie-key{ display:flex; flex-direction:column; gap:1px; margin-top:10px; max-width:220px; }
+  /* Slices answer to the same gesture as the bars above, so they look the same
+     when hovered and when held. */
+  .slice{ cursor:pointer; transform-box:fill-box; transform-origin:center;
+          transition:filter .12s ease, transform .12s ease, opacity .12s ease; }
+  .slice:hover, .slice:focus-visible{ filter:brightness(1.3) drop-shadow(0 0 6px currentColor); }
+  .slice:focus-visible{ outline:none; }
+  .slice:hover, .slice:focus-visible, .slice.sel{ transform:scale(1.04); }
+  .slice.sel{ filter:brightness(1.4) drop-shadow(0 0 9px currentColor); }
+  .slice.dim{ opacity:.25; }
+  .pie-tx{ flex:1 1 auto; min-width:0; }
+  .pie-tx .hint{ font-size:12.5px; color:var(--muted); }
+  table.pie-table td{ padding:7px 10px 7px 0; font-size:12.5px; }
+  table.pie-table td:nth-child(2){ overflow:hidden; text-overflow:ellipsis;
+                                   max-width:0; white-space:nowrap; }
+  @media (max-width:760px){
+    .pie-wrap{ flex-direction:column; }
+    .pie-tx{ width:100%; }
+  }
+
   /* ---------- budget vs actual ---------- */
   .bv-card{ padding:16px 0 4px; border-top:1px solid var(--hair); }
   .bv-card:first-child{ border-top:none; padding-top:4px; }
@@ -458,6 +482,7 @@
         </span>
       </div>
       <div class="card"><div id="trend-chart"></div></div>
+      <div class="card" id="trend-pie"></div>
       <div class="card" id="forecast-box" hidden></div>
     </section>
 
@@ -1441,15 +1466,18 @@ async function renderTrend() {
   }
 
   const all = actual.map(m =>
-      ({ month: m.month, byParent: m.byParent || {}, expense: m.expense, income: m.income || 0, projected: false }))
+      ({ month: m.month, byParent: m.byParent || {}, byCategory: m.byCategory || {},
+         expense: m.expense, income: m.income || 0, projected: false }))
     .concat(projected.map(m =>
-      ({ month: m.month, byParent: m.byParent || {}, expense: m.expense, income: m.income || 0, projected: true })));
+      ({ month: m.month, byParent: m.byParent || {}, byCategory: {},
+         expense: m.expense, income: m.income || 0, projected: true })));
 
   trendData = { all: all, prior: prior };
   // A new range is a new question, so the view resets to the whole of it.
   trendVisible = all.length;
   trendOffset = 0;
   trendSel = null;
+  pieSel = null;
 
   drawTrend();
   await renderForecast();
@@ -1685,6 +1713,8 @@ function drawTrend() {
       '<div class="trend-key">' + key + extras + '</div>' +
     '</div>' +
     '<div class="trend-detail" id="trend-detail">' + detailHtml(all, totals) + '</div>';
+
+  drawPie();
 }
 
 /* What a selection actually tells you. Without this a click just changes some
@@ -2134,6 +2164,192 @@ $('bud-list').addEventListener('click', (e) => {
 });
 
 $('bud-range').addEventListener('change', () => { summaryCache = null; txCache = {}; refresh(); });
+
+/* ------------------------------------------------------------------ pie -- */
+
+/* The breakdown of whatever the chart above is showing, and then the rows
+   behind one slice of it.
+
+   It follows the bars rather than having controls of its own: select a parent
+   up there and the pie splits that parent into its children; select nothing and
+   it shows the parents themselves. Two places to say "Food" would be one place
+   too many. */
+let pieSel = null;      // the slice whose transactions are listed
+let pieTxCache = {};
+
+/* Only months that happened. A projection has no transactions behind it, and a
+   pie of forecast figures next to a list of real ones would invite comparing
+   them. */
+function pieWindow() {
+  if (!trendData) return { months: [], byCat: {}, title: '', level: 'parents' };
+  const from = trendOffset, to = trendOffset + trendVisible;
+  const months = trendData.all.slice(from, to).filter(m => !m.projected);
+
+  // A month selected in the chart narrows the pie to that month alone.
+  const scoped = trendSel && trendSel.month
+    ? months.filter(m => m.month === trendSel.month)
+    : months;
+
+  const cat = trendSel && trendSel.cat;
+  const kids = cat ? categoryList.filter(c => c.parentSlug === cat).map(c => c.slug) : null;
+
+  const byCat = {};
+  for (const m of scoped) {
+    if (kids) {
+      // Inside one parent: its children, from the leaf-level figures.
+      for (const slug of kids) {
+        const v = (m.byCategory || {})[slug] || 0;
+        if (v) byCat[slug] = (byCat[slug] || 0) + v;
+      }
+      // Spending filed directly on the parent rather than on a child.
+      const direct = (m.byCategory || {})[cat] || 0;
+      if (direct) byCat[cat] = (byCat[cat] || 0) + direct;
+    } else {
+      for (const [slug, v] of Object.entries(m.byParent || {})) {
+        if (v) byCat[slug] = (byCat[slug] || 0) + v;
+      }
+    }
+  }
+
+  const label = scoped.length === 1 ? monthLabel(scoped[0].month)
+    : scoped.length ? monthLabel(scoped[0].month) + ' – ' + monthLabel(scoped[scoped.length - 1].month)
+    : 'nothing in view';
+
+  return { months: scoped, byCat, title: cat ? labelOfSlug(cat) : 'Everything', label,
+           level: cat ? 'children' : 'parents' };
+}
+
+function arcPath(cx, cy, r, a0, a1) {
+  const p = (a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  const [x0, y0] = p(a0), [x1, y1] = p(a1);
+  const large = a1 - a0 > Math.PI ? 1 : 0;
+  return 'M' + cx + ',' + cy + ' L' + x0.toFixed(1) + ',' + y0.toFixed(1) +
+    ' A' + r + ',' + r + ' 0 ' + large + ' 1 ' + x1.toFixed(1) + ',' + y1.toFixed(1) + ' Z';
+}
+
+function drawPie() {
+  const host = $('trend-pie');
+  if (!host) return;
+  const w = pieWindow();
+  const entries = Object.keys(w.byCat).map(s => [s, w.byCat[s]])
+    .filter(e => e[1] > 0).sort((a, b) => b[1] - a[1]);
+
+  if (pieSel && !entries.some(e => e[0] === pieSel)) pieSel = null;
+
+  if (!entries.length) {
+    host.innerHTML = '<p class="empty">Nothing to break down in this window.</p>';
+    return;
+  }
+
+  const total = entries.reduce((s, e) => s + e[1], 0);
+  const R = 92, CX = 110, CY = 110;
+  let angle = -Math.PI / 2;
+
+  const slices = entries.map(([slug, v]) => {
+    const sweep = (v / total) * Math.PI * 2;
+    const a0 = angle, a1 = angle + sweep;
+    angle = a1;
+    const on = pieSel === slug;
+    return '<path class="slice' + (on ? ' sel' : '') + (pieSel && !on ? ' dim' : '') + '" ' +
+      'd="' + arcPath(CX, CY, R, a0, a1) + '" fill="' + colourOf(slug) + '" ' +
+      'style="color:' + colourOf(slug) + '" data-slice="' + escapeHtml(slug) + '" ' +
+      'tabindex="0" role="button">' +
+      '<title>' + escapeHtml(labelOfSlug(slug)) + ': ' + money(v) +
+      ' (' + ((v / total) * 100).toFixed(1) + '%)</title></path>';
+  }).join('');
+
+  const legend = entries.map(([slug, v]) =>
+    '<button type="button" class="kitem" data-slice="' + escapeHtml(slug) + '" ' +
+    'aria-pressed="' + (pieSel === slug ? 'true' : 'false') + '">' +
+    '<span class="kswatch" style="background:' + colourOf(slug) + '"></span>' +
+    '<span class="klabel">' + escapeHtml(labelOfSlug(slug)) + '</span>' +
+    '<span class="kamt">' + ((v / total) * 100).toFixed(0) + '%</span></button>').join('');
+
+  host.innerHTML =
+    '<div class="pie-head"><p class="eyebrow">' + escapeHtml(w.title) + ' · ' + escapeHtml(w.label) + '</p>' +
+      '<p class="fc-method" style="margin:5px 0 0">' +
+      (w.level === 'children'
+        ? 'Split into what is inside it. Pick a slice for the transactions behind it.'
+        : 'Every parent category in view. Select a bar above to open one up.') +
+      '</p></div>' +
+    '<div class="pie-wrap">' +
+      '<div class="pie-chart">' +
+        '<svg viewBox="0 0 220 220" width="220" height="220" role="img" ' +
+        'aria-label="Share of spending by category">' + slices +
+        '<circle cx="' + CX + '" cy="' + CY + '" r="46" fill="var(--surface)"/>' +
+        '<text x="' + CX + '" y="' + (CY - 4) + '" text-anchor="middle" font-family="IBM Plex Mono" ' +
+          'font-size="13" fill="var(--ink)">' + money0(total) + '</text>' +
+        '<text x="' + CX + '" y="' + (CY + 13) + '" text-anchor="middle" font-family="IBM Plex Mono" ' +
+          'font-size="9.5" fill="var(--muted)">total</text>' +
+        '</svg>' +
+        '<div class="pie-key">' + legend + '</div>' +
+      '</div>' +
+      '<div class="pie-tx" id="pie-tx"></div>' +
+    '</div>';
+
+  drawPieTx();
+}
+
+async function drawPieTx() {
+  const box = $('pie-tx');
+  if (!box) return;
+  if (!pieSel) {
+    box.innerHTML = '<p class="hint">Pick a slice to see the transactions behind it.</p>';
+    return;
+  }
+
+  const w = pieWindow();
+  if (!w.months.length) { box.innerHTML = '<p class="hint">No months in view.</p>'; return; }
+  const range = 'span:' + w.months[0].month + '..' + w.months[w.months.length - 1].month;
+  const key = range + '|' + pieSel;
+
+  box.innerHTML = '<p class="hint">Loading…</p>';
+  try {
+    if (!pieTxCache[key]) {
+      pieTxCache[key] = await authed('/api/transactions?range=' + encodeURIComponent(range) +
+        '&bucket=' + encodeURIComponent(pieSel) + '&limit=50');
+    }
+    const r = pieTxCache[key];
+    if (pieSel === null) return;
+
+    if (!r.transactions.length) {
+      box.innerHTML = '<p class="hint">Nothing in ' + escapeHtml(labelOfSlug(pieSel)) + ' for these months.</p>';
+      return;
+    }
+    box.innerHTML =
+      '<p class="eyebrow">' + escapeHtml(labelOfSlug(pieSel)) + ' · ' + r.total + ' transaction' +
+        (r.total === 1 ? '' : 's') + '</p>' +
+      '<table class="data pie-table"><tbody>' +
+      r.transactions.map(t =>
+        '<tr><td class="num" style="color:var(--muted)">' + t.date + '</td>' +
+        '<td>' + escapeHtml(t.name) + '</td>' +
+        '<td class="num' + (t.amount > 0 ? ' in' : '') + '">' +
+          (t.amount > 0 ? '+' : '') + money(t.amount) + '</td></tr>').join('') +
+      '</tbody></table>' +
+      (r.total > r.transactions.length
+        ? '<p class="hint">' + (r.total - r.transactions.length) + ' more not shown.</p>'
+        : '');
+  } catch (err) {
+    box.innerHTML = '<p class="hint">' + escapeHtml(err.message) + '</p>';
+  }
+}
+
+/* Slice and legend entry are the same gesture on the same thing. */
+$('trend-pie').addEventListener('click', (e) => {
+  const hit = e.target.closest('[data-slice]');
+  if (!hit) return;
+  pieSel = pieSel === hit.dataset.slice ? null : hit.dataset.slice;
+  drawPie();
+});
+
+$('trend-pie').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const hit = e.target.closest('[data-slice]');
+  if (!hit) return;
+  e.preventDefault();
+  pieSel = pieSel === hit.dataset.slice ? null : hit.dataset.slice;
+  drawPie();
+});
 
 /* -------------------------------------------------------------- forecast -- */
 
