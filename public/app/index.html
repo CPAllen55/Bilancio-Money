@@ -2109,9 +2109,24 @@ async function renderBudgeting() {
   void sel;
 }
 
+/* Saves in flight. The redraw waits for the last of them.
+ *
+ * Every change used to redraw the whole list as soon as its own save landed,
+ * which rebuilt every <select> on the page. Change a second category while the
+ * first is still saving and the rebuild replaced the menu under the pointer —
+ * the choice looked like it had been rejected, when it was on its way to the
+ * server and arrived a moment later.
+ *
+ * Now the list holds still until nothing is pending, so what you picked stays
+ * picked while it saves.
+ */
+let planSaving = 0;
+
 async function savePlan(slug, method, manualAmount) {
   const msg = $('plan-msg');
+  planSaving++;
   say(msg, 'Saving…');
+  let failed = null;
   try {
     await authed('/api/budget-plan', {
       method: 'PUT',
@@ -2120,16 +2135,24 @@ async function savePlan(slug, method, manualAmount) {
     });
     // The budget these methods produce is what every other tab reads.
     summaryCache = null;
-    await renderBudgeting();
-    // Switching to manual asks for a number, so the cursor goes where the
-    // number belongs rather than leaving an empty box to be found.
-    if (method === 'manual') {
-      const box = $('plan-list').querySelector('.bp-amount[data-slug="' + slug + '"]');
-      if (box) { box.focus(); box.select(); }
-    }
-    say(msg, 'Saved.', 'good');
   } catch (err) {
-    say(msg, err.message, 'bad');
+    failed = err;
+  } finally {
+    planSaving--;
+  }
+
+  if (failed) { say(msg, failed.message, 'bad'); return; }
+  say(msg, 'Saved.', 'good');
+
+  // Someone else is still saving; let them do the redrawing when they finish.
+  if (planSaving > 0) return;
+  await renderBudgeting();
+
+  // Switching to manual asks for a number, so the cursor goes where the
+  // number belongs rather than leaving an empty box to be found.
+  if (method === 'manual') {
+    const box = $('plan-list').querySelector('.bp-amount[data-slug="' + slug + '"]');
+    if (box) { box.focus(); box.select(); }
   }
 }
 
