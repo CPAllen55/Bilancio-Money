@@ -53,6 +53,38 @@
 
   /* ---------- tabs ---------- */
   .tabs{ display:flex; gap:8px; flex-wrap:wrap; padding:20px 0 0; }
+
+  /* The mark, in the empty corner beside the tabs.
+   *
+   * Positioned rather than in flow: at its own height it would push the whole
+   * dashboard down on every tab, and the space it occupies is space the layout
+   * was not using anyway. Inert, so it can never take a click meant for
+   * something underneath, and decorative — the wordmark in the header already
+   * names the app, so a second reading of it here is noise to a screen reader.
+   *
+   * The tabs reserve room for it rather than flowing under it, which is what
+   * the wrapping row would otherwise do as the window narrows.
+   */
+  #app{ position:relative; }
+  /* Sized by what is beneath it rather than by taste: Transactions and Banks put
+     a card straight after the lede with no control bar in between, so their
+     card is the highest thing the mark could ever land on. It stops above that
+     with room to spare — it is painted over the page, so any overlap would be
+     the owl sitting on the card rather than behind it. */
+  .mark{ position:absolute; top:14px; right:0; width:100px; height:auto;
+         pointer-events:none; user-select:none; }
+  .tabs{ padding-right:116px; }
+
+  @media (max-width:1040px){
+    .mark{ width:84px; }
+    .tabs{ padding-right:98px; }
+  }
+  /* Narrower than this the tabs need the full width more than the corner needs
+     a picture, so it goes rather than squeezing them into three rows. */
+  @media (max-width:860px){
+    .mark{ display:none; }
+    .tabs{ padding-right:0; }
+  }
   .tab{ font-family:'IBM Plex Mono', monospace; font-size:13px; padding:9px 15px;
         border:1px solid var(--hair); border-radius:6px; background:none;
         color:var(--ink-soft); cursor:pointer; }
@@ -526,6 +558,7 @@
   </div>
 
   <div id="app" hidden>
+    <img class="mark" src="/brand/dbowl-mark.png" width="240" height="285" alt="" aria-hidden="true">
     <div class="tabs" id="tabs">
       <button class="tab" data-view="overview" aria-current="true">Overview</button>
       <button class="tab" data-view="trend">Trend</button>
