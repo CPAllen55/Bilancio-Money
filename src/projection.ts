@@ -138,28 +138,76 @@ export async function buildPlan(
 
   // Months where both years hold real numbers — the only honest basis for a
   // growth rate. A month with no prior-year twin says nothing about trend.
-  const comparable = completed.filter((k) => at(k).expense > 0 && at(priorOf(k)).expense > 0);
-  const thisYearSum = comparable.reduce((s, k) => s + at(k).expense, 0);
-  const priorSum = comparable.reduce((s, k) => s + at(priorOf(k)).expense, 0);
+  /* Everything below is computed from the months BEFORE the one being asked
+     about, not from everything known today.
 
-  const hasSeasonal = comparable.length >= 2 && priorSum > 0;
-  const growth = hasSeasonal ? thisYearSum / priorSum : 1;
+     A month that has ended should stop moving. Priced off all available
+     history, last March's expectation changes every time April through August
+     arrive — so a figure you were judged against in April reads differently in
+     August, and nobody can tell whether they did well. Asking only what was
+     known before the month began fixes the answer for good, and for the current
+     month it is the same arithmetic as before because there is nothing later to
+     exclude.
 
-  const recent = completed.filter((k) => at(k).expense > 0).slice(-3);
-  const recentExpense = mean(recent.map((k) => at(k).expense));
-  const recentIncome = mean(completed.slice(-3).map((k) => at(k).income).filter((v) => v > 0));
-  const recentShape: Record<string, number> = {};
-  if (recent.length) {
-    for (const k of recent) {
-      for (const [slug, v] of Object.entries(at(k).byCategory)) {
-        if (!v || ctx.kindOfSlug.get(slug) !== "spend") continue;
-        recentShape[slug] = (recentShape[slug] ?? 0) + v;
+     Memoised per month: the same month is asked about repeatedly across a
+     range, and the buckets are already in memory, so this is arithmetic rather
+     than another read. */
+  const basisCache = new Map<string, Basis>();
+
+  interface Basis {
+    hasSeasonal: boolean;
+    growth: number;
+    comparableMonths: number;
+    recentExpense: number;
+    recentIncome: number;
+    recentShape: Record<string, number>;
+  }
+
+  function basisBefore(month: string): Basis {
+    const hit = basisCache.get(month);
+    if (hit) return hit;
+
+    const known = completed.filter((k) => k < month);
+
+    const comparable = known.filter((k) => at(k).expense > 0 && at(priorOf(k)).expense > 0);
+    const thisYearSum = comparable.reduce((s, k) => s + at(k).expense, 0);
+    const priorSum = comparable.reduce((s, k) => s + at(priorOf(k)).expense, 0);
+    const hasSeasonal = comparable.length >= 2 && priorSum > 0;
+
+    const recent = known.filter((k) => at(k).expense > 0).slice(-3);
+    const recentShape: Record<string, number> = {};
+    if (recent.length) {
+      for (const k of recent) {
+        for (const [slug, v] of Object.entries(at(k).byCategory)) {
+          if (!v || ctx.kindOfSlug.get(slug) !== "spend") continue;
+          recentShape[slug] = (recentShape[slug] ?? 0) + v;
+        }
+      }
+      for (const slug of Object.keys(recentShape)) {
+        recentShape[slug] = Math.round(recentShape[slug] / recent.length);
       }
     }
-    for (const slug of Object.keys(recentShape)) {
-      recentShape[slug] = Math.round(recentShape[slug] / recent.length);
-    }
+
+    const basis: Basis = {
+      hasSeasonal,
+      growth: hasSeasonal ? thisYearSum / priorSum : 1,
+      comparableMonths: now.comparableMonths,
+      recentExpense: mean(recent.map((k) => at(k).expense)),
+      recentIncome: mean(known.slice(-3).map((k) => at(k).income).filter((v) => v > 0)),
+      recentShape,
+    };
+    basisCache.set(month, basis);
+    return basis;
   }
+
+  // Headline figures describe the position as of now, which is what the
+  // forecast and the method labels are about.
+  // The headline figures describe the position as of now — which is the basis
+  // for the current month, since completed months are by definition before it.
+  const now = basisBefore(currentKey);
+  const hasSeasonal = now.hasSeasonal;
+  const growth = now.growth;
+  const recentExpense = now.recentExpense;
 
   const method: PlanMethod = hasSeasonal
     ? "seasonal-growth"
@@ -171,30 +219,31 @@ export async function buildPlan(
     method,
     growth,
     growthPct: hasSeasonal ? Math.round((growth - 1) * 1000) / 10 : null,
-    comparableMonths: comparable.length,
+    comparableMonths: now.comparableMonths,
     monthsOfHistory: completed.filter((k) => at(k).expense > 0).length,
 
     for(month: string): MonthPlan {
+      const b = basisBefore(month);
       const priorKey = priorOf(month);
       const prior = at(priorKey);
       // Same reasoning as above: a partial month is no basis for its twin a
       // year later either.
-      const seasonal = hasSeasonal && prior.expense > 0 && usable(priorKey);
+      const seasonal = b.hasSeasonal && prior.expense > 0 && usable(priorKey);
 
       if (seasonal) {
         return {
           month, seasonal: true,
-          expense: Math.round(prior.expense * growth),
-          income: prior.income > 0 ? Math.round(prior.income * growth) : Math.round(recentIncome),
-          byCategory: scaleSpend(prior.byCategory, growth, ctx),
+          expense: Math.round(prior.expense * b.growth),
+          income: prior.income > 0 ? Math.round(prior.income * b.growth) : Math.round(b.recentIncome),
+          byCategory: scaleSpend(prior.byCategory, b.growth, ctx),
         };
       }
 
       return {
         month, seasonal: false,
-        expense: Math.round(recentExpense),
-        income: Math.round(recentIncome),
-        byCategory: { ...recentShape },
+        expense: Math.round(b.recentExpense),
+        income: Math.round(b.recentIncome),
+        byCategory: { ...b.recentShape },
       };
     },
   };

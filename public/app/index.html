@@ -2551,6 +2551,10 @@ $('tabs').addEventListener('click', (e) => {
   document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-current', String(t === btn)));
   document.querySelectorAll('.panel').forEach(p =>
     p.setAttribute('aria-current', String(p.id === 'v-' + btn.dataset.view)));
+  // Budgeting sets rules rather than reading a window, and the rules apply to
+  // this month onward whatever the page period says. Leaving the control on
+  // screen invites the reasonable belief that it changes something here.
+  $('range').closest('.bar').hidden = btn.dataset.view === 'budgeting';
   refresh();
 });
 

@@ -123,6 +123,14 @@ export interface HistoryLookup {
   completed: string[];
   /** The most recent completed month, or null. */
   lastComplete: string | null;
+  /**
+   * Completed months strictly before the given one.
+   *
+   * A budget for a month that has ended must not move when later months arrive,
+   * or the figure somebody was judged against in April reads differently in
+   * August. Every method reads through this rather than the whole list.
+   */
+  before(month: string): string[];
 }
 
 /**
@@ -148,13 +156,13 @@ export function budgetForLeaf(
       return manualAmount;
 
     case "previous": {
-      if (!history.lastComplete) return null;
-      return Math.round(history.at(slug, history.lastComplete));
+      const known = history.before(month);
+      if (!known.length) return null;
+      return Math.round(history.at(slug, known[known.length - 1]));
     }
 
     case "average": {
-      const vals = history.completed.map((m) => history.at(slug, m));
-      const t = trimmedMean(vals);
+      const t = trimmedMean(history.before(month).map((m) => history.at(slug, m)));
       return t > 0 ? Math.round(t) : null;
     }
 
@@ -170,7 +178,7 @@ export function budgetForLeaf(
     default: {
       const expected = plan.for(month).byCategory[slug];
       if (expected != null && expected > 0) return Math.round(expected);
-      const t = trimmedMean(history.completed.map((m) => history.at(slug, m)));
+      const t = trimmedMean(history.before(month).map((m) => history.at(slug, m)));
       return t > 0 ? Math.round(t) : null;
     }
   }

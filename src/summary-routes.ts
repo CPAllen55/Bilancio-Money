@@ -469,6 +469,7 @@ async function budgetFor(
     at,
     completed,
     lastComplete: completed.length ? completed[completed.length - 1] : null,
+    before: (month) => completed.filter((k) => k < month),
   };
 
   const leaves = ctx.list.filter((c) => c.parentSlug && c.kind === "spend");
