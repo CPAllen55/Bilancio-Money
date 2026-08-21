@@ -208,6 +208,12 @@
      below shows a shape, and the way into the transactions is the share view. */
   .seg.noclick{ cursor:default; }
 
+  /* The figure above a stack reacts like the stack does — grown and brightened
+     rather than glowing, because a drop-shadow on 10px type reads as a smudge. */
+  .stacktotal{ transform-box:fill-box; transform-origin:center; cursor:default;
+               transition:transform .12s ease, fill .12s ease; }
+  .stacktotal:hover, .stacktotal.sel{ transform:scale(1.22); fill:var(--ink); }
+
   /* The hover box. Bigger than a native tooltip because it is doing more than
      naming a thing — it gives the amount at a size worth reading and says what
      share of the month it was. */
@@ -264,13 +270,21 @@
               letter-spacing:.06em; text-transform:uppercase; }
   .pie-head{ display:flex; align-items:flex-start; justify-content:space-between;
              gap:16px; margin-bottom:14px; flex-wrap:wrap; }
-  .pie-nav{ display:flex; align-items:center; gap:2px; flex:none; }
+  /* The gap between the two cards, with the control centred in it. The spacing
+     that used to be a margin on the lower card now comes from here, so the
+     control reads as belonging to neither and moving between them. */
+  .pie-switch{ display:flex; justify-content:center; margin:18px 0; }
+  .pie-nav{ display:flex; align-items:center; gap:4px; flex:none;
+            background:var(--surface); border:1px solid var(--hair);
+            border-radius:999px; padding:4px 6px; }
   .pie-arrow{ width:28px; height:28px; padding:0; font-size:16px; line-height:1;
+              border-radius:999px; border-color:transparent;
               display:inline-flex; align-items:center; justify-content:center; }
   /* The name between the arrows says which of the two you are on — without it
      the arrows point at nothing in particular. */
-  .pie-viewname{ min-width:86px; text-align:center; font-family:'IBM Plex Mono', monospace;
+  .pie-viewname{ min-width:250px; text-align:center; font-family:'IBM Plex Mono', monospace;
                  font-size:12px; color:var(--mint); }
+  @media (max-width:560px){ .pie-viewname{ min-width:0; font-size:11px; } }
   
   .pie-wrap{ display:flex; gap:24px; align-items:flex-start; }
   .pie-chart{ flex:0 0 auto; max-width:100%; }
@@ -552,7 +566,8 @@
         </span>
       </div>
       <div class="card"><div id="trend-chart"></div></div>
-      <div class="card trend-below" id="trend-pie"></div>
+      <div class="pie-switch" id="pie-switch"></div>
+      <div class="card" id="trend-pie"></div>
       <div class="card trend-below" id="forecast-box" hidden></div>
     </section>
 
@@ -1269,12 +1284,21 @@ function tipAttrs(label, month, amount, ofTotal) {
     ' data-tip-of="' + (ofTotal || 0) + '"';
 }
 
-/* The month's total, above its bar. Skipped where the bars are too close
-   together for the numbers to sit apart — a row of overlapping figures is worse
-   than no figures. */
-function stackTotal(cx, topY, total, band) {
+/* The month's total, above its bar, and live like the bar is.
+ *
+ * It stands for the whole stack, so hovering it should behave the way hovering
+ * a segment does — it grows, brightens, and raises the same box. Sitting inert
+ * above something that reacts made it look like a caption rather than part of
+ * the chart.
+ *
+ * Skipped where the bars are too close together for the numbers to sit apart:
+ * a row of overlapping figures is worse than no figures.
+ */
+function stackTotal(cx, topY, total, band, month, label, selected) {
   if (band < 52) return '';
-  return '<text x="' + cx.toFixed(1) + '" y="' + (topY - 7).toFixed(1) + '" text-anchor="middle" ' +
+  return '<text class="stacktotal' + (selected ? ' sel' : '') + '" ' +
+    tipAttrs(label || 'Everything', month, total, 0) +
+    ' x="' + cx.toFixed(1) + '" y="' + (topY - 8).toFixed(1) + '" text-anchor="middle" ' +
     'font-family="IBM Plex Mono" font-size="10.5" fill="var(--ink-soft)">' + money0(total) + '</text>';
 }
 
@@ -1491,7 +1515,10 @@ function drawTrend() {
       acc += v;
     });
 
-    if (m.expense > 0) svg += stackTotal(cx, y(m.expense), m.expense, band);
+    if (m.expense > 0) {
+      svg += stackTotal(cx, y(m.expense), m.expense, band, m.month, 'Everything',
+        !!(trendSel && trendSel.month === m.month));
+    }
 
     if (i % every === 0 || i === all.length - 1) {
       const parts = m.month.split('-');
@@ -2285,8 +2312,8 @@ let pieSel = null;      // the slice whose transactions are listed
 /* 'bars' first: how a category moves month to month is the more useful first
    look, and its share is a step away rather than the other way round. */
 const PIE_VIEWS = [
-  { id: 'bars', label: 'By month' },
-  { id: 'pie', label: 'Share' },
+  { id: 'bars', label: 'Detailed Bar Chart' },
+  { id: 'pie', label: 'Detailed Pie Chart with Transactions' },
 ];
 let pieView = 'bars';
 let pieTxCache = {};
@@ -2435,7 +2462,7 @@ function pieBarsSvg(entries, w) {
       acc += v;
     }
 
-    if (monthTotal > 0) svg += stackTotal(cx, y(monthTotal), monthTotal, band);
+    if (monthTotal > 0) svg += stackTotal(cx, y(monthTotal), monthTotal, band, m.month, w.title, false);
 
     if (idx % every === 0 || idx === months.length - 1) {
       const parts = m.month.split('-');
@@ -2520,8 +2547,10 @@ function drawPie() {
 
   // Two views, so either arrow goes to the other one. Kept as a pair anyway —
   // a single button would not say that there is something on both sides.
+  // Drawn into the gap between the two cards: it belongs to neither and moves
+  // between them, so it sits where that reads.
   const at = PIE_VIEWS.findIndex(v => v.id === pieView);
-  const step = '<div class="pie-nav">' +
+  $('pie-switch').innerHTML = '<div class="pie-nav">' +
     '<button type="button" class="pie-arrow" data-pie-step="-1" aria-label="Previous view">‹</button>' +
     '<span class="pie-viewname">' + escapeHtml(PIE_VIEWS[at].label) + '</span>' +
     '<button type="button" class="pie-arrow" data-pie-step="1" aria-label="Next view">›</button>' +
@@ -2564,7 +2593,6 @@ function drawPie() {
         '<b>' + escapeHtml(w.title) + '</b>' +
         '<span class="pie-range">' + escapeHtml(w.label) + '</span>' +
         '<p class="fc-method" style="margin:5px 0 0;width:100%">' + note + '</p></div>' +
-      step +
     '</div>' + body;
 
   if (pieView === 'pie') drawPieTx();
@@ -2621,10 +2649,12 @@ function stepPieView(by) {
   drawPie();
 }
 
-$('trend-pie').addEventListener('click', (e) => {
+$('pie-switch').addEventListener('click', (e) => {
   const arrow = e.target.closest('[data-pie-step]');
-  if (arrow) { stepPieView(Number(arrow.dataset.pieStep)); return; }
+  if (arrow) stepPieView(Number(arrow.dataset.pieStep));
+});
 
+$('trend-pie').addEventListener('click', (e) => {
   const hit = e.target.closest('[data-slice]');
   if (!hit) return;
   pieSel = pieSel === hit.dataset.slice ? null : hit.dataset.slice;
