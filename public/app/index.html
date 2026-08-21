@@ -242,14 +242,14 @@
   .trend-below{ margin-top:22px; }
   .pie-head{ display:flex; align-items:flex-start; justify-content:space-between;
              gap:16px; margin-bottom:14px; flex-wrap:wrap; }
-  .pie-tabs{ display:flex; gap:0; flex:none; border:1px solid var(--hair);
-             border-radius:6px; overflow:hidden; }
-  .pie-tab{ border:none; border-radius:0; padding:7px 14px; font-size:12px; }
-  .pie-tab[aria-pressed="true"]{ background:var(--mint-bg); color:var(--mint); }
-  .pie-tab + .pie-tab{ border-left:1px solid var(--hair); }
-  /* The bars want the width the donut does not, so they take it rather than
-     sitting in a 300px column with room to spare. */
-  .pie-bars{ flex:1 1 380px; min-width:0; max-width:520px; }
+  .pie-nav{ display:flex; align-items:center; gap:2px; flex:none; }
+  .pie-arrow{ width:28px; height:28px; padding:0; font-size:16px; line-height:1;
+              display:inline-flex; align-items:center; justify-content:center; }
+  /* The name between the arrows says which of the two you are on — without it
+     the arrows point at nothing in particular. */
+  .pie-viewname{ min-width:86px; text-align:center; font-family:'IBM Plex Mono', monospace;
+                 font-size:12px; color:var(--mint); }
+  
   .pie-wrap{ display:flex; gap:24px; align-items:flex-start; }
   .pie-chart{ flex:0 0 auto; max-width:100%; }
   /* Fixed size where there is room, shrinking rather than overflowing where
@@ -2195,7 +2195,13 @@ $('bud-list').addEventListener('click', (e) => {
    it shows the parents themselves. Two places to say "Food" would be one place
    too many. */
 let pieSel = null;      // the slice whose transactions are listed
-let pieView = 'pie';    // 'pie' | 'bars' — same data, different question
+/* 'bars' first: how a category moves month to month is the more useful first
+   look, and its share is a step away rather than the other way round. */
+const PIE_VIEWS = [
+  { id: 'bars', label: 'By month' },
+  { id: 'pie', label: 'Share' },
+];
+let pieView = 'bars';
 let pieTxCache = {};
 
 /* Only months that happened. A projection has no transactions behind it, and a
@@ -2264,68 +2270,74 @@ function arcPath(cx, cy, r, a0, a1) {
     ' A' + r + ',' + r + ' 0 ' + large + ' 1 ' + x1.toFixed(1) + ',' + y1.toFixed(1) + ' Z';
 }
 
-/* The same categories as the donut, laid out over time instead of summed.
+/* The chart above, drawn on the children of whatever is selected up there.
  *
- * A donut answers "how is this split", bars answer "is it steady" — and for a
- * category you are worried about, the second is usually the question. Both read
- * the same window and the same selection, so switching between them never
- * changes what is being described, only how.
+ * Same geometry, same padding, same gridlines, same month labels — because it
+ * is the same chart asking a narrower question, and two charts that differ only
+ * in their proportions read as two unrelated things.
+ *
+ * Not clickable, unlike the donut. The transactions behind a category are one
+ * question and its shape over time is another; offering the first from both
+ * places means two ways to open the same list and a selection that has to mean
+ * something in a view that cannot show it.
  */
 function pieBarsSvg(entries, w) {
   const months = w.perMonth;
   if (!months.length) return '<p class="empty">Nothing in these months.</p>';
 
-  const W = 460, H = 300;
-  const PL = 58, PR = 8, PT = 14, PB = 34;
+  // The top chart's dimensions, exactly.
+  const W = 880, H = 320;
+  const PL = 66, PR = 14, PT = 20, PB = 38;
   const plotW = W - PL - PR, plotH = H - PT - PB;
 
   const totals = months.map(m => Object.values(m.row).reduce((s, v) => s + v, 0));
   const peak = Math.max.apply(null, totals.concat([0])) || 1;
-  const mag = Math.pow(10, Math.floor(Math.log10(peak / 3)));
-  const step = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].filter(x => x * mag >= peak / 3)[0] || 10;
-  const yMax = step * mag * 3;
+  const mag = Math.pow(10, Math.floor(Math.log10(peak / 4)));
+  const stepMul = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].filter(x => x * mag >= peak / 4)[0] || 10;
+  const yMax = stepMul * mag * 4;
   const y = v => PT + plotH - (v / yMax) * plotH;
   const band = plotW / months.length;
-  const barW = Math.min(38, band * 0.6);
-  const every = Math.ceil(months.length / 8);
+  // 46, as above. The cap was the one number that still differed, and a bar
+  // half the width of the same bar higher up the page is exactly the kind of
+  // difference that makes two charts look unrelated.
+  const barW = Math.min(46, band * 0.55);
+  const every = Math.ceil(months.length / 12);
 
   let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
     '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="' +
     escapeHtml(w.title) + ' by month">';
 
-  for (let i = 0; i <= 3; i++) {
-    const v = (yMax / 3) * i, yy = y(v);
-    svg += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + yy.toFixed(1) + '" y2="' + yy.toFixed(1) +
+  for (let k = 0; k <= 4; k++) {
+    const v = (yMax / 4) * k, yy = y(v);
+    svg += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + yy + '" y2="' + yy +
       '" stroke="var(--grid)" stroke-width="1"/>' +
-      '<text x="' + (PL - 8) + '" y="' + (yy + 4).toFixed(1) + '" text-anchor="end" ' +
-      'font-family="IBM Plex Mono" font-size="10" fill="var(--muted)">' + money0(v) + '</text>';
+      '<text x="' + (PL - 9) + '" y="' + (yy + 4) + '" text-anchor="end" font-family="IBM Plex Mono" ' +
+      'font-size="10.5" fill="var(--muted)">' + money0(v) + '</text>';
   }
 
   // Stacked in the legend's order, so the colour at the bottom of every bar is
   // the same category and the stack can be read across months.
   const order = entries.map(e => e[0]);
-  months.forEach((m, i) => {
-    const cx = PL + band * i + band / 2;
+  months.forEach((m, idx) => {
+    const cx = PL + band * idx + band / 2;
     let acc = 0;
     for (const slug of order) {
       const v = m.row[slug] || 0;
       if (!v) continue;
       const top = y(acc + v), bot = y(acc);
-      const on = pieSel === slug;
-      svg += '<rect class="slice' + (on ? ' sel' : '') + (pieSel && !on ? ' dim' : '') + '" ' +
-        'data-slice="' + escapeHtml(slug) + '" tabindex="0" role="button" ' +
-        'x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
-        '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 1).toFixed(1) +
-        '" rx="1" fill="' + colourOf(slug) + '" style="color:' + colourOf(slug) + '">' +
-        '<title>' + escapeHtml(labelOfSlug(slug)) + ' · ' + monthLabel(m.month) + ': ' + money(v) +
-        '</title></rect>';
+      svg += '<rect x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
+        '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 2).toFixed(1) +
+        '" fill="' + colourOf(slug) + '" rx="1">' +
+        '<title>' + escapeHtml(labelOfSlug(slug)) + ': ' + money(v) + '</title></rect>';
       acc += v;
     }
-    if (i % every === 0 || i === months.length - 1) {
+
+    if (idx % every === 0 || idx === months.length - 1) {
       const parts = m.month.split('-');
-      svg += '<text x="' + cx.toFixed(1) + '" y="' + (H - PB + 16) + '" text-anchor="middle" ' +
-        'font-family="IBM Plex Mono" font-size="10" fill="var(--muted)">' +
-        MONTH_NAMES[Number(parts[1]) - 1] + '</text>';
+      const label = MONTH_NAMES[Number(parts[1]) - 1] +
+        (parts[1] === '01' || idx === 0 ? " '" + parts[0].slice(2) : '');
+      svg += '<text x="' + cx.toFixed(1) + '" y="' + (H - PB + 18) + '" text-anchor="middle" ' +
+        'font-family="IBM Plex Mono" font-size="10.5" fill="var(--muted)">' + label + '</text>';
     }
   });
 
@@ -2363,12 +2375,18 @@ function drawPie() {
       ' (' + ((v / total) * 100).toFixed(1) + '%)</title></path>';
   }).join('');
 
-  const legend = entries.map(([slug, v]) =>
-    '<button type="button" class="kitem" data-slice="' + escapeHtml(slug) + '" ' +
-    'aria-pressed="' + (pieSel === slug ? 'true' : 'false') + '">' +
-    '<span class="kswatch" style="background:' + colourOf(slug) + '"></span>' +
-    '<span class="klabel">' + escapeHtml(labelOfSlug(slug)) + '</span>' +
-    '<span class="kamt">' + ((v / total) * 100).toFixed(0) + '%</span></button>').join('');
+  // In the bar view the key is a key and nothing more: there is no selection to
+  // make when the chart cannot show one.
+  const legend = entries.map(([slug, v]) => pieView === 'bars'
+    ? '<div class="kitem static">' +
+      '<span class="kswatch" style="background:' + colourOf(slug) + '"></span>' +
+      '<span class="klabel">' + escapeHtml(labelOfSlug(slug)) + '</span>' +
+      '<span class="kamt">' + money0(v) + '</span></div>'
+    : '<button type="button" class="kitem" data-slice="' + escapeHtml(slug) + '" ' +
+      'aria-pressed="' + (pieSel === slug ? 'true' : 'false') + '">' +
+      '<span class="kswatch" style="background:' + colourOf(slug) + '"></span>' +
+      '<span class="klabel">' + escapeHtml(labelOfSlug(slug)) + '</span>' +
+      '<span class="kamt">' + ((v / total) * 100).toFixed(0) + '%</span></button>').join('');
 
   const donut =
     '<svg viewBox="0 0 300 300" width="300" height="300" role="img" ' +
@@ -2380,36 +2398,50 @@ function drawPie() {
       'font-size="11" fill="var(--muted)">total</text>' +
     '</svg>';
 
-  const tab = (id, label) =>
-    '<button type="button" class="pie-tab" data-pie-view="' + id + '" aria-pressed="' +
-    (pieView === id ? 'true' : 'false') + '">' + label + '</button>';
+  // Two views, so either arrow goes to the other one. Kept as a pair anyway —
+  // a single button would not say that there is something on both sides.
+  const at = PIE_VIEWS.findIndex(v => v.id === pieView);
+  const step = '<div class="pie-nav">' +
+    '<button type="button" class="pie-arrow" data-pie-step="-1" aria-label="Previous view">‹</button>' +
+    '<span class="pie-viewname">' + escapeHtml(PIE_VIEWS[at].label) + '</span>' +
+    '<button type="button" class="pie-arrow" data-pie-step="1" aria-label="Next view">›</button>' +
+    '</div>';
+
+  const note = w.level === 'children'
+    ? (pieView === 'bars'
+        ? 'What is inside it, month by month.'
+        : 'What is inside it, as a share. Pick a slice for the transactions behind it.')
+    : 'Every parent category in view. Select a bar above to open one up.';
+
+  // Bars borrow the layout of the chart above as well as its shape: full width
+  // with the key down the side. The share view keeps its own, because a donut
+  // beside a list of transactions is the whole point of it.
+  const body = pieView === 'bars'
+    ? '<div class="trend-wrap">' +
+        '<div class="trend-plot">' + pieBarsSvg(entries, w) + '</div>' +
+        '<div class="trend-key">' + legend + '</div>' +
+      '</div>'
+    : '<div class="pie-wrap">' +
+        '<div class="pie-chart">' + donut + '<div class="pie-key">' + legend + '</div></div>' +
+        '<div class="pie-tx" id="pie-tx"></div>' +
+      '</div>';
 
   host.innerHTML =
     '<div class="pie-head">' +
       '<div><p class="eyebrow">' + escapeHtml(w.title) + ' · ' + escapeHtml(w.label) + '</p>' +
-      '<p class="fc-method" style="margin:5px 0 0">' +
-      (w.level === 'children'
-        ? 'What is inside it — as a share, or month by month. Pick one for the transactions behind it.'
-        : 'Every parent category in view. Select a bar above to open one up.') +
-      '</p></div>' +
-      '<div class="pie-tabs">' + tab('pie', 'Share') + tab('bars', 'By month') + '</div>' +
-    '</div>' +
-    '<div class="pie-wrap">' +
-      '<div class="' + (pieView === 'bars' ? 'pie-bars' : 'pie-chart') + '">' +
-        (pieView === 'bars' ? pieBarsSvg(entries, w) : donut) +
-        '<div class="pie-key">' + legend + '</div>' +
-      '</div>' +
-      '<div class="pie-tx" id="pie-tx"></div>' +
-    '</div>';
+      '<p class="fc-method" style="margin:5px 0 0">' + note + '</p></div>' +
+      step +
+    '</div>' + body;
 
-  drawPieTx();
+  if (pieView === 'pie') drawPieTx();
 }
 
 async function drawPieTx() {
   const box = $('pie-tx');
   if (!box) return;
   if (!pieSel) {
-    box.innerHTML = '<p class="hint">Pick a slice to see the transactions behind it.</p>';
+    box.innerHTML = '<p class="hint">Pick a ' + (pieView === 'bars' ? 'bar' : 'slice') +
+      ' to see the transactions behind it.</p>';
     return;
   }
 
@@ -2449,9 +2481,15 @@ async function drawPieTx() {
   }
 }
 
+function stepPieView(by) {
+  const at = PIE_VIEWS.findIndex(v => v.id === pieView);
+  pieView = PIE_VIEWS[(at + by + PIE_VIEWS.length) % PIE_VIEWS.length].id;
+  drawPie();
+}
+
 $('trend-pie').addEventListener('click', (e) => {
-  const view = e.target.closest('[data-pie-view]');
-  if (view) { pieView = view.dataset.pieView; drawPie(); return; }
+  const arrow = e.target.closest('[data-pie-step]');
+  if (arrow) { stepPieView(Number(arrow.dataset.pieStep)); return; }
 
   const hit = e.target.closest('[data-slice]');
   if (!hit) return;
@@ -2475,8 +2513,7 @@ $('trend-pie').addEventListener('click', (e) => {
     const dy = e.changedTouches[0].clientY - y0;
     x0 = null;
     if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    const next = dx < 0 ? 'bars' : 'pie';
-    if (next !== pieView) { pieView = next; drawPie(); }
+    stepPieView(dx < 0 ? 1 : -1);
   }, { passive: true });
 })();
 
