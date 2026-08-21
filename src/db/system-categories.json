@@ -80,6 +80,22 @@
     "kind": "spend"
   },
   {
+    "slug": "restaurants",
+    "label": "Restaurants",
+    "colour": "#b8431c",
+    "sortOrder": 24,
+    "parent": "food",
+    "kind": "spend"
+  },
+  {
+    "slug": "fast-food",
+    "label": "Fast Food",
+    "colour": "#e69a4a",
+    "sortOrder": 25,
+    "parent": "food",
+    "kind": "spend"
+  },
+  {
     "slug": "home",
     "label": "Home",
     "colour": "#3987e5",
@@ -196,6 +212,14 @@
     "label": "Amazon",
     "colour": "#4fd4a6",
     "sortOrder": 53,
+    "parent": "shopping",
+    "kind": "spend"
+  },
+  {
+    "slug": "wholesale",
+    "label": "Wholesale",
+    "colour": "#0d7a58",
+    "sortOrder": 54,
     "parent": "shopping",
     "kind": "spend"
   },

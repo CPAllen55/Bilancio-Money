@@ -46,6 +46,12 @@ export type Kind = "spend" | "income" | "transfer";
 const BY_DETAILED: Record<string, string> = {
   FOOD_AND_DRINK_GROCERIES: "groceries",
   FOOD_AND_DRINK_COFFEE: "coffee",
+  // Sitting down and grabbing something are different decisions and different
+  // money, so they are different rows. What is left in Dining & Drinks is bars,
+  // liquor and anything Plaid could not place — which is most of what the name
+  // meant anyway.
+  FOOD_AND_DRINK_RESTAURANT: "restaurants",
+  FOOD_AND_DRINK_FAST_FOOD: "fast-food",
   GENERAL_MERCHANDISE_PET_SUPPLIES: "pets",
   RENT_AND_UTILITIES_RENT: "housing",
   RENT_AND_UTILITIES_INTERNET_AND_CABLE: "utilities",
@@ -85,6 +91,29 @@ const BY_DETAILED: Record<string, string> = {
   TRAVEL_FLIGHTS: "airlines",
   LOAN_PAYMENTS_CAR_PAYMENT: "car-payment",
 };
+
+/**
+ * Warehouse clubs, which the taxonomy cannot see.
+ *
+ * There is no wholesale code in Plaid's list. Costco and Sam's Club arrive as
+ * GENERAL_MERCHANDISE_SUPERSTORES, which Plaid documents as "Superstores such
+ * as Target and Walmart" — the same code for the membership warehouse and the
+ * supermarket. The only thing separating them is the name on the transaction.
+ *
+ * So this reads the name, but only where Plaid already decided the row was a
+ * shop of some kind. Costco sells petrol too, and that arrives under
+ * transportation; without the guard a tank of fuel would file itself as a
+ * warehouse run. It also keeps BJ's Restaurants out, since a restaurant is
+ * categorised as one before the name is ever consulted.
+ *
+ * "bj s" is the normalised form of "BJ'S" — merchantKey turns punctuation into
+ * spaces before any of this is matched.
+ */
+const WHOLESALE_MERCHANT =
+  /\bcostco\b|\bsams? club\b|\bsam s club\b|\bbjs\b|\bbj s\b|\bwholesale\b|\bwarehouse club\b/;
+
+/** Only these guesses are open to being re-read as a warehouse club. */
+const WHOLESALE_REFINES = new Set(["general-stores", "groceries", "online-shopping", "other"]);
 
 const BY_PRIMARY: Record<string, string> = {
   FOOD_AND_DRINK: "dining",
@@ -160,7 +189,13 @@ export interface Classified {
   slug: string | null;
 }
 
-export function classify(primary: string | null, detailed: string | null): Classified {
+export function classify(
+  primary: string | null,
+  detailed: string | null,
+  /** The output of merchantKey, not the raw name. Optional: callers that only
+   *  have Plaid's codes still get Plaid's answer. */
+  merchant?: string,
+): Classified {
   if (primary === "INCOME") {
     const slug = (detailed && INCOME_BY_DETAILED[detailed]) || "other-income";
     return { kind: "income", slug };
@@ -180,14 +215,15 @@ export function classify(primary: string | null, detailed: string | null): Class
   }
 
   const fromDetailed = detailed ? BY_DETAILED[detailed] : undefined;
-  if (fromDetailed) return { kind: "spend", slug: fromDetailed };
-
   const fromPrimary = primary ? BY_PRIMARY[primary] : undefined;
-  if (fromPrimary) return { kind: "spend", slug: fromPrimary };
-
   // Unmapped, or Plaid told us nothing. "Other" is visible in the UI, so a
   // wrong guess gets noticed and re-filed rather than quietly vanishing.
-  return { kind: "spend", slug: "other" };
+  const slug = fromDetailed ?? fromPrimary ?? "other";
+
+  if (merchant && WHOLESALE_REFINES.has(slug) && WHOLESALE_MERCHANT.test(merchant)) {
+    return { kind: "spend", slug: "wholesale" };
+  }
+  return { kind: "spend", slug };
 }
 
 /**

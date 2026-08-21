@@ -178,7 +178,10 @@ interface Categorisable {
  * the double-count that keeping transfers out of the totals exists to avoid.
  */
 function resolveSlug(row: Categorisable, ctx: CategoryContext): { kind: string; slug: string | null } {
-  const base = classify(row.categoryPrimary, row.categoryDetailed);
+  // Computed once: the merchant rule looks it up, and the wholesale clubs are
+  // told apart from ordinary superstores by the same normalised name.
+  const key = merchantKey(row.merchantName, row.name);
+  const base = classify(row.categoryPrimary, row.categoryDetailed, key);
 
   // An override is an explicit statement about this one transaction, so it
   // wins over both a merchant rule and Plaid's guess.
@@ -190,7 +193,7 @@ function resolveSlug(row: Categorisable, ctx: CategoryContext): { kind: string; 
   // Rules do not apply to transfers: a merchant rule is about what something
   // is, and a transfer between your own accounts is not a purchase.
   if (base.kind === "spend") {
-    const ruled = ctx.ruleBySlugKey.get(merchantKey(row.merchantName, row.name));
+    const ruled = ctx.ruleBySlugKey.get(key);
     if (ruled) return { kind: ctx.kindOfSlug.get(ruled) ?? "spend", slug: ruled };
   }
 
