@@ -305,41 +305,11 @@
   .net-figure.up{ color:var(--mint); }
   .net-figure.down{ color:var(--coral); }
 
-  /* ---------- category rows ---------- */
-  /* The name column was 120px, which "Transportation" and "Entertainment" ran
-     straight past — the label collided with the bar and shorter two-word names
-     wrapped to two lines. Wide enough for the longest label in the tree, and
-     the bar simply gets what is left. */
-  .crow{ display:grid; grid-template-columns:186px minmax(0,1fr) 110px; gap:14px;
-         align-items:center; padding:10px 0; border-top:1px solid var(--hair); }
-  .crow:first-child{ border-top:none; }
-  .crow .cname{ display:flex; align-items:center; gap:8px; font-size:13.5px;
-                min-width:0; white-space:nowrap; }
-  .crow .cname b, .crow .cname > span:last-child{ overflow:hidden; text-overflow:ellipsis; }
-  .crow .swatch{ width:10px; height:10px; border-radius:2px; flex:none; }
-  .crow .ctrack{ height:8px; background:var(--grid); border-radius:2px; overflow:hidden; }
-  .crow .cfill{ height:100%; border-radius:2px; }
-  .crow .camt{ text-align:right; font-family:'IBM Plex Mono', monospace; font-size:13px; }
-  /* What the category was expected to cost: a marker on the bar and a quiet
-     second line, not a rival bar. The row answers "how much did this cost" and
-     the budget qualifies that answer rather than competing with it. */
-  /* overflow was hidden for the fill; the marker has to stand proud of the
-     bar to be seen at all, and the fill rounds its own corners anyway. */
-  .crow .ctrack{ position:relative; overflow:visible; }
-  .cbud-tick{ position:absolute; top:-3px; bottom:-3px; width:2px; border-radius:1px;
-              background:var(--ink-soft); }
-  .crow .cbud{ display:block; font-size:10.5px; color:var(--muted); margin-top:1px; }
-  .crow .camt.over{ color:var(--coral); }
-  .crow .camt.over .cbud{ color:var(--coral); opacity:.8; }
-  /* Sub-categories are indented and quieter, so the parent reads as the total
-     and the children as its makeup rather than as competing rows. */
-  .crow.child{ border-top:none; padding:4px 0; }
-  .crow.child .cname{ padding-left:18px; font-size:12.5px; color:var(--ink-soft); }
-  .crow.child .ctrack{ height:5px; }
-  .crow.child .camt{ font-size:12px; color:var(--ink-soft); }
-  .crow.parent{ padding-top:14px; }
-  /* Expand/collapse. The ghost keeps parents without children aligned with
-     those that have one, so the labels form a single column either way. */
+  /* The disclosure control and the colour dot outlive the Categories view they
+     were written for — the Tracker uses both. Standing on their own now rather
+     than nested under a row class that no longer exists: as .crow .swatch the
+     dot had no size anywhere else, and would have rendered invisible. */
+  .swatch{ width:10px; height:10px; border-radius:2px; flex:none; }
   .ctog{ width:18px; height:18px; flex:none; padding:0; line-height:1;
          display:inline-flex; align-items:center; justify-content:center;
          font-family:'IBM Plex Mono', monospace; font-size:13px;
@@ -347,25 +317,6 @@
          color:var(--ink-soft); cursor:pointer; }
   .ctog:hover{ color:var(--ink); border-color:var(--mint-dim); }
   .ctog.ghost{ border-color:transparent; cursor:default; }
-  .kidcount{ font-family:'IBM Plex Mono', monospace; font-size:11px;
-             color:var(--muted); border:1px solid var(--hair); border-radius:99px;
-             padding:1px 7px; margin-left:2px; }
-  .ctog.sm{ width:15px; height:15px; font-size:11px; }
-  /* Third level of the same tree: parent, category, then the transactions that
-     add up to the number. Quieter again, and monospaced dates so the rows line
-     up into a column the eye can run down. */
-  .crow.txrow{ border-top:none; padding:2px 0; }
-  .crow.txrow .cname{ padding-left:26px; font-family:'IBM Plex Mono', monospace;
-                      font-size:11.5px; color:var(--muted); }
-  .crow.txrow.nested .cname{ padding-left:49px; }
-  .crow.txrow .txname{ min-width:0; font-size:12.5px; color:var(--ink-soft);
-                       overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .crow.txrow .camt{ font-size:12px; color:var(--ink-soft); }
-  .crow.txrow .camt.in{ color:var(--mint); }
-  .crow.txrow.note .txname{ color:var(--muted); }
-  /* Transfers sit apart from the ranking above — same money, different meaning. */
-  .moved{ margin-top:22px; padding-top:16px; border-top:1px dashed var(--hair-strong); }
-  .moved .camt{ color:var(--ink-soft); }
 
   /* ---------- table ---------- */
   table.data{ width:100%; border-collapse:collapse; font-size:13.5px; }
@@ -427,8 +378,6 @@
   @media (max-width: 900px){ .tiles{ grid-template-columns:repeat(2, minmax(0,1fr)); } }
   @media (max-width: 560px){
     .tiles{ grid-template-columns:minmax(0,1fr); }
-    .crow{ grid-template-columns:100px minmax(0,1fr); }
-    .crow .camt{ grid-column:1 / -1; text-align:left; }
   }
 </style>
 </head>
@@ -458,8 +407,7 @@
       <button class="tab" data-view="overview" aria-current="true">Overview</button>
       <button class="tab" data-view="trend">Trend</button>
       <button class="tab" data-view="net">Net Activity</button>
-      <button class="tab" data-view="budget">Budget</button>
-      <button class="tab" data-view="categories">Categories</button>
+      <button class="tab" data-view="tracker">Tracker</button>
       <button class="tab" data-view="transactions">Transactions</button>
       <button class="tab" data-view="banks">Banks</button>
     </div>
@@ -521,24 +469,13 @@
       <div class="card"><div id="net-chart"></div></div>
     </section>
 
-    <section class="panel" id="v-budget">
+    <section class="panel" id="v-tracker">
       <h2 class="view">Against the plan</h2>
       <p class="lede">How much of each budget has gone. A full bar is the whole budget; past that the bar turns red and a white line marks where the budget ran out, so the red beyond it is the overspend.</p>
       <div class="bar" style="padding-top:0">
         <select class="ctl" id="bud-range" aria-label="Period"></select>
       </div>
       <div id="bud-list" class="bv-list"></div>
-    </section>
-
-    <section class="panel" id="v-categories">
-      <h2 class="view">Where it goes</h2>
-      <p class="lede">Every settled transaction sorted into a bucket. Transfers between your own accounts are excluded — moving money is not spending. Open a category to see what is inside it.</p>
-      <div class="bar" style="padding-top:0">
-        <select class="ctl" id="cat-month" aria-label="Month">
-          <option value="" selected>Use the period above</option>
-        </select>
-      </div>
-      <div class="card" id="cat-list"></div>
     </section>
 
     <section class="panel" id="v-transactions">
@@ -719,8 +656,7 @@ async function refresh() {
     if (view !== 'banks') {
       // Categories may be looking at a month of its own; asking about the page
       // range here as well would thrash a cache that only holds one range.
-      const s = await summaryFor(
-        view === 'categories' ? catRange() : view === 'budget' ? budgetRange() : range());
+      const s = await summaryFor(view === 'tracker' ? budgetRange() : range());
       hasBanks = s.accountsCounted > 0;
       if (!hasBanks) { clearFirstRun(); showFirstRun(view); say(msg, ''); return; }
     }
@@ -729,8 +665,7 @@ async function refresh() {
     if (view === 'overview')     await renderOverview();
     if (view === 'trend')        await renderTrend();
     if (view === 'net')          await renderNet();
-    if (view === 'budget')       await renderBudgetView();
-    if (view === 'categories')   await renderCategories();
+    if (view === 'tracker')      await renderBudgetView();
     if (view === 'transactions') await renderTransactions();
     if (view === 'banks')        await renderBanks();
     say(msg, '');
@@ -895,276 +830,6 @@ async function renderOverview() {
 
   const b = s.budget || { method: 'insufficient-data', months: 1 };
   $('budget-note').textContent = budgetNote(b) + incomeNote(b);
-}
-
-/* Which parents are collapsed. Module-level so it survives a re-render — the
-   list rebuilds on every range change, and having your open sections snap shut
-   because you looked at last month would be its own small annoyance. */
-/* Inverted from "which parents are collapsed" to "which are open", so the
-   default — an empty set — is everything shut. A category list that arrives
-   fully expanded is a wall of thirty rows; shut, it is a dozen totals you can
-   read, and opening one is a deliberate act.
-
-   Cleared on entering the tab, so coming back gives you the same readable list
-   rather than whatever you left open. Range changes do not clear it: having
-   your open sections snap shut because you looked at another month would be
-   its own small annoyance. */
-const expandedParents = new Set();
-
-/* Which categories are showing the transactions behind them. Same reasoning as
-   above, and the same lifetime — changing the range keeps your place. */
-const expandedCats = new Set();
-
-/* Enough to read a category without turning the page, and short enough that a
-   busy one does not bury the categories underneath it. The count of what is
-   not shown is displayed, so nothing goes missing silently. */
-const DRILL_LIMIT = 25;
-
-/* Keyed by range as well as category: the same category holds different rows
-   in a different month. Cleared alongside summaryCache, because re-filing a
-   transaction moves it between categories. */
-let txCache = {};
-
-async function txFor(slug) {
-  const key = catRange() + '|' + slug;
-  if (!txCache[key]) {
-    txCache[key] = await authed('/api/transactions?range=' + encodeURIComponent(catRange()) +
-      '&bucket=' + encodeURIComponent(slug) + '&limit=' + DRILL_LIMIT);
-  }
-  return txCache[key];
-}
-
-function drillToggle(slug, small) {
-  return '<button class="ctog' + (small ? ' sm' : '') + '" type="button" data-drill="1" ' +
-    'data-slug="' + escapeHtml(slug) + '" aria-expanded="' + expandedCats.has(slug) + '" ' +
-    'aria-label="' + (expandedCats.has(slug) ? 'Hide' : 'Show') + ' transactions in ' +
-    escapeHtml(labelOfSlug(slug)) + '">' + (expandedCats.has(slug) ? '−' : '+') + '</button>';
-}
-
-/* The direct children of the category list, filtered by a data attribute.
-   Matching on the attribute value rather than building a CSS selector out of
-   it, because a slug comes partly from user-named categories and does not have
-   to be selector-safe. */
-function catRows(attr, value) {
-  return Array.from($('cat-list').children).filter(el => el.dataset[attr] === value);
-}
-
-function drillRow(slug, parentSlug, hidden, body, extra) {
-  return '<div class="crow txrow' + (parentSlug ? ' nested' : '') + (extra || '') + '"' +
-    ' data-for="' + escapeHtml(slug) + '"' +
-    (parentSlug ? ' data-parent="' + escapeHtml(parentSlug) + '"' : '') +
-    (hidden ? ' hidden' : '') + '>' + body + '</div>';
-}
-
-function drillNote(slug, parentSlug, hidden, text) {
-  return drillRow(slug, parentSlug, hidden,
-    '<div class="cname"></div><div class="txname">' + escapeHtml(text) + '</div><div class="camt"></div>',
-    ' note');
-}
-
-function drillHtml(slug, parentSlug, hidden, res) {
-  if (!res.transactions.length) return drillNote(slug, parentSlug, hidden, 'No transactions here.');
-
-  const rows = res.transactions.map(t =>
-    drillRow(slug, parentSlug, hidden,
-      '<div class="cname">' + escapeHtml(t.date) + '</div>' +
-      '<div class="txname">' + escapeHtml(t.name) +
-        (t.pending ? ' <span class="pill">pending</span>' : '') + '</div>' +
-      '<div class="camt' + (t.amount > 0 ? ' in' : '') + '">' +
-        (t.amount > 0 ? '+' : '') + money(t.amount) + '</div>')
-  ).join('');
-
-  const rest = res.total - res.transactions.length;
-  return rows + (rest > 0
-    ? drillNote(slug, parentSlug, hidden, rest + ' more not shown — the Transactions tab has all of them.')
-    : '');
-}
-
-/* Opens a category into its transactions, or closes it again. The rows are
-   inserted after the category rather than nested inside it, so they share the
-   grid above and the amounts stay in one column all the way down. */
-async function toggleDrill(btn) {
-  const slug = btn.dataset.slug;
-  const row = btn.closest('.crow');
-  const parentSlug = row.dataset.parent || '';
-  const setState = open => {
-    btn.textContent = open ? '−' : '+';
-    btn.setAttribute('aria-expanded', String(open));
-    btn.setAttribute('aria-label', (open ? 'Hide' : 'Show') + ' transactions in ' + labelOfSlug(slug));
-  };
-
-  if (expandedCats.has(slug)) {
-    expandedCats.delete(slug);
-    catRows('for', slug).forEach(el => el.remove());
-    setState(false);
-    return;
-  }
-
-  expandedCats.add(slug);
-  setState(true);
-  row.insertAdjacentHTML('afterend', drillNote(slug, parentSlug, row.hidden, 'Loading…'));
-
-  try {
-    const res = await txFor(slug);
-    // Closed again while the request was in flight, or the list was rebuilt
-    // underneath it. Either way these rows are no longer wanted.
-    if (!expandedCats.has(slug) || !row.isConnected) return;
-    catRows('for', slug).forEach(el => el.remove());
-    row.insertAdjacentHTML('afterend', drillHtml(slug, parentSlug, row.hidden, res));
-  } catch (err) {
-    expandedCats.delete(slug);
-    if (!row.isConnected) return;
-    catRows('for', slug).forEach(el => el.remove());
-    row.insertAdjacentHTML('afterend', drillNote(slug, parentSlug, row.hidden, err.message));
-    setState(false);
-  }
-}
-
-/* Two years of individual months, so "what did March cost me" is answerable.
-   Every other option aggregates to today, which is a different question. */
-function fillCatMonths() {
-  const sel = $('cat-month');
-  if (sel.options.length > 1) return;   // built once
-  const now = new Date();
-  let html = '<option value="">Use the period above</option>';
-  for (let i = 0; i < 24; i++) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
-    const key = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
-    html += '<option value="month:' + key + '">' + MONTH_NAMES[d.getUTCMonth()] + ' ' + d.getUTCFullYear() + '</option>';
-  }
-  sel.innerHTML = html;
-}
-
-/** The range this tab is looking at: its own month if one is chosen, else the page's. */
-function catRange() {
-  return $('cat-month').value || range();
-}
-
-/** Parents ranked by their own total, each with its sub-categories beneath. */
-async function renderCategories() {
-  fillCatMonths();
-  const s = await summaryFor(catRange());
-  const host = $('cat-list');
-
-  const parents = Object.keys(s.totals.byParent || {})
-    .map(slug => [slug, s.totals.byParent[slug]])
-    .filter(p => p[1] > 0)
-    .sort((a, b) => b[1] - a[1]);
-
-  if (!parents.length) { host.innerHTML = '<p class="empty">No categorised spending in this range.</p>'; return; }
-
-  const bud = s.budget || { available: false, byParent: {}, byCategory: {} };
-  // Zero counts as no budget rather than a budget of nothing: every category
-  // you have never used before would otherwise be reported as overspent.
-  const budgetOf = slug => {
-    if (!bud.available) return null;
-    const v = (bud.byParent && bud.byParent[slug]) || (bud.byCategory && bud.byCategory[slug]) || 0;
-    return v > 0 ? v : null;
-  };
-
-  // The bars are scaled to the biggest thing on screen, and once budgets are
-  // drawn a budget can be the biggest thing on screen. Leaving it out of the
-  // scale would push the marker off the end of an under-spent category.
-  const max = Math.max(
-    parents[0][1],
-    ...parents.map(p => budgetOf(p[0]) || 0)
-  );
-
-  const childrenOf = parentSlug => categoryList
-    .filter(c => c.parentSlug === parentSlug)
-    .map(c => [c.slug, s.totals.byCategory[c.slug] || 0])
-    .filter(pair => pair[1] > 0)
-    .sort((a, b) => b[1] - a[1]);
-
-  /* Budget as a marker on the bar and a second line under the amount, rather
-     than as a rival bar. The question a category row answers is "how much did
-     this cost"; the budget qualifies that answer, it does not compete with it. */
-  const budgetMark = slug => {
-    const b = budgetOf(slug);
-    if (!b) return '';
-    return '<div class="cbud-tick" style="left:' + Math.min(100, (b / max) * 100).toFixed(1) +
-      '%" title="expected ' + money(b) + '"></div>';
-  };
-  const amount = (slug, spent) => {
-    const b = budgetOf(slug);
-    const over = b !== null && spent > b;
-    return '<div class="camt' + (over ? ' over' : '') + '">' + money(spent) +
-      (b !== null ? '<span class="cbud">' + (over ? money(spent - b) + ' over' : 'of ' + money(b)) + '</span>' : '') +
-      '</div>';
-  };
-
-  host.innerHTML = parents.map(pair => {
-    const slug = pair[0], total = pair[1], colour = colourOf(slug);
-    const kids = childrenOf(slug);
-    // A single child is the parent restated, so there is nothing to expand.
-    const expandable = kids.length > 1;
-    const open = expandable && expandedParents.has(slug);
-
-    // A parent with more than one child opens into its categories; anything
-    // else has nothing below it but the transactions themselves, so it opens
-    // straight into those. Either way the button means "show what is inside".
-    const toggle = expandable
-      ? '<button class="ctog" type="button" data-slug="' + escapeHtml(slug) + '" aria-expanded="' + open + '" ' +
-        'aria-label="' + (open ? 'Hide' : 'Show') + ' categories inside ' + escapeHtml(labelOfSlug(slug)) + '">' +
-        (open ? '−' : '+') + '</button>'
-      : drillToggle(slug, false);
-
-    const head = '<div class="crow parent">' +
-      '<div class="cname">' + toggle +
-        '<span class="swatch" style="background:' + colour + '"></span>' +
-        '<b>' + escapeHtml(labelOfSlug(slug)) + '</b>' +
-        (expandable && !open ? '<span class="kidcount">' + kids.length + '</span>' : '') + '</div>' +
-      '<div class="ctrack"><div class="cfill" style="width:' + ((total / max) * 100).toFixed(1) +
-        '%;background:' + colour + '"></div>' + budgetMark(slug) + '</div>' +
-      amount(slug, total) + '</div>';
-
-    const rows = expandable ? kids.map(k =>
-      '<div class="crow child" data-parent="' + escapeHtml(slug) + '"' + (open ? '' : ' hidden') + '>' +
-        '<div class="cname">' + drillToggle(k[0], true) +
-          '<span class="swatch" style="background:' + colourOf(k[0]) + '"></span>' +
-          escapeHtml(labelOfSlug(k[0])) + '</div>' +
-        '<div class="ctrack"><div class="cfill" style="width:' + ((k[1] / max) * 100).toFixed(1) +
-          '%;background:' + colourOf(k[0]) + ';opacity:.75"></div>' + budgetMark(k[0]) + '</div>' +
-        amount(k[0], k[1]) + '</div>'
-    ).join('') : '';
-
-    return head + rows;
-  }).join('');
-
-
-  // Transfers, kept visually apart. They are money you still have, so mixing
-  // them into the ranking above would overstate spending — but hiding them
-  // entirely is what makes a large sum look unaccounted for.
-  const moved = Object.keys(s.totals.byTransferCategory || {})
-    .map(slug => [slug, s.totals.byTransferCategory[slug]])
-    .filter(p => p[1] > 0)
-    .sort((a, b) => b[1] - a[1]);
-
-  if (moved.length) {
-    host.innerHTML += '<div class="moved">' +
-      '<p class="eyebrow">Not counted · ' + money(s.totals.transfersMoved) + '</p>' +
-      '<p class="fc-method" style="margin:6px 0 10px">Money moved between your own accounts, card payments, and anything you have marked <b>Ignore this</b>. None of it counts as income or spending, and none of it appears in the trend.</p>' +
-      moved.map(p =>
-        '<div class="crow child"><div class="cname">' + escapeHtml(labelOfSlug(p[0])) + '</div>' +
-        '<div></div><div class="camt">' + money(p[1]) + '</div></div>'
-      ).join('') + '</div>';
-  }
-
-  // Re-open whatever was drilled into before. The rows themselves are gone —
-  // the list was just rebuilt — and for a new range they would be different
-  // rows anyway, so each one refetches.
-  //
-  // Last, after the transfers block: that is appended with innerHTML +=, which
-  // reparses the whole list and would detach anything inserted before it.
-  // Not awaited, because the totals are already on screen and the transactions
-  // can arrive underneath them.
-  for (const slug of Array.from(expandedCats)) {
-    const btn = Array.from(host.querySelectorAll('.ctog[data-drill]'))
-      .find(b => b.dataset.slug === slug);
-    if (!btn) { expandedCats.delete(slug); continue; }
-    expandedCats.delete(slug);  // toggleDrill re-adds it
-    toggleDrill(btn);
-  }
 }
 
 const NEW_CATEGORY = '__new__';
@@ -1393,7 +1058,7 @@ async function refile(txId, categoryId, merchantLabel) {
     body: JSON.stringify({ categoryId: categoryId, applyToMerchant: true })
   });
 
-  summaryCache = null; txCache = {};
+  summaryCache = null;
   if (res.rule) {
     msg.innerHTML = escapeHtml(res.rule.displayName) + ' is now ' + escapeHtml(res.category.label) +
       ' — and so is every future one. <a href="#" id="just-one" style="color:var(--mint-dim)">just this one instead</a>';
@@ -1403,7 +1068,7 @@ async function refile(txId, categoryId, merchantLabel) {
       try {
         await authed('/api/rules/' + encodeURIComponent(res.rule.id), { method: 'DELETE' });
         msg.textContent = 'Rule removed — the change applies to this transaction only.';
-        summaryCache = null; txCache = {};
+        summaryCache = null;
       } catch (err) { say(msg, err.message, 'bad'); }
     });
   } else {
@@ -2212,7 +1877,7 @@ $('bud-list').addEventListener('click', (e) => {
   btn.setAttribute('aria-expanded', String(open));
 });
 
-$('bud-range').addEventListener('change', () => { summaryCache = null; txCache = {}; refresh(); });
+$('bud-range').addEventListener('change', () => { summaryCache = null; refresh(); });
 
 /* ------------------------------------------------------------------ pie -- */
 
@@ -2519,7 +2184,7 @@ $('bank-list').addEventListener('click', async (e) => {
   say(msg, 'Disconnecting…');
   try {
     const res = await authed('/api/plaid/items/' + encodeURIComponent(btn.dataset.item), { method: 'DELETE' });
-    summaryCache = null; txCache = {}; trendData = null; netData = null;
+    summaryCache = null; trendData = null; netData = null;
     await renderBanks();
     say(msg, res.removed + ' disconnected and its data deleted.', 'good');
   } catch (err) {
@@ -2592,7 +2257,7 @@ $('link-bank').addEventListener('click', async () => {
           } else {
             say(msg, 'Done — ' + sync.added + ' transactions in.', 'good');
           }
-          summaryCache = null; txCache = {};
+          summaryCache = null;
           await renderBanks();
         } catch (err) {
           say(msg, err.message, 'bad');
@@ -2640,7 +2305,7 @@ $('sync-now').addEventListener('click', async () => {
     else say(msg, total.added + ' added, ' + total.modified + ' updated, ' + total.removed + ' removed.' +
       (r.more ? ' More history is still waiting — sync again.' : ''), 'good');
 
-    summaryCache = null; txCache = {}; trendData = null; netData = null;
+    summaryCache = null; trendData = null; netData = null;
     await renderBanks();
   } catch (err) {
     say(msg, err.message, 'bad');
@@ -2651,61 +2316,16 @@ $('sync-now').addEventListener('click', async () => {
 
 /* ---------------------------------------------------------------- wiring -- */
 
-/* Delegated, and it toggles the rows in place rather than re-rendering: the
-   numbers have not changed, so refetching them to show three lines would be
-   a round trip for nothing. */
-$('cat-list').addEventListener('click', (e) => {
-  const btn = e.target.closest('.ctog');
-  if (!btn || !btn.dataset.slug) return;
-  if (btn.dataset.drill) toggleDrill(btn); else toggleParent(btn);
-});
-
-function toggleParent(btn) {
-  const slug = btn.dataset.slug;
-  const open = !expandedParents.has(slug);   // about to open if currently shut
-  if (open) expandedParents.add(slug); else expandedParents.delete(slug);
-
-  const inside = catRows('parent', slug);
-  inside.forEach(row => {
-    // Closing hides everything underneath. Re-opening restores the categories
-    // but not the transactions under one that was itself closed — that would
-    // open something the reader never asked to see.
-    row.hidden = !open || (row.classList.contains('txrow') && !expandedCats.has(row.dataset.for));
-  });
-
-  btn.textContent = open ? '−' : '+';
-  btn.setAttribute('aria-expanded', String(open));
-  const label = btn.closest('.cname').querySelector('b');
-  btn.setAttribute('aria-label', (open ? 'Hide' : 'Show') + ' categories inside ' + (label ? label.textContent : slug));
-
-  // Count sits next to the name only while hidden, as a reminder of what is
-  // tucked away. Transactions do not count towards it — the badge is about how
-  // many categories are folded up, not how much is behind them.
-  const existing = btn.closest('.cname').querySelector('.kidcount');
-  if (open) {
-    if (existing) existing.remove();
-  } else if (!existing && label) {
-    const badge = document.createElement('span');
-    badge.className = 'kidcount';
-    badge.textContent = String(inside.filter(r => !r.classList.contains('txrow')).length);
-    label.after(badge);
-  }
-}
-
 $('tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.tab');
   if (!btn) return;
-  // Revisiting the tab resets what is open — the point of shutting them by
-  // default is that the list is readable when you arrive at it.
-  if (btn.dataset.view === 'categories') { expandedParents.clear(); expandedCats.clear(); }
   document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-current', String(t === btn)));
   document.querySelectorAll('.panel').forEach(p =>
     p.setAttribute('aria-current', String(p.id === 'v-' + btn.dataset.view)));
   refresh();
 });
 
-$('range').addEventListener('change', () => { summaryCache = null; txCache = {}; refresh(); });
-$('cat-month').addEventListener('change', () => { summaryCache = null; txCache = {}; refresh(); });
+$('range').addEventListener('change', () => { summaryCache = null; refresh(); });
 $('trend-range').addEventListener('change', refresh);
 // The chart draws the projected months too, so the toggle has to redraw the
 // chart — renderTrend ends by rendering the forecast box anyway. Wiring it
