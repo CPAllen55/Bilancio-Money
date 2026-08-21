@@ -453,18 +453,18 @@ async function budgetFor(
 ) {
   const months = monthsIn(current.start, current.end);
 
-  // Two years of history, so "average" and "previous month" have something to
-  // read that is not the window being budgeted.
-  const historyKeys = monthKeys(24, today);
-  const [plan, buckets, planRows] = await Promise.all([
+  // buildPlan reads the surrounding years for its seasonal basis, and those are
+  // the same months "average" and "previous" want. One scan, read twice.
+  const [plan, planRows] = await Promise.all([
     buildPlan(db, userId, ids, ctx, months, today),
-    monthlyBuckets(db, userId, ids, ctx, historyKeys),
     loadPlanRows(db, userId),
   ]);
+  const buckets = plan.buckets;
 
   const currentKey = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}`;
   const at = (slug: string, month: string) => buckets.get(month)?.byCategory[slug] ?? 0;
-  const completed = historyKeys.filter((k) => k < currentKey && (buckets.get(k)?.expense ?? 0) > 0);
+  const completed = [...buckets.keys()].sort()
+    .filter((k) => k < currentKey && (buckets.get(k)?.expense ?? 0) > 0);
   const history: HistoryLookup = {
     at,
     completed,

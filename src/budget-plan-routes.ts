@@ -16,7 +16,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "./db/client";
 import { budgetPlans } from "./db/schema";
 import { requireUser } from "./auth";
-import { loadCategories, monthKeys, monthlyBuckets, ownedAccountIds } from "./summary-routes";
+import { loadCategories, ownedAccountIds } from "./summary-routes";
 import { buildPlan } from "./projection";
 import type { HistoryLookup } from "./budget-plan";
 import { METHODS, budgetForLeaf, isMethod, loadPlanRows, resolveMethod, shareOut } from "./budget-plan";
@@ -39,16 +39,16 @@ plans.get("/budget-plan", async (c) => {
     // The month being previewed is the one running now: what the chosen method
     // says this month should cost.
     const currentKey = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}`;
-    const historyKeys = monthKeys(24, today);
 
-    const [plan, buckets, rows] = await Promise.all([
+    const [plan, rows] = await Promise.all([
       buildPlan(db, auth.user.id, ids, ctx, [currentKey], today),
-      monthlyBuckets(db, auth.user.id, ids, ctx, historyKeys),
       loadPlanRows(db, auth.user.id),
     ]);
+    const buckets = plan.buckets;
 
     const at = (slug: string, month: string) => buckets.get(month)?.byCategory[slug] ?? 0;
-    const completed = historyKeys.filter((k) => k < currentKey && (buckets.get(k)?.expense ?? 0) > 0);
+    const completed = [...buckets.keys()].sort()
+      .filter((k) => k < currentKey && (buckets.get(k)?.expense ?? 0) > 0);
     const history: HistoryLookup = {
       at, completed,
       lastComplete: completed.length ? completed[completed.length - 1] : null,

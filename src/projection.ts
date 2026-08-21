@@ -33,7 +33,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
 import { transactions } from "./db/schema";
-import type { CategoryContext } from "./summary-routes";
+import type { CategoryContext, MonthBucket } from "./summary-routes";
 import { monthlyBuckets } from "./summary-routes";
 
 export type PlanMethod = "seasonal-growth" | "recent-average" | "insufficient-data";
@@ -49,6 +49,16 @@ export interface MonthPlan {
 }
 
 export interface Plan {
+  /**
+   * The monthly figures this plan was built from.
+   *
+   * Exposed so callers can read history without running the same grouped scan
+   * again. /api/summary was doing exactly that — buildPlan read two to four
+   * years of months, and then the budget read twenty-four more of the same
+   * rows for its averages. Two full passes over the transaction table on every
+   * request, for one set of numbers.
+   */
+  buckets: Map<string, MonthBucket>;
   method: PlanMethod;
   growth: number;
   /** Growth as a percentage, so the front end never handles a bare multiplier. */
@@ -191,7 +201,7 @@ export async function buildPlan(
     const basis: Basis = {
       hasSeasonal,
       growth: hasSeasonal ? thisYearSum / priorSum : 1,
-      comparableMonths: now.comparableMonths,
+      comparableMonths: comparable.length,
       recentExpense: mean(recent.map((k) => at(k).expense)),
       recentIncome: mean(known.slice(-3).map((k) => at(k).income).filter((v) => v > 0)),
       recentShape,
@@ -200,10 +210,8 @@ export async function buildPlan(
     return basis;
   }
 
-  // Headline figures describe the position as of now, which is what the
-  // forecast and the method labels are about.
-  // The headline figures describe the position as of now — which is the basis
-  // for the current month, since completed months are by definition before it.
+  // The headline figures describe the position as of now — the basis for the
+  // current month, since every completed month is by definition before it.
   const now = basisBefore(currentKey);
   const hasSeasonal = now.hasSeasonal;
   const growth = now.growth;
@@ -216,6 +224,7 @@ export async function buildPlan(
       : "insufficient-data";
 
   return {
+    buckets,
     method,
     growth,
     growthPct: hasSeasonal ? Math.round((growth - 1) * 1000) / 10 : null,
