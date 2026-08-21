@@ -223,10 +223,16 @@
   .danger-btn:hover{ color:#fff; background:var(--coral); border-color:var(--coral); }
 
   /* ---------- pie ---------- */
+  /* The breakdown is a separate thought from the chart it describes, so it
+     gets air rather than sitting flush against it. */
+  .trend-below{ margin-top:22px; }
   .pie-head{ margin-bottom:14px; }
   .pie-wrap{ display:flex; gap:24px; align-items:flex-start; }
-  .pie-chart{ flex:0 0 auto; }
-  .pie-key{ display:flex; flex-direction:column; gap:1px; margin-top:10px; max-width:220px; }
+  .pie-chart{ flex:0 0 auto; max-width:100%; }
+  /* Fixed size where there is room, shrinking rather than overflowing where
+     there is not — at 390px the card has 298px inside it and the pie wants 300. */
+  .pie-chart svg{ width:300px; max-width:100%; height:auto; }
+  .pie-key{ display:flex; flex-direction:column; gap:1px; margin-top:12px; max-width:300px; }
   /* Slices answer to the same gesture as the bars above, so they look the same
      when hovered and when held. */
   .slice{ cursor:pointer; transform-box:fill-box; transform-origin:center;
@@ -497,8 +503,8 @@
         </span>
       </div>
       <div class="card"><div id="trend-chart"></div></div>
-      <div class="card" id="trend-pie"></div>
-      <div class="card" id="forecast-box" hidden></div>
+      <div class="card trend-below" id="trend-pie"></div>
+      <div class="card trend-below" id="forecast-box" hidden></div>
     </section>
 
     <section class="panel" id="v-net">
@@ -2285,7 +2291,7 @@ function drawPie() {
   }
 
   const total = entries.reduce((s, e) => s + e[1], 0);
-  const R = 92, CX = 110, CY = 110;
+  const R = 132, CX = 150, CY = 150;
   let angle = -Math.PI / 2;
 
   const slices = entries.map(([slug, v]) => {
@@ -2317,13 +2323,13 @@ function drawPie() {
       '</p></div>' +
     '<div class="pie-wrap">' +
       '<div class="pie-chart">' +
-        '<svg viewBox="0 0 220 220" width="220" height="220" role="img" ' +
+        '<svg viewBox="0 0 300 300" width="300" height="300" role="img" ' +
         'aria-label="Share of spending by category">' + slices +
-        '<circle cx="' + CX + '" cy="' + CY + '" r="46" fill="var(--surface)"/>' +
-        '<text x="' + CX + '" y="' + (CY - 4) + '" text-anchor="middle" font-family="IBM Plex Mono" ' +
-          'font-size="13" fill="var(--ink)">' + money0(total) + '</text>' +
-        '<text x="' + CX + '" y="' + (CY + 13) + '" text-anchor="middle" font-family="IBM Plex Mono" ' +
-          'font-size="9.5" fill="var(--muted)">total</text>' +
+        '<circle cx="' + CX + '" cy="' + CY + '" r="68" fill="var(--surface)"/>' +
+        '<text x="' + CX + '" y="' + (CY - 5) + '" text-anchor="middle" font-family="IBM Plex Mono" ' +
+          'font-size="17" fill="var(--ink)">' + money0(total) + '</text>' +
+        '<text x="' + CX + '" y="' + (CY + 15) + '" text-anchor="middle" font-family="IBM Plex Mono" ' +
+          'font-size="11" fill="var(--muted)">total</text>' +
         '</svg>' +
         '<div class="pie-key">' + legend + '</div>' +
       '</div>' +
