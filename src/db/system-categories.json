@@ -80,18 +80,10 @@
     "kind": "spend"
   },
   {
-    "slug": "restaurants",
-    "label": "Restaurants",
-    "colour": "#b8431c",
-    "sortOrder": 24,
-    "parent": "food",
-    "kind": "spend"
-  },
-  {
     "slug": "fast-food",
     "label": "Fast Food",
     "colour": "#e69a4a",
-    "sortOrder": 25,
+    "sortOrder": 24,
     "parent": "food",
     "kind": "spend"
   },

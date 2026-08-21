@@ -46,11 +46,9 @@ export type Kind = "spend" | "income" | "transfer";
 const BY_DETAILED: Record<string, string> = {
   FOOD_AND_DRINK_GROCERIES: "groceries",
   FOOD_AND_DRINK_COFFEE: "coffee",
-  // Sitting down and grabbing something are different decisions and different
-  // money, so they are different rows. What is left in Dining & Drinks is bars,
-  // liquor and anything Plaid could not place — which is most of what the name
-  // meant anyway.
-  FOOD_AND_DRINK_RESTAURANT: "restaurants",
+  // Fast food is split out because grabbing something is a different decision,
+  // and different money, from sitting down. Restaurants are not: they stay in
+  // Dining & Drinks, which is the category that exists to hold them.
   FOOD_AND_DRINK_FAST_FOOD: "fast-food",
   GENERAL_MERCHANDISE_PET_SUPPLIES: "pets",
   RENT_AND_UTILITIES_RENT: "housing",
