@@ -244,12 +244,29 @@
   .slice.dim{ opacity:.25; }
   .pie-tx{ flex:1 1 auto; min-width:0; }
   .pie-tx .hint{ font-size:12.5px; color:var(--muted); }
+  /* Fixed layout with the two narrow columns pinned, so the description gets
+     everything left over. It previously had max-width:0 to make the ellipsis
+     work, which under auto layout is read as "be as narrow as you can" — the
+     column collapsed to a few characters and every merchant became "Spr...".
+     Fixed layout gives the same ellipsis without the collapse. */
+  table.pie-table{ table-layout:fixed; width:100%; }
   table.pie-table td{ padding:7px 10px 7px 0; font-size:12.5px; }
+  table.pie-table td:nth-child(1){ width:92px; text-align:left; }
   table.pie-table td:nth-child(2){ overflow:hidden; text-overflow:ellipsis;
-                                   max-width:0; white-space:nowrap; }
+                                   white-space:nowrap; }
+  table.pie-table td:nth-child(3){ width:104px; padding-right:0; }
   @media (max-width:760px){
     .pie-wrap{ flex-direction:column; }
     .pie-tx{ width:100%; }
+  }
+  /* On a phone the two fixed columns are most of the row, so they give back
+     what they can. The description still truncates at some length — three
+     columns in 390 pixels always will — but it gets the space rather than
+     losing it to a date nobody needs the century of. */
+  @media (max-width:560px){
+    table.pie-table td{ padding-right:6px; font-size:12px; }
+    table.pie-table td:nth-child(1){ width:62px; }
+    table.pie-table td:nth-child(3){ width:86px; }
   }
 
   .bv-controls{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
