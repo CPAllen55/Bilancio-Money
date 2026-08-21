@@ -124,6 +124,14 @@
   .thf.on{ color:var(--mint); border-color:var(--mint-dim); text-transform:none;
            letter-spacing:0; font-size:12px; }
   table.data th{ padding-bottom:0; }
+  .thf, select.catsel, select.ctl{ color-scheme:dark; }
+  .thf option, .thf optgroup{
+    background:var(--bg-panel); color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif; font-size:13.5px;
+    text-transform:none; letter-spacing:normal; }
+  select.catsel option, select.catsel optgroup, select.ctl option{
+    background:var(--bg-panel); color:var(--ink); }
+  .thf optgroup, select.catsel optgroup{ color:var(--muted); font-style:normal; }
   /* The clear sits immediately after the select, next to the chevron.
      Pinned to the far right of the cell it was a long way from the control
      it belonged to — on a wide column, far enough to read as unrelated. */
@@ -1086,6 +1094,19 @@ function escapeHtml(s) {
  * the optgroup labels and are not themselves selectable — a transaction belongs
  * to a leaf, or the rollup would double-count it.
  */
+/* The option list for a row menu, built once per side of the ledger.
+
+   It used to be rebuilt for every row so the chosen one could be marked
+   selected in the markup: fifty options times two hundred rows is ten thousand
+   elements to build and parse on every render, and that is most of the wait
+   before the table appears. The markup is identical for every row on the same
+   side, so it is built twice and each row's own value set afterwards. */
+let catOptCache = {};
+function cachedCategoryOptions(side) {
+  if (!catOptCache[side]) catOptCache[side] = categoryOptions(null, side);
+  return catOptCache[side];
+}
+
 function categoryOptions(selectedSlug, side) {
   // The side of the ledger the money actually moved on, plus transfers. A
   // category cannot change the direction cash travelled, so offering "Salary"
@@ -1176,7 +1197,7 @@ async function renderTransactions() {
     (txFilters.amount ? '&amount=' + encodeURIComponent(txFilters.amount) : '') +
     '&limit=200');
 
-  categoryList = r.categories;
+  categoryList = r.categories; catOptCache = {};
   const host = $('tx-list');
 
   const head = '<thead><tr>' +
@@ -1209,9 +1230,12 @@ async function renderTransactions() {
       '<td class="num" style="color:var(--muted)">' + t.date + '</td>' +
       '<td>' + escapeHtml(t.name) + (t.pending ? ' <span class="pill">pending</span>' : '') +
         (source ? ' <span class="pill">' + source + '</span>' : '') + '</td>' +
-      '<td><select class="catsel" data-id="' + t.id + '">' +
-        // Amount decides which side of the ledger this row is on.
-        categoryOptions(t.category, t.amount > 0 ? 'income' : 'spend') + '</select></td>' +
+      // Amount decides which side of the ledger this row is on. The menu holds
+      // only what it is currently showing; the rest arrives when it is opened.
+      '<td><select class="catsel" data-id="' + t.id + '" data-slug="' +
+        escapeHtml(t.category || '') + '" data-side="' + (t.amount > 0 ? 'income' : 'spend') + '">' +
+        '<option>' + escapeHtml(t.category ? labelOfSlug(t.category) : '—') + '</option>' +
+        '</select></td>' +
       '<td class="num' + (t.amount > 0 ? ' in' : '') + '">' +
         (t.amount > 0 ? '+' : '') + money(t.amount) + '</td></tr>';
   }).join('');
@@ -1223,6 +1247,34 @@ async function renderTransactions() {
 
 /* Delegated: the headings are rebuilt on every render, so binding to them
    directly would lose the listener the first time a filter is used. */
+/* Row menus are filled the moment before they open, not when the table is built.
+
+   Two hundred rows each holding the full category list is eight thousand option
+   elements for the browser to create and lay out, and that — not building the
+   markup, which measures at eight milliseconds — is what made the table slow to
+   appear and the menus slow to drop. Each row starts with a single option
+   showing its own category, which is all anybody sees until they click.
+
+   mousedown fires before the menu opens, and focus covers the keyboard, so by
+   the time the list is visible it is complete. */
+function fillCatSel(sel) {
+  if (sel.dataset.filled) return;
+  sel.dataset.filled = '1';
+  sel.innerHTML = cachedCategoryOptions(sel.dataset.side);
+  const c = categoryList.find(x => x.slug === sel.dataset.slug);
+  sel.value = c ? c.id : '';
+}
+
+$('tx-list').addEventListener('mousedown', (e) => {
+  const sel = e.target.closest('.catsel');
+  if (sel) fillCatSel(sel);
+}, true);
+
+$('tx-list').addEventListener('focusin', (e) => {
+  const sel = e.target.closest('.catsel');
+  if (sel) fillCatSel(sel);
+});
+
 $('tx-list').addEventListener('change', (e) => {
   const map = { 'f-date': 'period', 'f-desc': 'merchant', 'f-cat': 'category', 'f-amt': 'amount' };
   const key = map[e.target.id];
@@ -1329,7 +1381,7 @@ async function renderTrend() {
     authed('/api/trend?months=' + months),
     wantForecast ? authed('/api/forecast').catch(() => null) : Promise.resolve(null)
   ]);
-  if (tr.categories) { categoryList = tr.categories; rememberColours(categoryList); }
+  if (tr.categories) { categoryList = tr.categories; catOptCache = {}; rememberColours(categoryList); }
 
   const actual = tr.series, prior = tr.priorSeries;
 
@@ -1741,7 +1793,7 @@ function niceStep(x) {
 async function renderNet() {
   const months = Number($('net-range').value);
   const tr = await authed('/api/trend?months=' + months);
-  if (tr.categories) { categoryList = tr.categories; rememberColours(categoryList); }
+  if (tr.categories) { categoryList = tr.categories; catOptCache = {}; rememberColours(categoryList); }
 
   let running = 0;
   const rows = (tr.series || []).map(m => {
