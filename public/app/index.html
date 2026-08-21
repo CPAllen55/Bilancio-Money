@@ -253,23 +253,30 @@
   .bv-head b{ font-weight:600; }
   /* The verdict is the answer to the question the two bars pose, so it sits on
      the same line as the name rather than under the bars. */
-  .bv-verdict{ margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:12px; }
+  .bv-verdict{ margin-left:14px; font-family:'IBM Plex Mono', monospace; font-size:12px;
+               min-width:98px; text-align:right; }
   .bv-verdict.good{ color:var(--mint); }
   .bv-verdict.bad{ color:var(--coral); }
-  .bv-none{ margin-left:auto; font-size:11.5px; color:var(--muted); }
-  .bv-row{ display:grid; grid-template-columns:52px minmax(0,1fr) 104px; gap:12px;
-           align-items:center; margin-bottom:6px; }
-  /* Budget is drawn as an outline rather than a solid: it is the expectation,
-     not a thing that happened, and it should not compete with the bar above it. */
-  .bv-budget{ background:transparent; border:1px dashed var(--hair-strong); }
+  .bv-none{ margin-left:14px; font-size:11.5px; color:var(--muted);
+             min-width:98px; text-align:right; }
+  .bv-row{ margin-bottom:4px; }
+  .bv-row .btrack{ position:relative; overflow:visible; height:12px; }
+  /* Where the budget sits on the bar. Standing proud of the track so it reads
+     as a mark against the fill rather than as part of it. */
+  .bv-tick{ position:absolute; top:-4px; bottom:-4px; width:2px; border-radius:1px;
+            background:var(--ink); opacity:.85; }
+  .bv-figures{ margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:12.5px;
+               color:var(--ink); }
   .bv-dim{ color:var(--muted); }
   .bv-kids{ margin:10px 0 2px 26px; padding-left:14px; border-left:1px solid var(--hair); }
   .bv-kid{ padding:8px 0; }
   .bv-kid .bv-head{ font-size:12.5px; margin-bottom:7px; }
-  .bv-kid .bv-row{ margin-bottom:5px; }
-  .bv-kid .btrack{ height:7px; }
+  .bv-kid .bv-row{ margin-bottom:2px; }
+  .bv-kid .btrack{ height:9px; }
   @media (max-width:560px){
-    .bv-row{ grid-template-columns:44px minmax(0,1fr) 84px; gap:8px; }
+    .bv-head{ flex-wrap:wrap; }
+    .bv-figures{ margin-left:26px; }
+    .bv-verdict, .bv-none{ margin-left:auto; min-width:0; }
     .bv-kids{ margin-left:8px; }
   }
 
@@ -502,7 +509,7 @@
 
     <section class="panel" id="v-budget">
       <h2 class="view">Against the plan</h2>
-      <p class="lede">What each category cost, over what it was expected to cost. Every bar shares one scale, so a longer bar is more money wherever it appears — and the gap between a pair is the whole point.</p>
+      <p class="lede">What each category cost, with a line where the budget sits. Green until spending reaches that line, red past it. Every bar shares one scale, so a longer bar is more money wherever it appears.</p>
       <div class="bar" style="padding-top:0">
         <select class="ctl" id="bud-range" aria-label="Period"></select>
       </div>
@@ -2075,11 +2082,23 @@ function fillBudgetRanges() {
   sel.innerHTML = html + '</optgroup>';
 }
 
-/* Actual over budget, both against the same width. */
+/* One bar, with the budget marked on it.
+ *
+ * Two bars made the reader compare two lengths to answer one question. The bar
+ * is what was spent; the line across it is where the budget sits. Green until
+ * the fill reaches that line, red past it, and the overshoot is the stretch of
+ * red beyond the mark — which is the same question answered by looking rather
+ * than by measuring.
+ *
+ * With no budget behind it the line would be at zero and every penny would read
+ * as an overspend, so the bar keeps the category's own colour and says so.
+ */
 function budgetPair(label, colour, actual, budget, max, expandable, slug, open) {
   const w = v => Math.min(100, max ? (v / max) * 100 : 0).toFixed(1);
-  const over = budget > 0 && actual > budget;
-  const verdict = budget <= 0
+  const hasBudget = budget > 0;
+  const over = hasBudget && actual > budget;
+
+  const verdict = !hasBudget
     ? '<span class="bv-none">no budget yet</span>'
     : '<span class="bv-verdict ' + (over ? 'bad' : 'good') + '">' +
       money(Math.abs(actual - budget)) + (over ? ' over' : ' under') + '</span>';
@@ -2090,16 +2109,20 @@ function budgetPair(label, colour, actual, budget, max, expandable, slug, open) 
       escapeHtml(label) + '">' + (open ? '−' : '+') + '</button>'
     : '<span class="ctog ghost" aria-hidden="true"></span>';
 
+  const fill = hasBudget ? (over ? 'var(--coral)' : 'var(--mint)') : colour;
+  const tick = hasBudget
+    ? '<div class="bv-tick" style="left:' + w(budget) + '%" title="budget ' + money(budget) + '"></div>'
+    : '';
+
   return '<div class="bv-head">' + toggle +
       '<span class="swatch" style="background:' + colour + '"></span>' +
-      '<b>' + escapeHtml(label) + '</b>' + verdict + '</div>' +
-    '<div class="bv-row"><span class="blabel">Actual</span>' +
-      '<div class="btrack"><div class="bfill" style="width:' + w(actual) +
-        '%;background:' + (over ? 'var(--coral)' : colour) + '"></div></div>' +
-      '<span class="bamt' + (over ? ' out' : '') + '">' + money(actual) + '</span></div>' +
-    '<div class="bv-row"><span class="blabel">Budget</span>' +
-      '<div class="btrack"><div class="bfill bv-budget" style="width:' + w(budget) + '%"></div></div>' +
-      '<span class="bamt bv-dim">' + (budget > 0 ? money(budget) : '—') + '</span></div>';
+      '<b>' + escapeHtml(label) + '</b>' +
+      '<span class="bv-figures">' + money(actual) +
+        (hasBudget ? ' <span class="bv-dim">of ' + money(budget) + '</span>' : '') + '</span>' +
+      verdict + '</div>' +
+    '<div class="bv-row"><div class="btrack">' +
+      '<div class="bfill" style="width:' + w(actual) + '%;background:' + fill + '"></div>' +
+      tick + '</div></div>';
 }
 
 async function renderBudgetView() {
