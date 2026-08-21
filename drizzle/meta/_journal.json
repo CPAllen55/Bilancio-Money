@@ -57,6 +57,13 @@
       "when": 1787348012512,
       "tag": "0007_awesome_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787349757633,
+      "tag": "0008_supreme_power_man",
+      "breakpoints": true
     }
   ]
 }

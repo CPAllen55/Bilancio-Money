@@ -534,6 +534,72 @@
   @media (max-width: 560px){
     .tiles{ grid-template-columns:minmax(0,1fr); }
   }
+
+  /* ---- Budgeting v2 ----
+     One grid per parent, and everything in it shares the same month columns:
+     the chart spans them, the month headings sit under it, and a manual figure
+     is typed into the column of the month it belongs to. That alignment is the
+     feature — a number under "Nov" has to be Nov's number without anyone
+     having to check it.
+
+     Which is why the columns carry no gap. A fixed gap between fr columns
+     changes its share of the width as the window moves, so no fixed viewBox
+     could line a bar up with the box under it. With the gap at zero every
+     column is exactly one nth of the span and the chart can be drawn in equal
+     bands; the breathing room comes from padding inside the cells instead. */
+  .bv2-note{ border:1px solid var(--hair-strong); border-radius:6px; padding:10px 13px;
+             margin:0 0 16px; font-size:12.5px; color:var(--ink-soft);
+             background:var(--bg-panel); }
+  .bv2-note b{ color:var(--mint); }
+
+  .bv2-card{ background:var(--surface); border:1px solid var(--hair); border-radius:6px;
+             padding:16px 18px; margin-bottom:14px; }
+  .bv2-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .bv2-head b{ font-size:14px; }
+  .bv2-total{ margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:11.5px;
+              color:var(--muted); text-align:right; }
+  .bv2-total b{ display:block; color:var(--ink); font-size:14px; font-weight:500; }
+
+  /* --cols is the number of months in the horizon, set per card. */
+  .bv2-grid{ display:grid; grid-template-columns:180px 168px repeat(var(--cols), minmax(64px, 1fr));
+             gap:7px 0; align-items:center; margin-top:16px; }
+  .bv2-chart{ grid-column:3 / -1; min-width:0; }
+  .bv2-chart svg{ display:block; width:100%; height:auto; }
+  .bv2-legend{ grid-column:1 / 3; align-self:end; display:flex; flex-direction:column;
+               gap:5px; font-size:10.5px; color:var(--muted); padding:0 12px 6px 0; }
+  .bv2-legend i{ display:inline-block; width:18px; height:0; border-top-width:2px;
+                 margin-right:7px; vertical-align:middle; }
+  .bv2-mh{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--muted);
+           text-align:center; padding:2px 3px 0; }
+  .bv2-name{ display:flex; align-items:center; gap:7px; font-size:12.5px; min-width:0;
+             padding-right:12px; }
+  .bv2-name span.t{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bv2-name.sub{ padding-left:15px; }
+  .bv2-method{ padding-right:14px; }
+  .bv2-inherit{ font-size:10px; color:var(--muted); border:1px solid var(--hair);
+                border-radius:3px; padding:1px 4px; flex:none; }
+  .bv2-sep{ grid-column:1 / -1; height:1px; background:var(--hair); margin:3px 0; }
+
+  /* A month that is not editable still shows its figure, so the row reads
+     across whether or not you are the one choosing the numbers. */
+  .bv2-cell{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft);
+             text-align:right; padding:0 6px; }
+  .bv2-cell.nil{ color:var(--muted); }
+  input.bv2-in{ font-family:'IBM Plex Mono', monospace; font-size:11px;
+                width:calc(100% - 6px); margin:0 3px; min-width:0;
+                background:var(--bg-panel); color:var(--ink);
+                border:1px solid var(--hair-strong); border-radius:4px;
+                padding:5px 6px; text-align:right; }
+  input.bv2-in:focus{ outline:none; border-color:var(--mint); }
+
+  @media (max-width:980px){
+    /* Below this a month column cannot hold a figure without truncating it, so
+       the grid stops pretending to be one and the card keeps the chart alone. */
+    .bv2-grid{ grid-template-columns:1fr 1fr; }
+    .bv2-chart, .bv2-legend, .bv2-sep{ grid-column:1 / -1; }
+    .bv2-mh, .bv2-cell, input.bv2-in{ display:none; }
+    .bv2-name{ padding-right:0; }
+  }
 </style>
 </head>
 <body>
@@ -565,6 +631,7 @@
       <button class="tab" data-view="trend">Trend</button>
       <button class="tab" data-view="net">Net Activity</button>
       <button class="tab" data-view="budgeting">Budgeting</button>
+      <button class="tab" data-view="budgeting-v2">Budgeting v2</button>
       <button class="tab" data-view="transactions">Transactions</button>
       <button class="tab" data-view="banks">Banks</button>
     </div>
@@ -656,6 +723,15 @@
         <p class="eyebrow">The methods</p>
         <dl class="bp-defs"></dl>
       </div>
+    </section>
+
+    <section class="panel" id="v-budgeting-v2">
+      <h2 class="view">Budgeting v2</h2>
+      <p class="lede">The same choice per category as before, but across the rest of the year rather than one month at a time. Each parent shows what its children add up to per month, with the methods you did not pick drawn behind as lines — so choosing between them is a matter of looking rather than guessing.</p>
+      <p class="bv2-note"><b>This is a workshop.</b> Nothing set here reaches the Tracker, the Overview tiles or the Trend budget — it is kept in its own table until the shape is right and it is adopted deliberately. The original Budgeting tab is still the one that counts.</p>
+      <div id="bv2-list"></div>
+      <p class="msg" id="bv2-msg"></p>
+      <p class="fc-method" id="bv2-note" style="margin-top:10px"></p>
     </section>
 
     <section class="panel" id="v-transactions">
@@ -850,6 +926,7 @@ async function refresh() {
     if (view === 'net')          await renderNet();
     if (view === 'tracker')      await renderBudgetView();
     if (view === 'budgeting')    await renderBudgeting();
+    if (view === 'budgeting-v2') await renderBudgetingV2();
     if (view === 'transactions') await renderTransactions();
     if (view === 'banks')        await renderBanks();
     say(msg, '');
@@ -3058,6 +3135,294 @@ $('go-signin').addEventListener('click', () =>
 $('signout').addEventListener('click', async () => {
   await window.Clerk.signOut();
   location.reload();
+});
+
+/* ------------------------------------------------------- budgeting v2 -- *//*
+ * The same decision as the Budgeting tab, made across the rest of the year
+ * instead of one month at a time, and in its own table so that trying things
+ * out here cannot move a number on any other tab.
+ *
+ * Three things it does that v1 cannot:
+ *
+ *   The horizon. Every month from this one to December, so the shape of a plan
+ *   is visible rather than implied by a single figure.
+ *
+ *   The alternatives. Bars are the method in force; the methods not chosen are
+ *   drawn behind them as lines. Deciding between "average" and "seasonal" by
+ *   reading their definitions is guesswork — seeing the two curves is not.
+ *
+ *   Manual per month. One box per month, sitting in that month's column, so
+ *   December can cost more than August without needing a method that says so.
+ */
+let bv2Data = null;
+const bv2Open = new Set();
+
+/* The three computed methods. Manual is whatever you typed, so comparing
+   against it says nothing; "none" is zero and would only ever be a flat line
+   along the floor. */
+const BV2_COMPARE = ['average', 'previous', 'seasonal'];
+const BV2_LINE = { average: '#6aa9ff', previous: '#e0b341', seasonal: '#e0653c' };
+
+function bv2Short(ym) {
+  const p = ym.split('-');
+  return MONTH_NAMES[Number(p[1]) - 1];
+}
+
+function bv2Options(selected, inherited, isParent) {
+  const methods = bv2Data ? bv2Data.methods : [];
+  let html = '';
+  if (!isParent) {
+    html += '<option value="inherit"' + (inherited ? ' selected' : '') + '>Follow the parent</option>';
+  }
+  for (const m of methods) {
+    html += '<option value="' + m + '"' + (!inherited && m === selected ? ' selected' : '') + '>' +
+      escapeHtml(METHOD_LABEL[m] || m) + '</option>';
+  }
+  return html;
+}
+
+/**
+ * One parent's year: its children stacked per month, with the methods it did
+ * not pick drawn over the top.
+ *
+ * Drawn in equal bands with no padding either side, because the grid column
+ * under band i is this category's figure for month i and the two have to line
+ * up. That rules out a y axis in the usual place, so the scale is written
+ * inside the plot against the gridlines.
+ */
+function bv2Chart(parent, kids, months) {
+  const n = months.length;
+  if (!n) return '<p class="empty">Nothing left in the year.</p>';
+
+  const BAND = 100, W = BAND * n, H = 168, PT = 20, PB = 4;
+  const plotH = H - PT - PB;
+  const stack = kids.length ? kids : [parent];
+
+  const totals = months.map(m => stack.reduce((s, k) => s + (k.budget[m] || 0), 0));
+  const lines = BV2_COMPARE.filter(m => m !== parent.method);
+  let peak = Math.max.apply(null, totals.concat([0]));
+  for (const method of lines) {
+    for (const m of months) {
+      const v = parent.alternates[method] ? parent.alternates[method][m] : null;
+      if (typeof v === 'number' && v > peak) peak = v;
+    }
+  }
+  if (peak <= 0) peak = 1;
+
+  const mag = Math.pow(10, Math.floor(Math.log10(peak / 3)));
+  const step = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].filter(x => x * mag >= peak / 3)[0] || 10;
+  const yMax = step * mag * 3;
+  const y = v => PT + plotH - (v / yMax) * plotH;
+  const cx = i => i * BAND + BAND / 2;
+  const barW = BAND * 0.46;
+
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" ' +
+    'role="img" aria-label="' + escapeHtml(parent.label) + ' budget for the rest of the year">';
+
+  for (let k = 0; k <= 3; k++) {
+    const v = (yMax / 3) * k, yy = y(v);
+    svg += '<line x1="0" x2="' + W + '" y1="' + yy.toFixed(1) + '" y2="' + yy.toFixed(1) +
+      '" stroke="var(--grid)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+    if (k) {
+      svg += '<text x="4" y="' + (yy - 3).toFixed(1) + '" font-family="IBM Plex Mono" ' +
+        'font-size="9" fill="var(--muted)" opacity=".75">' + money0(v) + '</text>';
+    }
+  }
+
+  months.forEach((m, i) => {
+    let acc = 0;
+    for (const k of stack) {
+      const v = k.budget[m] || 0;
+      if (!v) continue;
+      const top = y(acc + v), bot = y(acc);
+      svg += '<rect x="' + (cx(i) - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
+        '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 1).toFixed(1) +
+        '" fill="' + k.colour + '" rx="1">' +
+        '<title>' + escapeHtml(k.label) + ' · ' + escapeHtml(monthLabel(m)) + ': ' + money(v) +
+        '</title></rect>';
+      acc += v;
+    }
+    if (totals[i] > 0) {
+      svg += '<text x="' + cx(i).toFixed(1) + '" y="' + (y(totals[i]) - 6).toFixed(1) +
+        '" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" ' +
+        'fill="var(--ink-soft)">' + money0(totals[i]) + '</text>';
+    }
+  });
+
+  for (const method of lines) {
+    const src = parent.alternates[method] || {};
+    const pts = months.map((m, i) => {
+      const v = src[m];
+      return typeof v === 'number' ? cx(i).toFixed(1) + ',' + y(v).toFixed(1) : null;
+    }).filter(Boolean);
+    if (pts.length < 2) continue;
+    svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + BV2_LINE[method] +
+      '" stroke-width="2" stroke-dasharray="5 4" opacity=".85" ' +
+      'vector-effect="non-scaling-stroke"/>';
+  }
+
+  return svg + '</svg>';
+}
+
+function bv2Legend(parent) {
+  const lines = BV2_COMPARE.filter(m => m !== parent.method);
+  if (!lines.length) return '';
+  return '<span>If instead you picked:</span>' + lines.map(m =>
+    '<span><i style="border-top-color:' + BV2_LINE[m] + '"></i>' +
+    escapeHtml(METHOD_LABEL[m] || m) + '</span>').join('');
+}
+
+/** A month cell: an input where the figure is yours to set, the number if not. */
+function bv2MonthCell(row, month, editable) {
+  const v = row.budget[month];
+  if (!editable) {
+    return '<div class="bv2-cell' + (v ? '' : ' nil') + '">' +
+      (typeof v === 'number' ? money0(v) : '—') + '</div>';
+  }
+  const named = row.manualByMonth[month];
+  const amount = typeof named === 'number' ? named : row.manualAmount;
+  return '<input class="bv2-in" type="text" inputmode="decimal" data-slug="' +
+    escapeHtml(row.slug) + '" data-month="' + escapeHtml(month) + '" value="' +
+    (amount ? (amount / 100).toFixed(2) : '') + '" placeholder="0.00" aria-label="' +
+    escapeHtml(row.label) + ', ' + escapeHtml(monthLabel(month)) + '">';
+}
+
+function bv2Card(parent, kids, months) {
+  const open = bv2Open.has(parent.slug);
+  const total = months.reduce((s, m) => s + (parent.budget[m] || 0), 0);
+  const ownsManual = parent.method === 'manual' && !parent.inherited;
+
+  let html = '<div class="bv2-card" data-parent="' + escapeHtml(parent.slug) + '">' +
+    '<div class="bv2-head">' +
+      '<button class="ctog" type="button" data-bv2-open="' + escapeHtml(parent.slug) + '" ' +
+        'aria-expanded="' + open + '">' + (open ? '−' : '+') + '</button>' +
+      '<span class="swatch" style="background:' + parent.colour + '"></span>' +
+      '<b>' + escapeHtml(parent.label) + '</b>' +
+      '<select class="ctl bv2-select" data-slug="' + escapeHtml(parent.slug) +
+        '" aria-label="Method for ' + escapeHtml(parent.label) + '">' +
+        bv2Options(parent.method, parent.inherited, true) + '</select>' +
+      '<span class="bv2-total">rest of the year<b>' + money(total) + '</b></span>' +
+    '</div>';
+
+  if (!open) return html + '</div>';
+
+  html += '<div class="bv2-grid" style="--cols:' + months.length + '">' +
+    '<div class="bv2-legend">' + bv2Legend(parent) + '</div>' +
+    '<div class="bv2-chart">' + bv2Chart(parent, kids, months) + '</div>' +
+    '<div></div><div></div>' +
+    months.map(m => '<div class="bv2-mh">' + bv2Short(m) + '</div>').join('') +
+    '<div class="bv2-sep"></div>';
+
+  // A parent set to manual is typed once and shared across its children by what
+  // they actually cost, so the boxes belong on the parent's own row.
+  if (ownsManual) {
+    html += '<div class="bv2-name"><span class="t">Whole category</span></div><div></div>' +
+      months.map(m => bv2MonthCell(parent, m, true)).join('');
+  }
+
+  for (const kid of kids) {
+    const editable = kid.method === 'manual' && !kid.inherited;
+    html += '<div class="bv2-name sub">' +
+        '<span class="swatch" style="background:' + kid.colour + '"></span>' +
+        '<span class="t">' + escapeHtml(kid.label) + '</span>' +
+        (kid.inherited ? '<span class="bv2-inherit">inherited</span>' : '') +
+      '</div>' +
+      '<div class="bv2-method"><select class="ctl bv2-select" data-slug="' + escapeHtml(kid.slug) +
+        '" aria-label="Method for ' + escapeHtml(kid.label) + '">' +
+        bv2Options(kid.method, kid.inherited, false) + '</select></div>' +
+      months.map(m => bv2MonthCell(kid, m, editable)).join('');
+  }
+
+  return html + '</div></div>';
+}
+
+async function renderBudgetingV2() {
+  fillMethodDefs();
+  bv2Data = await authed('/api/budget-v2');
+  const host = $('bv2-list');
+  const months = bv2Data.months;
+  const parents = bv2Data.categories.filter(c => !c.parentSlug);
+
+  if (!parents.length || !months.length) {
+    host.innerHTML = '<p class="empty">No spending categories yet.</p>';
+    return;
+  }
+
+  // Opened on the biggest plan rather than on nothing: the point of this tab is
+  // the chart, and a column of shut cards shows none of it.
+  if (!bv2Open.size) {
+    const spend = p => months.reduce((s, m) => s + (p.budget[m] || 0), 0);
+    const biggest = parents.slice().sort((a, b) => spend(b) - spend(a))[0];
+    if (biggest && spend(biggest) > 0) bv2Open.add(biggest.slug);
+  }
+
+  host.innerHTML = parents.map(p =>
+    bv2Card(p, bv2Data.categories.filter(c => c.parentSlug === p.slug), months)).join('');
+
+  $('bv2-note').textContent = 'Budgets for ' + monthLabel(months[0]) + ' to ' +
+    monthLabel(months[months.length - 1]) + ', from ' + bv2Data.monthsOfHistory +
+    ' complete month' + (bv2Data.monthsOfHistory === 1 ? '' : 's') + ' of history.' +
+    (bv2Data.basis === 'seasonal-growth' && bv2Data.growthPct !== null
+      ? ' Seasonal is using last year scaled by ' +
+        (bv2Data.growthPct >= 0 ? '+' : '') + bv2Data.growthPct + '%.'
+      : bv2Data.basis === 'recent-average'
+        ? ' There is not yet a full year behind you, so Seasonal falls back to a recent average.'
+        : '');
+}
+
+/* Saves in flight, held to one redraw between them — the same reason as the
+   Budgeting tab: a rebuild mid-edit takes the control out from under you. */
+let bv2Saving = 0;
+
+async function bv2Save(body) {
+  const msg = $('bv2-msg');
+  bv2Saving++;
+  say(msg, 'Saving…');
+  let failed = null;
+  try {
+    await authed('/api/budget-v2', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  } catch (err) {
+    failed = err;
+  } finally {
+    bv2Saving--;
+  }
+  if (failed) { say(msg, failed.message, 'bad'); return; }
+  say(msg, 'Saved.', 'good');
+  if (bv2Saving > 0) return;
+  await renderBudgetingV2();
+}
+
+$('bv2-list').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-bv2-open]');
+  if (!btn) return;
+  const slug = btn.dataset.bv2Open;
+  if (bv2Open.has(slug)) bv2Open.delete(slug); else bv2Open.add(slug);
+  renderBudgetingV2();
+});
+
+$('bv2-list').addEventListener('change', (e) => {
+  const sel = e.target.closest('.bv2-select');
+  if (sel) { bv2Save({ slug: sel.dataset.slug, method: sel.value }); return; }
+
+  const input = e.target.closest('.bv2-in');
+  if (!input) return;
+  const raw = input.value.trim().replace(/[$,\s]/g, '');
+  const n = Number(raw);
+  if (!raw || !isFinite(n) || n < 0) {
+    say($('bv2-msg'), 'That needs to be a number, zero or more.', 'bad');
+    return;
+  }
+  bv2Save({ slug: input.dataset.slug, month: input.dataset.month, monthAmount: Math.round(n * 100) });
+});
+
+$('bv2-list').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const input = e.target.closest('.bv2-in');
+  if (input) { e.preventDefault(); input.blur(); }
 });
 
 boot();

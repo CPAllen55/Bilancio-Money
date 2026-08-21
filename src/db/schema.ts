@@ -192,3 +192,29 @@ export const budgetPlans = pgTable("budget_plans", {
 }, (t) => [
   uniqueIndex("budget_plans_user_category_idx").on(t.userId, t.categoryId),
 ]);
+
+// 12b. Budget plans, second attempt — deliberately a separate table.
+//
+// Budgeting v2 is being worked out in the open while the original stays in
+// service, so the two cannot share storage: anything configured here must not
+// reach the Tracker, the Overview tiles or the Trend budget until the shape is
+// settled and adopted. A separate table is the only silo that cannot leak by
+// accident. Nothing outside budget-v2-routes reads it, and dropping it drops
+// the experiment whole.
+//
+// manualByMonth is the one thing v1 has no room for: a manual budget per month
+// rather than one figure repeated. Keyed "YYYY-MM" to cents. manualAmount stays
+// as the fallback for months not named in it, so switching to manual gives a
+// sensible starting figure everywhere rather than a grid of zeroes.
+export const budgetPlansV2 = pgTable("budget_plans_v2", {
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  categoryId: uuid("category_id").notNull()
+    .references(() => categories.id, { onDelete: "cascade" }),
+  method: text("method").notNull().default("average"),
+  manualAmount: bigint("manual_amount", { mode: "number" }).notNull().default(0),
+  manualByMonth: jsonb("manual_by_month").$type<Record<string, number>>()
+    .notNull().default(sql`'{}'::jsonb`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("budget_plans_v2_user_category_idx").on(t.userId, t.categoryId),
+]);
