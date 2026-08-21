@@ -50,6 +50,13 @@
       "when": 1787274989145,
       "tag": "0006_eminent_lockjaw",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787348012512,
+      "tag": "0007_awesome_forge",
+      "breakpoints": true
     }
   ]
 }

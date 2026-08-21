@@ -2040,8 +2040,7 @@ $('net-range').addEventListener('change', () => { netSel = null; refresh(); });
  * each one would give you.
  */
 const METHOD_LABEL = {
-  auto: 'Automatic',
-  average: 'Average month',
+  average: 'Historical Average',
   previous: 'Same as last month',
   seasonal: 'Seasonal',
   manual: 'Manual',
@@ -2049,7 +2048,6 @@ const METHOD_LABEL = {
 };
 
 const METHOD_NOTE = {
-  auto: 'Seasonal where there is a year of history, an average month where there is not.',
   average: 'A typical month, with the most and least expensive set aside so one unusual month does not become the plan.',
   previous: 'Whatever the last complete month cost, repeated.',
   seasonal: 'The same month a year ago, scaled by how this year is running. Keeps the spikes — the only method that expects December to cost more than August.',

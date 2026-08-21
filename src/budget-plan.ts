@@ -4,10 +4,9 @@
  * Every method answers the same question — what should this category cost in a
  * given month — and they differ only in which history they trust:
  *
- *   auto      Seasonal where there is a year behind you, average where there is
- *             not. What the app did before any of this was configurable.
  *   average   A typical month, with the best and worst set aside. The right
  *             answer for anything steady, and wrong for anything seasonal.
+ *             The default, and what an unset category falls back to.
  *   previous  Last completed month, repeated. Blunt, and exactly what people
  *             mean when they say "same as last month".
  *   seasonal  The same month a year ago, scaled by this year's trend. The only
@@ -40,7 +39,7 @@ import type { Plan } from "./projection";
 import { budgetPlans } from "./db/schema";
 import { eq } from "drizzle-orm";
 
-export const METHODS = ["auto", "average", "previous", "seasonal", "manual", "none"] as const;
+export const METHODS = ["average", "previous", "seasonal", "manual", "none"] as const;
 export type Method = (typeof METHODS)[number];
 
 export const isMethod = (v: unknown): v is Method =>
@@ -113,7 +112,7 @@ export function resolveMethod(
     const p = pid ? rows.get(pid) : undefined;
     if (p) return { method: p.method, inherited: true, manualAmount: p.manualAmount, from: parentSlug };
   }
-  return { method: "auto", inherited: true, manualAmount: 0, from: "default" };
+  return { method: "average", inherited: true, manualAmount: 0, from: "default" };
 }
 
 export interface HistoryLookup {
@@ -161,11 +160,6 @@ export function budgetForLeaf(
       return Math.round(history.at(slug, known[known.length - 1]));
     }
 
-    case "average": {
-      const t = trimmedMean(history.before(month).map((m) => history.at(slug, m)));
-      return t > 0 ? Math.round(t) : null;
-    }
-
     case "seasonal": {
       const expected = plan.for(month).byCategory[slug];
       // plan.for falls back to a recent average when it has no prior year, and
@@ -174,10 +168,10 @@ export function budgetForLeaf(
       return expected != null ? Math.round(expected) : null;
     }
 
-    case "auto":
+    // Last, because it is also where anything unrecognised lands — including an
+    // "auto" row written before that method was removed and not yet migrated.
+    case "average":
     default: {
-      const expected = plan.for(month).byCategory[slug];
-      if (expected != null && expected > 0) return Math.round(expected);
       const t = trimmedMean(history.before(month).map((m) => history.at(slug, m)));
       return t > 0 ? Math.round(t) : null;
     }

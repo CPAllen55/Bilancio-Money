@@ -186,7 +186,7 @@ export const budgetPlans = pgTable("budget_plans", {
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   categoryId: uuid("category_id").notNull()
     .references(() => categories.id, { onDelete: "cascade" }),
-  method: text("method").notNull().default("auto"),
+  method: text("method").notNull().default("average"),
   manualAmount: bigint("manual_amount", { mode: "number" }).notNull().default(0),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
