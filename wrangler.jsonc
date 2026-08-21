@@ -56,9 +56,20 @@
     // and every call fails with an error that does not say why.
     "PLAID_ENV": "production",
 
-    // Empty until a bank that needs an OAuth hand-off is in play. Whatever goes
-    // here must FIRST be registered under Plaid → Developers → API → Allowed
-    // redirect URIs; an unregistered value makes every link attempt fail.
+    // Needed by every bank that hands off to its own website — which on a phone
+    // is most of the big ones, Chase included. Without it the browser goes to
+    // the bank, signs in, and has nowhere to come back to; on desktop the same
+    // banks open in a popup instead, which is why this went unnoticed until
+    // somebody tried it on a phone.
+    //
+    // Set this to exactly:  https://bilanciomoney.com/app/
+    // Trailing slash included — /app answers 307 to /app/, and a redirect in the
+    // middle of an OAuth return is a good way to lose the query string.
+    //
+    // It must be registered FIRST under Plaid → Developers → API → Allowed
+    // redirect URIs. An unregistered value does not degrade, it makes every
+    // link attempt fail outright, so filling this in before registering it is
+    // strictly worse than leaving it empty.
     "PLAID_REDIRECT_URI": "",
 
     // Where Plaid posts when an Item has news — most importantly that more

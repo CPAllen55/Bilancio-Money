@@ -845,6 +845,8 @@ async function boot() {
   const email = window.Clerk.user.primaryEmailAddress;
   $('who-email').textContent = email ? email.emailAddress : '';
   refresh();
+  // After refresh: this reopens Link, and Link belongs on top of a drawn page.
+  resumePlaidOAuth();
 }
 
 async function authed(path, options) {
@@ -3023,6 +3025,100 @@ function loadPlaid() {
   });
 }
 
+/* Where the link token is kept between opening Link and coming back from a
+   bank's own website.
+ *
+ * An OAuth bank does not hand control back to the page that opened Link — it
+ * navigates away to its own site and later sends the browser to a URL we
+ * registered with Plaid. By then the page has been torn down and rebuilt, and
+ * Link has to be recreated with the SAME token it started with. Nothing else
+ * survives that trip, so the token goes somewhere that does.
+ *
+ * localStorage rather than sessionStorage: some banks come back in a new tab,
+ * and a new tab gets a new session. */
+const PLAID_TOKEN_KEY = 'bilancio.plaidLinkToken';
+
+/** Everything Link needs, minus the token, so both entry points agree. */
+function plaidLinkOptions(msg, btn) {
+  return {
+    onSuccess: async (publicToken) => {
+      try {
+        say(msg, 'Storing the connection…');
+        const ex = await authed('/api/plaid/exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ publicToken: publicToken })
+        });
+        say(msg, 'Linked ' + (ex.item.institution || 'bank') + '. Pulling transactions…');
+        const sync = await authed('/api/plaid/sync', { method: 'POST' });
+        if (sync.pending && sync.pending.length) {
+          say(msg, sync.pending.join(', ') + ' is still preparing transactions — click Sync in a moment.');
+        } else {
+          say(msg, 'Done — ' + sync.added + ' transactions in.', 'good');
+        }
+        summaryCache = null;
+        await renderBanks();
+      } catch (err) {
+        say(msg, err.message, 'bad');
+      } finally {
+        localStorage.removeItem(PLAID_TOKEN_KEY);
+        if (btn) btn.disabled = false;
+      }
+    },
+    onExit: (err) => {
+      localStorage.removeItem(PLAID_TOKEN_KEY);
+      say(msg, err ? 'Link closed: ' + (err.display_message || err.error_message || err.error_code) : 'Link closed.',
+          err ? 'bad' : '');
+      if (btn) btn.disabled = false;
+    }
+  };
+}
+
+/**
+ * Picking up a link that went off to a bank's own website and came back.
+ *
+ * Plaid returns the browser to the redirect URI registered on the account, with
+ * an oauth_state_id on the query string. That is the only signal that this page
+ * load is the second half of a link rather than a fresh visit, and Link has to
+ * be handed both the original token and the URL it arrived at.
+ *
+ * Without this the journey ended exactly where the first person to try it on a
+ * phone said it did: through the bank's site, back to Bilancio, and nothing.
+ * Desktop hid it, because there Link opens the bank in a popup and the page
+ * that started it is still sitting there when the popup closes.
+ */
+async function resumePlaidOAuth() {
+  if (!location.search.includes('oauth_state_id')) return;
+
+  const token = localStorage.getItem(PLAID_TOKEN_KEY);
+  // Kept before the address is tidied, because the oauth_state_id in it is the
+  // whole point: Link matches it against the session the bank just finished.
+  // Reading location.href after the clean hands Plaid a URL with nothing in it.
+  const returnedTo = location.href;
+  // Cleaned either way, so that a reload does not look like another return.
+  history.replaceState({}, '', location.pathname);
+
+  const msg = $('bank-msg'), btn = $('link-bank');
+  // The same way anything else moves tabs here.
+  const tab = document.querySelector('.tab[data-view="banks"]');
+  if (tab) tab.click();
+  if (!token) {
+    say(msg, 'That bank sent you back, but the link had already been closed here. Please start again.', 'bad');
+    return;
+  }
+
+  try {
+    await loadPlaid();
+    window.Plaid.create(Object.assign({
+      token: token,
+      receivedRedirectUri: returnedTo
+    }, plaidLinkOptions(msg, btn))).open();
+  } catch (err) {
+    localStorage.removeItem(PLAID_TOKEN_KEY);
+    say(msg, err.message, 'bad');
+  }
+}
+
 $('link-bank').addEventListener('click', async () => {
   const btn = $('link-bank'), msg = $('bank-msg');
   btn.disabled = true;
@@ -3030,36 +3126,12 @@ $('link-bank').addEventListener('click', async () => {
   try {
     await loadPlaid();
     const res = await authed('/api/plaid/link-token', { method: 'POST' });
+    // Stored before Link opens, because an OAuth bank can navigate away the
+    // moment it is picked and there is no later opportunity.
+    localStorage.setItem(PLAID_TOKEN_KEY, res.linkToken);
     window.Plaid.create({
       token: res.linkToken,
-      onSuccess: async (publicToken) => {
-        try {
-          say(msg, 'Storing the connection…');
-          const ex = await authed('/api/plaid/exchange', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ publicToken: publicToken })
-          });
-          say(msg, 'Linked ' + (ex.item.institution || 'bank') + '. Pulling transactions…');
-          const sync = await authed('/api/plaid/sync', { method: 'POST' });
-          if (sync.pending && sync.pending.length) {
-            say(msg, sync.pending.join(', ') + ' is still preparing transactions — click Sync in a moment.');
-          } else {
-            say(msg, 'Done — ' + sync.added + ' transactions in.', 'good');
-          }
-          summaryCache = null;
-          await renderBanks();
-        } catch (err) {
-          say(msg, err.message, 'bad');
-        } finally {
-          btn.disabled = false;
-        }
-      },
-      onExit: (err) => {
-        say(msg, err ? 'Link closed: ' + (err.display_message || err.error_message || err.error_code) : 'Link closed.',
-            err ? 'bad' : '');
-        btn.disabled = false;
-      }
+      ...plaidLinkOptions(msg, btn)
     }).open();
   } catch (err) {
     say(msg, err.message, 'bad');
