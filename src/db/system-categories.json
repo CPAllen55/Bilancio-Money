@@ -124,7 +124,7 @@
     "label": "Uber & Lyft",
     "colour": "#12a85f",
     "sortOrder": 42,
-    "parent": "transportation",
+    "parent": "entertainment",
     "kind": "spend"
   },
   {
@@ -156,7 +156,7 @@
     "label": "Airlines",
     "colour": "#00a2a2",
     "sortOrder": 46,
-    "parent": "transportation",
+    "parent": "entertainment",
     "kind": "spend"
   },
   {
@@ -164,7 +164,7 @@
     "label": "Travel",
     "colour": "#00b8b8",
     "sortOrder": 47,
-    "parent": "transportation",
+    "parent": "entertainment",
     "kind": "spend"
   },
   {
@@ -201,7 +201,7 @@
   },
   {
     "slug": "entertainment",
-    "label": "Entertainment",
+    "label": "Travel & Entertainment",
     "colour": "#b4529f",
     "sortOrder": 55,
     "parent": null,
