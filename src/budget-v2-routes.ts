@@ -22,8 +22,11 @@
  *     cost more than August without inventing a method to say so. Only the
  *     months ahead are editable — a budget for a month that has already
  *     happened is a wish.
- *   - Income alongside, on the same scale, so the plan can be read against what
- *     is meant to pay for it.
+ *   - Income as its own card rather than a stripe on top of the spending. It is
+ *     a category in its own right and stacking it on the expense bars made the
+ *     bars answer two questions at once — the total above them was spending
+ *     while the bar itself was spending plus earnings, so the "same as last
+ *     month" line sat below a bar it was supposed to match exactly.
  */
 
 import { Hono } from "hono";
@@ -160,6 +163,7 @@ v2.get("/budget-v2", async (c) => {
 
     interface Out {
       slug: string; label: string; parentSlug: string | null; colour: string;
+      kind: "spend" | "income";
       method: Method; inherited: boolean; manualAmount: number;
       manualByMonth: Record<string, number>;
       /** Actual where the month has been, budgeted where it has not. */
@@ -208,6 +212,7 @@ v2.get("/budget-v2", async (c) => {
 
         return {
           slug: kid.slug, label: kid.label, parentSlug: parent.slug, colour: kid.colour,
+          kind: "spend" as const,
           method: m.method, inherited: m.inherited, manualAmount: src.manualAmount,
           manualByMonth: rowFor(kid.slug).manualByMonth,
           series, alternates,
@@ -249,6 +254,7 @@ v2.get("/budget-v2", async (c) => {
 
       out.push({
         slug: parent.slug, label: parent.label, parentSlug: null, colour: parent.colour,
+        kind: "spend" as const,
         method: own.method, inherited: own.inherited, manualAmount: ownRow.manualAmount,
         manualByMonth: ownRow.manualByMonth,
         series: parentSeries, alternates: parentAlternates,
@@ -256,23 +262,72 @@ v2.get("/budget-v2", async (c) => {
       out.push(...kidRows);
     }
 
-    /* Income, on the same months and the same footing: what actually arrived
-       where the month has been, and a trimmed average of those months where it
-       has not. Trimmed for the same reason spending is — one bonus should not
-       become the expectation for every month after it. */
-    const earned = behind.map((m) => buckets.get(m)?.income ?? 0);
-    const expectedIncome = Math.round(trimmedMean(earned));
-    const income: Record<string, number | null> = {};
-    for (const month of behind) income[month] = buckets.get(month)?.income ?? 0;
-    for (const month of ahead) income[month] = expectedIncome > 0 ? expectedIncome : null;
+    /* Income, planned the same way spending is and drawn in its own card.
+     *
+     * It gets no breakdown, and that is a limit of the data rather than a
+     * choice: monthlyBuckets files spending by category but keeps income only
+     * as a monthly total, so Salary and Dividends cannot be told apart here
+     * without changing what every other tab reads. One series it is.
+     *
+     * Seasonal is not offered either. It reads its answer out of the spending
+     * projection, which has nothing to say about earnings, so asking for it
+     * would quietly return a spending figure. Average, previous, manual and
+     * none all mean exactly what they mean for spending.
+     */
+    const incomeCat = ctx.list.find((cat) => cat.slug === "income" && cat.kind === "income");
+    const incomeAt = (month: string) => buckets.get(month)?.income ?? 0;
+    const incomeCompleted = behind.filter((m) => incomeAt(m) > 0);
+    const incomeHistory: HistoryLookup = {
+      at: (_slug, month) => incomeAt(month),
+      completed: incomeCompleted,
+      lastComplete: incomeCompleted.length ? incomeCompleted[incomeCompleted.length - 1] : null,
+      before: (month) => incomeCompleted.filter((k) => k < month),
+    };
+    const INCOME_METHODS = METHODS.filter((m) => m !== "seasonal");
+    const incomeRow = incomeCat ? (rows.get(incomeCat.id) ?? EMPTY) : EMPTY;
+    const incomePlan = incomeCat ? resolveMethod("income", ctx, rows) : null;
+    const incomeMethod: Method = incomePlan && incomePlan.method !== "seasonal"
+      ? incomePlan.method : "average";
+
+    const incomeUnder = (month: string, method: Method) => {
+      if (method === "manual") {
+        const named = incomeRow.manualByMonth[month];
+        return typeof named === "number" ? named : incomeRow.manualAmount;
+      }
+      if (method === "none") return 0;
+      if (method === "previous") {
+        const known = incomeHistory.before(month);
+        return known.length ? Math.round(incomeAt(known[known.length - 1])) : null;
+      }
+      const t = trimmedMean(incomeHistory.before(month).map(incomeAt));
+      return t > 0 ? Math.round(t) : null;
+    };
+
+    if (incomeCat) {
+      const series: Record<string, number | null> = {};
+      for (const month of behind) series[month] = incomeAt(month);
+      for (const month of ahead) series[month] = incomeUnder(month, incomeMethod);
+      const alternates: Record<string, Record<string, number | null>> = {};
+      for (const method of INCOME_METHODS) {
+        alternates[method] = Object.fromEntries(ahead.map((m) => [m, incomeUnder(m, method)]));
+      }
+      // First in the list, because money arriving comes before money leaving.
+      out.unshift({
+        slug: incomeCat.slug, label: incomeCat.label, parentSlug: null,
+        colour: incomeCat.colour, kind: "income" as const,
+        method: incomeMethod, inherited: incomePlan ? incomePlan.inherited : true,
+        manualAmount: incomeRow.manualAmount, manualByMonth: incomeRow.manualByMonth,
+        series, alternates,
+      });
+    }
 
     return c.json({
       ok: true,
       siloed: true,
       methods: METHODS,
+      incomeMethods: INCOME_METHODS,
       months,
       firstProjected,
-      income,
       basis: plan.method,
       growthPct: plan.growthPct,
       monthsOfHistory: completed.length,
