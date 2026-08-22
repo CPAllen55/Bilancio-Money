@@ -1458,6 +1458,22 @@ function stackTotal(cx, topY, total, band, month, label, selected) {
     'font-family="IBM Plex Mono" font-size="10.5" fill="var(--ink-soft)">' + money0(total) + '</text>';
 }
 
+/**
+ * How wide a bar should be, given the room its month has.
+ *
+ * What is held steady is the GAP, not the width. Capping the width meant that
+ * zooming in freed up room and then left it lying between the bars — three
+ * months drawn as three thin columns marooned in white space, with the chart
+ * looking no fuller than it did at twelve.
+ *
+ * Capping the gap instead spends that room on the bars. Above about eleven
+ * months nothing changes at all: the proportional gap is already narrower than
+ * the cap there, so the old expression and this one agree exactly.
+ */
+function barWidth(band, share, maxGap) {
+  return band - Math.min(band * share, maxGap);
+}
+
 function monthLabel(ym) {
   const p = ym.split('-');
   return MONTH_NAMES[Number(p[1]) - 1] + ' ' + p[0];
@@ -1567,8 +1583,9 @@ function drawTrend() {
   const y = v => PT + plotH - (v / yMax) * plotH;
   const band = plotW / all.length;
   // Bars grow as the view narrows — that is what zooming in is for — but stop
-  // short of touching, so the gap still reads as a gap between months.
-  const barW = Math.min(46, band * 0.55);
+  // short of touching, so the gap still reads as a gap between months. The cap
+  // is on that gap, so the growing actually happens.
+  const barW = barWidth(band, 0.45, 34);
   const every = Math.ceil(all.length / 12);
 
   let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
@@ -1979,7 +1996,9 @@ function drawNet() {
   const zero = y(0);
 
   const band = plotW / rows.length;
-  const barW = Math.min(34, band * 0.5);
+  // Picking three months here does what zooming in does on Trend, so the bars
+  // widen the same way rather than stranding the room it frees.
+  const barW = barWidth(band, 0.5, 34);
 
   let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
             '" preserveAspectRatio="xMidYMid meet" role="img" ' +
@@ -2607,10 +2626,10 @@ function pieBarsSvg(entries, w) {
   const yMax = stepMul * mag * 4;
   const y = v => PT + plotH - (v / yMax) * plotH;
   const band = plotW / months.length;
-  // 46, as above. The cap was the one number that still differed, and a bar
-  // half the width of the same bar higher up the page is exactly the kind of
-  // difference that makes two charts look unrelated.
-  const barW = Math.min(46, band * 0.55);
+  // The same rule as above, to the number. A bar half the width of the same bar
+  // higher up the page is exactly the kind of difference that makes two charts
+  // look unrelated.
+  const barW = barWidth(band, 0.45, 34);
   const every = Math.ceil(months.length / 12);
 
   let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
