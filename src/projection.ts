@@ -32,6 +32,7 @@
 
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
+import { ownRates, scaleSpend } from "./seasonal-rates";
 import { transactions } from "./db/schema";
 import type { CategoryContext, MonthBucket } from "./summary-routes";
 import { monthlyBuckets } from "./summary-routes";
@@ -85,19 +86,6 @@ async function firstTransactionMonth(
 
   const first = rows[0]?.first;
   return first ? { month: first.slice(0, 7), day: Number(first.slice(8, 10)) } : null;
-}
-
-function scaleSpend(
-  byCategory: Record<string, number>,
-  factor: number,
-  ctx: CategoryContext,
-): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const [slug, v] of Object.entries(byCategory)) {
-    if (!v || ctx.kindOfSlug.get(slug) !== "spend") continue;
-    out[slug] = Math.round(v * factor);
-  }
-  return out;
 }
 
 /**
@@ -167,6 +155,8 @@ export async function buildPlan(
   interface Basis {
     hasSeasonal: boolean;
     growth: number;
+    /** Year-on-year rate for the categories that have earned their own. */
+    ownRate: Record<string, number>;
     comparableMonths: number;
     recentExpense: number;
     recentIncome: number;
@@ -183,6 +173,21 @@ export async function buildPlan(
     const thisYearSum = comparable.reduce((s, k) => s + at(k).expense, 0);
     const priorSum = comparable.reduce((s, k) => s + at(priorOf(k)).expense, 0);
     const hasSeasonal = comparable.length >= 2 && priorSum > 0;
+
+    // A rate per category, from the months where that category itself has
+    // something to compare. Categories do not move together — the ledger can
+    // rise while groceries fall — and one rate for all of them projects the
+    // ledger's story onto every line in it.
+    const seen = new Set<string>();
+    for (const k of comparable) {
+      for (const side of [at(k).byCategory, at(priorOf(k)).byCategory]) {
+        for (const [slug, v] of Object.entries(side)) {
+          if (v > 0 && ctx.kindOfSlug.get(slug) === "spend") seen.add(slug);
+        }
+      }
+    }
+    const ownRate = ownRates(
+      comparable, (slug, m) => at(m).byCategory[slug] ?? 0, priorOf, seen);
 
     const recent = known.filter((k) => at(k).expense > 0).slice(-3);
     const recentShape: Record<string, number> = {};
@@ -201,6 +206,7 @@ export async function buildPlan(
     const basis: Basis = {
       hasSeasonal,
       growth: hasSeasonal ? thisYearSum / priorSum : 1,
+      ownRate,
       comparableMonths: comparable.length,
       recentExpense: mean(recent.map((k) => at(k).expense)),
       recentIncome: mean(known.slice(-3).map((k) => at(k).income).filter((v) => v > 0)),
@@ -240,11 +246,17 @@ export async function buildPlan(
       const seasonal = b.hasSeasonal && prior.expense > 0 && usable(priorKey);
 
       if (seasonal) {
+        const byCategory = scaleSpend(prior.byCategory, b.growth, b.ownRate,
+          (slug) => ctx.kindOfSlug.get(slug) === "spend");
+        // Summed from the parts rather than scaled on its own, or the total
+        // would disagree with the categories underneath it the moment they
+        // stopped all moving at the same rate.
+        const expense = Object.values(byCategory).reduce((s, v) => s + v, 0);
         return {
           month, seasonal: true,
-          expense: Math.round(prior.expense * b.growth),
+          expense,
           income: prior.income > 0 ? Math.round(prior.income * b.growth) : Math.round(b.recentIncome),
-          byCategory: scaleSpend(prior.byCategory, b.growth, ctx),
+          byCategory,
         };
       }
 
