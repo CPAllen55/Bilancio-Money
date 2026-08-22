@@ -561,16 +561,27 @@
   .bv2-total b{ display:block; color:var(--ink); font-size:14px; font-weight:500; }
 
   /* --cols is the number of months in the horizon, set per card. */
-  .bv2-grid{ display:grid; grid-template-columns:150px 152px repeat(var(--cols), minmax(48px, 1fr));
+  /* One column for the name and its menu, and the chart takes everything else.
+     The legend is a caption across the top rather than a column beside the
+     chart, which is the other half of the room the chart gained. */
+  .bv2-grid{ display:grid; grid-template-columns:186px repeat(var(--cols), minmax(52px, 1fr));
              gap:7px 0; align-items:center; margin-top:16px; }
-  .bv2-chart{ grid-column:3 / -1; min-width:0; }
+  .bv2-chart{ grid-column:2 / -1; min-width:0; }
   .bv2-chart svg{ display:block; width:100%; height:auto; }
-  .bv2-legend{ grid-column:1 / 3; align-self:end; display:flex; flex-direction:column;
-               gap:5px; font-size:10.5px; color:var(--muted); padding:0 12px 6px 0; }
+  .bv2-legend{ grid-column:1 / -1; display:flex; flex-wrap:wrap; align-items:center;
+               gap:6px 16px; font-size:11px; color:var(--muted); padding:0 0 10px; }
   .bv2-lt{ color:var(--ink-soft); }
+  .bv2-key{ white-space:nowrap; }
   .bv2-legend i{ display:inline-block; width:18px; height:0; border-top-width:2px;
                  border-top-style:dashed; margin-right:7px; vertical-align:middle; }
-  .bv2-clear{ margin-top:4px; font-size:10.5px; padding:4px 8px; align-self:flex-start; }
+  .bv2-clear{ font-size:10.5px; padding:4px 8px; margin-left:auto; }
+
+  /* The name over its menu, in the one column they now share. */
+  .bv2-rowhead{ display:flex; flex-direction:column; align-items:stretch; gap:4px;
+                padding-right:14px; min-width:0; }
+  .bv2-rowhead .bv2-select{ width:100%; font-size:11px; padding:5px 7px; }
+  .bv2-titled{ display:flex; flex-direction:column; gap:5px; align-items:flex-start; }
+  .bv2-titled .bv2-select{ font-size:11.5px; padding:6px 9px; }
   .bv2-mh{ font-family:'IBM Plex Mono', monospace; font-size:10px; color:var(--muted);
            text-align:center; padding:2px 2px 0; }
   /* The months still to come, marked in the headings as well as in the chart. */
@@ -581,13 +592,12 @@
              padding-right:12px; }
   .bv2-name span.t{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   button.bv2-name{ background:none; border:1px solid transparent; border-radius:5px;
-                   padding:4px 12px 4px 15px; width:100%; text-align:left; cursor:pointer;
-                   color:var(--ink); font-size:12.5px; }
+                   padding:4px 8px; width:100%; text-align:left; cursor:pointer;
+                   color:var(--ink); font-size:12.5px; display:flex; align-items:center;
+                   gap:7px; min-width:0; }
   button.bv2-name:hover{ border-color:var(--hair); }
   button.bv2-name.on{ border-color:var(--mint); background:var(--mint-bg); }
   .bv2-method{ padding-right:14px; }
-  .bv2-inherit{ font-size:10px; color:var(--muted); border:1px solid var(--hair);
-                border-radius:3px; padding:1px 4px; flex:none; }
   .bv2-sep{ grid-column:1 / -1; height:1px; background:var(--hair); margin:3px 0; }
 
   /* A month that is not editable still shows its figure, so the row reads
@@ -604,11 +614,16 @@
                 padding:5px 4px; text-align:right; }
   input.bv2-in:focus{ outline:none; border-color:var(--mint); }
 
-  @media (max-width:1180px){
+  @media (max-width:1060px){
     /* Twelve columns cannot hold a figure much below this, so they go and the
-       card keeps the chart, which is the half that still reads. */
+       card keeps the chart, which is the half that still reads. Lower than it
+       used to be, because dropping the method column bought the grid room. */
     .bv2-grid{ grid-template-columns:1fr 1fr; }
     .bv2-chart, .bv2-legend, .bv2-sep{ grid-column:1 / -1; }
+    .bv2-rowhead{ padding-right:0; }
+    /* The row is its own column here, so the name can have the padding back —
+       without it the longest category loses its last letter to an ellipsis. */
+    button.bv2-name{ padding-left:4px; padding-right:4px; }
     .bv2-mh, .bv2-cell, input.bv2-in{ display:none; }
     .bv2-name{ padding-right:0; }
   }
@@ -3266,7 +3281,14 @@ const bv2Focus = {};
    against it says nothing; "none" is zero and would only ever be a flat line
    along the floor. */
 const BV2_COMPARE = ['average', 'previous', 'seasonal'];
-const BV2_LINE = { average: '#6aa9ff', previous: '#e0b341', seasonal: '#e0653c' };
+/* Chosen against the category palette rather than for their own sake. The old
+   three sat on top of it: the seasonal line was 7.9 from Food and Dining in
+   CIE76, which is to say the same colour, and the average line was 14 from one
+   of the blues. Categories occupy most of the wheel, but nothing uses violet or
+   chartreuse, and nothing is near white. Measured against all 35 spend colours
+   plus the mint the income bars use: 28.6, 44.8 and 34.3 at worst, where under
+   about 20 reads as a match. */
+const BV2_LINE = { average: '#d67dff', previous: '#c8dc3c', seasonal: '#eef3f7' };
 const BV2_INCOME = '#00F0A8';
 
 function bv2Short(ym) {
@@ -3407,12 +3429,15 @@ function bv2Chart(parent, kids, focus) {
   return svg + '</svg>';
 }
 
+/* Above the chart and across the full width, so it reads as a caption for what
+   is drawn rather than as a column competing with it — and so the chart can
+   start where the legend used to. */
 function bv2Legend(parent, kids, focus) {
   const lineSource = focus ? kids.find(k => k.slug === focus) : parent;
   const lines = BV2_COMPARE.filter(m => m !== (lineSource ? lineSource.method : parent.method));
   const who = focus && lineSource ? lineSource.label : parent.label;
   let html = '<span class="bv2-lt">' + escapeHtml(who) + ' if instead you picked:</span>' +
-    lines.map(m => '<span><i style="border-top-color:' + BV2_LINE[m] + '"></i>' +
+    lines.map(m => '<span class="bv2-key"><i style="border-top-color:' + BV2_LINE[m] + '"></i>' +
       escapeHtml(METHOD_LABEL[m] || m) + '</span>').join('');
   if (focus) {
     html += '<button type="button" class="bv2-clear" data-bv2-clear="' +
@@ -3456,10 +3481,12 @@ function bv2Card(parent, kids) {
       '<button class="ctog" type="button" data-bv2-open="' + escapeHtml(parent.slug) + '" ' +
         'aria-expanded="' + open + '">' + (open ? '−' : '+') + '</button>' +
       '<span class="swatch" style="background:' + parent.colour + '"></span>' +
-      '<b>' + escapeHtml(parent.label) + '</b>' +
-      '<select class="ctl bv2-select" data-slug="' + escapeHtml(parent.slug) +
-        '" aria-label="Method for ' + escapeHtml(parent.label) + '">' +
-        bv2Options(parent.method, parent.inherited, true) + '</select>' +
+      // The menu sits under the name it belongs to rather than beside it, which
+      // is what frees the column the chart has taken.
+      '<span class="bv2-titled"><b>' + escapeHtml(parent.label) + '</b>' +
+        '<select class="ctl bv2-select" data-slug="' + escapeHtml(parent.slug) +
+          '" aria-label="Method for ' + escapeHtml(parent.label) + '">' +
+          bv2Options(parent.method, parent.inherited, true) + '</select></span>' +
       '<span class="bv2-total">rest of the year<b>' + money(planned) + '</b></span>' +
     '</div>';
 
@@ -3468,7 +3495,7 @@ function bv2Card(parent, kids) {
   html += '<div class="bv2-grid" style="--cols:' + months.length + '">' +
     '<div class="bv2-legend">' + bv2Legend(parent, kids, focus) + '</div>' +
     '<div class="bv2-chart">' + bv2Chart(parent, kids, focus) + '</div>' +
-    '<div></div><div></div>' +
+    '<div></div>' +
     months.map(m => '<div class="bv2-mh' + (m >= bv2Data.firstProjected ? ' ahead' : '') + '">' +
       bv2Short(m) + '</div>').join('') +
     '<div class="bv2-sep"></div>';
@@ -3476,23 +3503,26 @@ function bv2Card(parent, kids) {
   // A parent set to manual is typed once and shared across its children by what
   // they actually cost, so the boxes belong on the parent's own row.
   if (ownsManual) {
-    html += '<div class="bv2-name"><span class="t">Whole category</span></div><div></div>' +
+    html += '<div class="bv2-name"><span class="t">Whole category</span></div>' +
       months.map(m => bv2MonthCell(parent, m, true)).join('');
   }
 
   for (const kid of kids) {
     const editable = kid.method === 'manual' && !kid.inherited;
     const on = focus === kid.slug;
-    html += '<button type="button" class="bv2-name sub' + (on ? ' on' : '') +
-        '" data-bv2-pick="' + escapeHtml(kid.slug) + '" data-parent="' + escapeHtml(parent.slug) +
-        '" aria-pressed="' + on + '">' +
-        '<span class="swatch" style="background:' + kid.colour + '"></span>' +
-        '<span class="t">' + escapeHtml(kid.label) + '</span>' +
-        (kid.inherited ? '<span class="bv2-inherit">inherited</span>' : '') +
-      '</button>' +
-      '<div class="bv2-method"><select class="ctl bv2-select" data-slug="' + escapeHtml(kid.slug) +
-        '" aria-label="Method for ' + escapeHtml(kid.label) + '">' +
-        bv2Options(kid.method, kid.inherited, false) + '</select></div>' +
+    // The name and its menu share one cell: a select cannot live inside the
+    // button, so they are stacked in a wrapper instead of taking a column each.
+    html += '<div class="bv2-rowhead">' +
+        '<button type="button" class="bv2-name sub' + (on ? ' on' : '') +
+          '" data-bv2-pick="' + escapeHtml(kid.slug) + '" data-parent="' + escapeHtml(parent.slug) +
+          '" aria-pressed="' + on + '">' +
+          '<span class="swatch" style="background:' + kid.colour + '"></span>' +
+          '<span class="t">' + escapeHtml(kid.label) + '</span>' +
+        '</button>' +
+        '<select class="ctl bv2-select" data-slug="' + escapeHtml(kid.slug) +
+          '" aria-label="Method for ' + escapeHtml(kid.label) + '">' +
+          bv2Options(kid.method, kid.inherited, false) + '</select>' +
+      '</div>' +
       months.map(m => bv2MonthCell(kid, m, editable)).join('');
   }
 
