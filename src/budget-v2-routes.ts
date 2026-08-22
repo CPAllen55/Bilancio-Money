@@ -41,6 +41,7 @@ import type { HistoryLookup, Method, PlanRow } from "./budget-plan";
 import {
   METHODS, budgetForLeaf, isMethod, resolveMethod, shareOut, trimmedMean,
 } from "./budget-plan";
+import { monthsApart, trendAt } from "./trend-line";
 
 const v2 = new Hono<{ Bindings: Env }>();
 
@@ -295,11 +296,16 @@ v2.get("/budget-v2", async (c) => {
         return typeof named === "number" ? named : incomeRow.manualAmount;
       }
       if (method === "none") return 0;
+      const known = incomeHistory.before(month);
       if (method === "previous") {
-        const known = incomeHistory.before(month);
         return known.length ? Math.round(incomeAt(known[known.length - 1])) : null;
       }
-      const t = trimmedMean(incomeHistory.before(month).map(incomeAt));
+      const t = trimmedMean(known.map(incomeAt));
+      if (method === "trend" && known.length) {
+        const answer = trendAt(
+          known.map(incomeAt), monthsApart(known[known.length - 1], month), t);
+        if (answer !== null) return answer;
+      }
       return t > 0 ? Math.round(t) : null;
     };
 

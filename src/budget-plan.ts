@@ -9,6 +9,9 @@
  *             The default, and what an unset category falls back to.
  *   previous  Last completed month, repeated. Blunt, and exactly what people
  *             mean when they say "same as last month".
+ *   trend     A line through the months so far, carried forward. What average
+ *             misses on anything that has been climbing or falling all year,
+ *             and what seasonal cannot say without a prior year to read.
  *   seasonal  The same month a year ago, scaled by this year's trend. The only
  *             method that expects December to cost more than August.
  *   manual    A number you typed.
@@ -34,12 +37,13 @@
  */
 
 import { getDb } from "./db/client";
+import { monthsApart, trendAt } from "./trend-line";
 import type { CategoryContext } from "./summary-routes";
 import type { Plan } from "./projection";
 import { budgetPlans } from "./db/schema";
 import { eq } from "drizzle-orm";
 
-export const METHODS = ["average", "previous", "seasonal", "manual", "none"] as const;
+export const METHODS = ["average", "trend", "previous", "seasonal", "manual", "none"] as const;
 export type Method = (typeof METHODS)[number];
 
 export const isMethod = (v: unknown): v is Method =>
@@ -158,6 +162,21 @@ export function budgetForLeaf(
       const known = history.before(month);
       if (!known.length) return null;
       return Math.round(history.at(slug, known[known.length - 1]));
+    }
+
+    case "trend": {
+      // Fitted to the months before this one, and reaching only as far as this
+      // one — so a month that has ended stops moving, exactly as the others do.
+      const known = history.before(month);
+      if (!known.length) return null;
+      const values = known.map((m) => history.at(slug, m));
+      const typical = trimmedMean(values);
+      const ahead = monthsApart(known[known.length - 1], month);
+      const answer = trendAt(values, ahead, typical);
+      // Not enough of a history to fit a line to. Average is what trend would
+      // become with a slope of zero, so it is the honest thing to fall back on.
+      if (answer === null) return typical > 0 ? Math.round(typical) : null;
+      return answer;
     }
 
     case "seasonal": {

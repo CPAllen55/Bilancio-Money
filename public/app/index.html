@@ -2174,6 +2174,7 @@ $('net-range').addEventListener('change', () => { netSel = null; refresh(); });
  */
 const METHOD_LABEL = {
   average: 'Historical Average',
+  trend: 'Historical Trend',
   previous: 'Same as last month',
   seasonal: 'Seasonal',
   manual: 'Manual',
@@ -2182,6 +2183,7 @@ const METHOD_LABEL = {
 
 const METHOD_NOTE = {
   average: 'A typical month, with the most and least expensive set aside so one unusual month does not become the plan.',
+  trend: 'A line through the months so far, carried forward. What Historical Average misses on anything that has been climbing or falling all year. Held between a quarter and three times a typical month, because a line extended far enough will predict a figure nobody would ever spend.',
   previous: 'Whatever the last complete month cost, repeated.',
   seasonal: 'The same month a year ago, scaled by how this year is running. Keeps the spikes — the only method that expects December to cost more than August.',
   manual: 'A figure you set. On a parent it is shared across its children in proportion to what they actually cost.',
@@ -3287,7 +3289,7 @@ const bv2Focus = {};
 /* The three computed methods. Manual is whatever you typed, so comparing
    against it says nothing; "none" is zero and would only ever be a flat line
    along the floor. */
-const BV2_COMPARE = ['average', 'previous', 'seasonal'];
+const BV2_COMPARE = ['average', 'trend', 'previous', 'seasonal'];
 /* Chosen against the category palette rather than for their own sake. The old
    three sat on top of it: the seasonal line was 7.9 from Food and Dining in
    CIE76, which is to say the same colour, and the average line was 14 from one
@@ -3295,7 +3297,7 @@ const BV2_COMPARE = ['average', 'previous', 'seasonal'];
    chartreuse, and nothing is near white. Measured against all 35 spend colours
    plus the mint the income bars use: 28.6, 44.8 and 34.3 at worst, where under
    about 20 reads as a match. */
-const BV2_LINE = { average: '#d67dff', previous: '#c8dc3c', seasonal: '#eef3f7' };
+const BV2_LINE = { average: '#d67dff', trend: '#8ce8ff', previous: '#c8dc3c', seasonal: '#eef3f7' };
 
 function bv2Short(ym) {
   return MONTH_NAMES[Number(ym.split('-')[1]) - 1];
