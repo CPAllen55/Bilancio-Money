@@ -561,45 +561,58 @@
   .bv2-total b{ display:block; color:var(--ink); font-size:14px; font-weight:500; }
 
   /* --cols is the number of months in the horizon, set per card. */
-  .bv2-grid{ display:grid; grid-template-columns:180px 168px repeat(var(--cols), minmax(64px, 1fr));
+  .bv2-grid{ display:grid; grid-template-columns:150px 152px repeat(var(--cols), minmax(48px, 1fr));
              gap:7px 0; align-items:center; margin-top:16px; }
   .bv2-chart{ grid-column:3 / -1; min-width:0; }
   .bv2-chart svg{ display:block; width:100%; height:auto; }
   .bv2-legend{ grid-column:1 / 3; align-self:end; display:flex; flex-direction:column;
                gap:5px; font-size:10.5px; color:var(--muted); padding:0 12px 6px 0; }
+  .bv2-lt{ color:var(--ink-soft); }
   .bv2-legend i{ display:inline-block; width:18px; height:0; border-top-width:2px;
-                 margin-right:7px; vertical-align:middle; }
-  .bv2-mh{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--muted);
-           text-align:center; padding:2px 3px 0; }
+                 border-top-style:dashed; margin-right:7px; vertical-align:middle; }
+  .bv2-clear{ margin-top:4px; font-size:10.5px; padding:4px 8px; align-self:flex-start; }
+  .bv2-mh{ font-family:'IBM Plex Mono', monospace; font-size:10px; color:var(--muted);
+           text-align:center; padding:2px 2px 0; }
+  /* The months still to come, marked in the headings as well as in the chart. */
+  .bv2-mh.ahead{ color:var(--mint); }
+
+  /* A subcategory row is the same control as its segment in the chart. */
   .bv2-name{ display:flex; align-items:center; gap:7px; font-size:12.5px; min-width:0;
              padding-right:12px; }
   .bv2-name span.t{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .bv2-name.sub{ padding-left:15px; }
+  button.bv2-name{ background:none; border:1px solid transparent; border-radius:5px;
+                   padding:4px 12px 4px 15px; width:100%; text-align:left; cursor:pointer;
+                   color:var(--ink); font-size:12.5px; }
+  button.bv2-name:hover{ border-color:var(--hair); }
+  button.bv2-name.on{ border-color:var(--mint); background:var(--mint-bg); }
   .bv2-method{ padding-right:14px; }
   .bv2-inherit{ font-size:10px; color:var(--muted); border:1px solid var(--hair);
                 border-radius:3px; padding:1px 4px; flex:none; }
   .bv2-sep{ grid-column:1 / -1; height:1px; background:var(--hair); margin:3px 0; }
 
   /* A month that is not editable still shows its figure, so the row reads
-     across whether or not you are the one choosing the numbers. */
-  .bv2-cell{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft);
-             text-align:right; padding:0 6px; }
-  .bv2-cell.nil{ color:var(--muted); }
-  input.bv2-in{ font-family:'IBM Plex Mono', monospace; font-size:11px;
-                width:calc(100% - 6px); margin:0 3px; min-width:0;
+     across whether or not you are the one choosing the numbers. Months already
+     gone are dimmer: they are a record, not a decision. */
+  .bv2-cell{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--ink-soft);
+             text-align:right; padding:0 5px; }
+  .bv2-cell.past{ color:var(--muted); }
+  .bv2-cell.nil{ color:var(--muted); opacity:.6; }
+  input.bv2-in{ font-family:'IBM Plex Mono', monospace; font-size:10.5px;
+                width:calc(100% - 4px); margin:0 2px; min-width:0;
                 background:var(--bg-panel); color:var(--ink);
                 border:1px solid var(--hair-strong); border-radius:4px;
-                padding:5px 6px; text-align:right; }
+                padding:5px 4px; text-align:right; }
   input.bv2-in:focus{ outline:none; border-color:var(--mint); }
 
-  @media (max-width:980px){
-    /* Below this a month column cannot hold a figure without truncating it, so
-       the grid stops pretending to be one and the card keeps the chart alone. */
+  @media (max-width:1180px){
+    /* Twelve columns cannot hold a figure much below this, so they go and the
+       card keeps the chart, which is the half that still reads. */
     .bv2-grid{ grid-template-columns:1fr 1fr; }
     .bv2-chart, .bv2-legend, .bv2-sep{ grid-column:1 / -1; }
     .bv2-mh, .bv2-cell, input.bv2-in{ display:none; }
     .bv2-name{ padding-right:0; }
   }
+
 </style>
 </head>
 <body>
@@ -3210,34 +3223,35 @@ $('signout').addEventListener('click', async () => {
 });
 
 /* ------------------------------------------------------- budgeting v2 -- *//*
- * The same decision as the Budgeting tab, made across the rest of the year
+ * The same decision as the Budgeting tab, made across a whole calendar year
  * instead of one month at a time, and in its own table so that trying things
  * out here cannot move a number on any other tab.
  *
- * Three things it does that v1 cannot:
+ * The chart is the point of it. Months already gone carry what was actually
+ * spent; the rest carry what the chosen method says they will cost, under a
+ * shade so the two are never mistaken for each other. The methods not chosen
+ * run across the projected half as lines, because deciding between "average"
+ * and "seasonal" by reading their definitions is guesswork and seeing the two
+ * curves is not.
  *
- *   The horizon. Every month from this one to December, so the shape of a plan
- *   is visible rather than implied by a single figure.
- *
- *   The alternatives. Bars are the method in force; the methods not chosen are
- *   drawn behind them as lines. Deciding between "average" and "seasonal" by
- *   reading their definitions is guesswork — seeing the two curves is not.
- *
- *   Manual per month. One box per month, sitting in that month's column, so
- *   December can cost more than August without needing a method that says so.
+ * Selecting a subcategory narrows all of that to it — its bars, its lines, its
+ * comparison — so the question "is Groceries the problem" can be asked without
+ * reading a stack.
  */
 let bv2Data = null;
 const bv2Open = new Set();
+/** parent slug -> the subcategory being looked at, if any. */
+const bv2Focus = {};
 
 /* The three computed methods. Manual is whatever you typed, so comparing
    against it says nothing; "none" is zero and would only ever be a flat line
    along the floor. */
 const BV2_COMPARE = ['average', 'previous', 'seasonal'];
 const BV2_LINE = { average: '#6aa9ff', previous: '#e0b341', seasonal: '#e0653c' };
+const BV2_INCOME = '#00F0A8';
 
 function bv2Short(ym) {
-  const p = ym.split('-');
-  return MONTH_NAMES[Number(p[1]) - 1];
+  return MONTH_NAMES[Number(ym.split('-')[1]) - 1];
 }
 
 function bv2Options(selected, inherited, isParent) {
@@ -3254,30 +3268,39 @@ function bv2Options(selected, inherited, isParent) {
 }
 
 /**
- * One parent's year: its children stacked per month, with the methods it did
- * not pick drawn over the top.
+ * One parent's year.
  *
  * Drawn in equal bands with no padding either side, because the grid column
  * under band i is this category's figure for month i and the two have to line
  * up. That rules out a y axis in the usual place, so the scale is written
  * inside the plot against the gridlines.
  */
-function bv2Chart(parent, kids, months) {
+function bv2Chart(parent, kids, focus) {
+  const months = bv2Data.months;
+  const first = bv2Data.firstProjected;
   const n = months.length;
-  if (!n) return '<p class="empty">Nothing left in the year.</p>';
+  if (!n) return '<p class="empty">Nothing to plan.</p>';
 
-  const BAND = 100, W = BAND * n, H = 168, PT = 20, PB = 4;
+  const BAND = 100, W = BAND * n, H = 196, PT = 22, PB = 4;
   const plotH = H - PT - PB;
-  const stack = kids.length ? kids : [parent];
+  // Focused on one subcategory, the stack is just that one. Otherwise it is
+  // every child, or the parent alone where it has none.
+  const stack = focus ? kids.filter(k => k.slug === focus)
+    : (kids.length ? kids : [parent]);
+  const lineSource = focus ? kids.find(k => k.slug === focus) : parent;
 
-  const totals = months.map(m => stack.reduce((s, k) => s + (k.budget[m] || 0), 0));
-  const lines = BV2_COMPARE.filter(m => m !== parent.method);
+  const totals = months.map(m => stack.reduce((s, k) => s + (k.series[m] || 0), 0));
+  const lines = BV2_COMPARE.filter(m => m !== (lineSource ? lineSource.method : parent.method));
+
   let peak = Math.max.apply(null, totals.concat([0]));
   for (const method of lines) {
-    for (const m of months) {
-      const v = parent.alternates[method] ? parent.alternates[method][m] : null;
-      if (typeof v === 'number' && v > peak) peak = v;
-    }
+    const src = (lineSource && lineSource.alternates[method]) || {};
+    for (const m of months) if (typeof src[m] === 'number' && src[m] > peak) peak = src[m];
+  }
+  const income = bv2Data.income || {};
+  for (const m of months) {
+    const v = (income[m] || 0) + (totals[months.indexOf(m)] || 0);
+    if (v > peak) peak = v;
   }
   if (peak <= 0) peak = 1;
 
@@ -3286,10 +3309,20 @@ function bv2Chart(parent, kids, months) {
   const yMax = step * mag * 3;
   const y = v => PT + plotH - (v / yMax) * plotH;
   const cx = i => i * BAND + BAND / 2;
-  const barW = BAND * 0.46;
+  const barW = BAND * 0.5;
 
   let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" ' +
-    'role="img" aria-label="' + escapeHtml(parent.label) + ' budget for the rest of the year">';
+    'role="img" aria-label="' + escapeHtml(parent.label) + ', this year">';
+
+  // The projected half, shaded. Drawn first so everything else sits on it.
+  const firstIdx = months.indexOf(first);
+  if (firstIdx > -1) {
+    svg += '<rect x="' + (firstIdx * BAND) + '" y="0" width="' + ((n - firstIdx) * BAND) +
+      '" height="' + H + '" fill="var(--mint)" opacity=".05"/>' +
+      '<line x1="' + (firstIdx * BAND) + '" x2="' + (firstIdx * BAND) + '" y1="0" y2="' + H +
+      '" stroke="var(--mint)" stroke-width="1" opacity=".35" stroke-dasharray="3 3" ' +
+      'vector-effect="non-scaling-stroke"/>';
+  }
 
   for (let k = 0; k <= 3; k++) {
     const v = (yMax / 3) * k, yy = y(v);
@@ -3304,52 +3337,84 @@ function bv2Chart(parent, kids, months) {
   months.forEach((m, i) => {
     let acc = 0;
     for (const k of stack) {
-      const v = k.budget[m] || 0;
+      const v = k.series[m] || 0;
       if (!v) continue;
       const top = y(acc + v), bot = y(acc);
-      svg += '<rect x="' + (cx(i) - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
+      const on = focus === k.slug;
+      const dim = focus && !on;
+      svg += '<rect class="seg' + (on ? ' sel' : '') + (dim ? ' dim' : '') + '"' +
+        ' data-bv2-pick="' + escapeHtml(k.slug) + '" data-parent="' + escapeHtml(parent.slug) + '"' +
+        ' tabindex="0" role="button"' +
+        ' x="' + (cx(i) - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
         '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 1).toFixed(1) +
-        '" fill="' + k.colour + '" rx="1">' +
+        '" fill="' + k.colour + '" style="color:' + k.colour + '" rx="1">' +
         '<title>' + escapeHtml(k.label) + ' · ' + escapeHtml(monthLabel(m)) + ': ' + money(v) +
-        '</title></rect>';
+        (m >= first ? ' (planned)' : '') + '</title></rect>';
       acc += v;
     }
+
+    // Income sits on top of the spending it has to cover, so the gap between
+    // the two is the thing you are actually deciding about.
+    const inc = income[m];
+    if (typeof inc === 'number' && inc > 0) {
+      const top = y(acc + inc), bot = y(acc);
+      svg += '<rect class="seg noclick" x="' + (cx(i) - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
+        '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 1).toFixed(1) +
+        '" fill="' + BV2_INCOME + '" style="color:' + BV2_INCOME + '" opacity=".55" rx="1">' +
+        '<title>Income · ' + escapeHtml(monthLabel(m)) + ': ' + money(inc) +
+        (m >= first ? ' (expected)' : '') + '</title></rect>';
+    }
+
     if (totals[i] > 0) {
       svg += '<text x="' + cx(i).toFixed(1) + '" y="' + (y(totals[i]) - 6).toFixed(1) +
-        '" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" ' +
+        '" text-anchor="middle" font-family="IBM Plex Mono" font-size="9.5" ' +
         'fill="var(--ink-soft)">' + money0(totals[i]) + '</text>';
     }
   });
 
+  // The alternatives, across the months still to come.
   for (const method of lines) {
-    const src = parent.alternates[method] || {};
+    const src = (lineSource && lineSource.alternates[method]) || {};
     const pts = months.map((m, i) => {
       const v = src[m];
       return typeof v === 'number' ? cx(i).toFixed(1) + ',' + y(v).toFixed(1) : null;
     }).filter(Boolean);
     if (pts.length < 2) continue;
     svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + BV2_LINE[method] +
-      '" stroke-width="2" stroke-dasharray="5 4" opacity=".85" ' +
+      '" stroke-width="2" stroke-dasharray="5 4" opacity=".9" ' +
       'vector-effect="non-scaling-stroke"/>';
   }
 
   return svg + '</svg>';
 }
 
-function bv2Legend(parent) {
-  const lines = BV2_COMPARE.filter(m => m !== parent.method);
-  if (!lines.length) return '';
-  return '<span>If instead you picked:</span>' + lines.map(m =>
-    '<span><i style="border-top-color:' + BV2_LINE[m] + '"></i>' +
-    escapeHtml(METHOD_LABEL[m] || m) + '</span>').join('');
+function bv2Legend(parent, kids, focus) {
+  const lineSource = focus ? kids.find(k => k.slug === focus) : parent;
+  const lines = BV2_COMPARE.filter(m => m !== (lineSource ? lineSource.method : parent.method));
+  const who = focus && lineSource ? lineSource.label : parent.label;
+  let html = '<span class="bv2-lt">' + escapeHtml(who) + ' if instead you picked:</span>' +
+    lines.map(m => '<span><i style="border-top-color:' + BV2_LINE[m] + '"></i>' +
+      escapeHtml(METHOD_LABEL[m] || m) + '</span>').join('');
+  if (focus) {
+    html += '<button type="button" class="bv2-clear" data-bv2-clear="' +
+      escapeHtml(parent.slug) + '">Show all of ' + escapeHtml(parent.label) + '</button>';
+  }
+  return html;
 }
 
-/** A month cell: an input where the figure is yours to set, the number if not. */
+/**
+ * A month cell.
+ *
+ * Behind the current month it shows what was spent and cannot be edited — a
+ * budget for a month that has already happened is a wish. Ahead of it, and
+ * where the figure is yours to set, it is a box.
+ */
 function bv2MonthCell(row, month, editable) {
-  const v = row.budget[month];
-  if (!editable) {
-    return '<div class="bv2-cell' + (v ? '' : ' nil') + '">' +
-      (typeof v === 'number' ? money0(v) : '—') + '</div>';
+  const past = month < bv2Data.firstProjected;
+  const v = row.series[month];
+  if (past || !editable) {
+    return '<div class="bv2-cell' + (past ? ' past' : '') + (v ? '' : ' nil') + '">' +
+      (typeof v === 'number' && v ? money0(v) : '—') + '</div>';
   }
   const named = row.manualByMonth[month];
   const amount = typeof named === 'number' ? named : row.manualAmount;
@@ -3359,9 +3424,12 @@ function bv2MonthCell(row, month, editable) {
     escapeHtml(row.label) + ', ' + escapeHtml(monthLabel(month)) + '">';
 }
 
-function bv2Card(parent, kids, months) {
+function bv2Card(parent, kids) {
+  const months = bv2Data.months;
   const open = bv2Open.has(parent.slug);
-  const total = months.reduce((s, m) => s + (parent.budget[m] || 0), 0);
+  const focus = bv2Focus[parent.slug] || null;
+  const ahead = months.filter(m => m >= bv2Data.firstProjected);
+  const planned = ahead.reduce((s, m) => s + (parent.series[m] || 0), 0);
   const ownsManual = parent.method === 'manual' && !parent.inherited;
 
   let html = '<div class="bv2-card" data-parent="' + escapeHtml(parent.slug) + '">' +
@@ -3373,16 +3441,17 @@ function bv2Card(parent, kids, months) {
       '<select class="ctl bv2-select" data-slug="' + escapeHtml(parent.slug) +
         '" aria-label="Method for ' + escapeHtml(parent.label) + '">' +
         bv2Options(parent.method, parent.inherited, true) + '</select>' +
-      '<span class="bv2-total">rest of the year<b>' + money(total) + '</b></span>' +
+      '<span class="bv2-total">rest of the year<b>' + money(planned) + '</b></span>' +
     '</div>';
 
   if (!open) return html + '</div>';
 
   html += '<div class="bv2-grid" style="--cols:' + months.length + '">' +
-    '<div class="bv2-legend">' + bv2Legend(parent) + '</div>' +
-    '<div class="bv2-chart">' + bv2Chart(parent, kids, months) + '</div>' +
+    '<div class="bv2-legend">' + bv2Legend(parent, kids, focus) + '</div>' +
+    '<div class="bv2-chart">' + bv2Chart(parent, kids, focus) + '</div>' +
     '<div></div><div></div>' +
-    months.map(m => '<div class="bv2-mh">' + bv2Short(m) + '</div>').join('') +
+    months.map(m => '<div class="bv2-mh' + (m >= bv2Data.firstProjected ? ' ahead' : '') + '">' +
+      bv2Short(m) + '</div>').join('') +
     '<div class="bv2-sep"></div>';
 
   // A parent set to manual is typed once and shared across its children by what
@@ -3394,11 +3463,14 @@ function bv2Card(parent, kids, months) {
 
   for (const kid of kids) {
     const editable = kid.method === 'manual' && !kid.inherited;
-    html += '<div class="bv2-name sub">' +
+    const on = focus === kid.slug;
+    html += '<button type="button" class="bv2-name sub' + (on ? ' on' : '') +
+        '" data-bv2-pick="' + escapeHtml(kid.slug) + '" data-parent="' + escapeHtml(parent.slug) +
+        '" aria-pressed="' + on + '">' +
         '<span class="swatch" style="background:' + kid.colour + '"></span>' +
         '<span class="t">' + escapeHtml(kid.label) + '</span>' +
         (kid.inherited ? '<span class="bv2-inherit">inherited</span>' : '') +
-      '</div>' +
+      '</button>' +
       '<div class="bv2-method"><select class="ctl bv2-select" data-slug="' + escapeHtml(kid.slug) +
         '" aria-label="Method for ' + escapeHtml(kid.label) + '">' +
         bv2Options(kid.method, kid.inherited, false) + '</select></div>' +
@@ -3423,17 +3495,20 @@ async function renderBudgetingV2() {
   // Opened on the biggest plan rather than on nothing: the point of this tab is
   // the chart, and a column of shut cards shows none of it.
   if (!bv2Open.size) {
-    const spend = p => months.reduce((s, m) => s + (p.budget[m] || 0), 0);
+    const ahead = months.filter(m => m >= bv2Data.firstProjected);
+    const spend = p => ahead.reduce((s, m) => s + (p.series[m] || 0), 0);
     const biggest = parents.slice().sort((a, b) => spend(b) - spend(a))[0];
     if (biggest && spend(biggest) > 0) bv2Open.add(biggest.slug);
   }
 
   host.innerHTML = parents.map(p =>
-    bv2Card(p, bv2Data.categories.filter(c => c.parentSlug === p.slug), months)).join('');
+    bv2Card(p, bv2Data.categories.filter(c => c.parentSlug === p.slug))).join('');
 
-  $('bv2-note').textContent = 'Budgets for ' + monthLabel(months[0]) + ' to ' +
-    monthLabel(months[months.length - 1]) + ', from ' + bv2Data.monthsOfHistory +
-    ' complete month' + (bv2Data.monthsOfHistory === 1 ? '' : 's') + ' of history.' +
+  const from = monthLabel(bv2Data.firstProjected);
+  $('bv2-note').textContent = 'Bars are what was actually spent up to ' + from +
+    ', and what the chosen method plans from ' + from + ' on — the shaded half. Worked from ' +
+    bv2Data.monthsOfHistory + ' complete month' + (bv2Data.monthsOfHistory === 1 ? '' : 's') +
+    ' of history.' +
     (bv2Data.basis === 'seasonal-growth' && bv2Data.growthPct !== null
       ? ' Seasonal is using last year scaled by ' +
         (bv2Data.growthPct >= 0 ? '+' : '') + bv2Data.growthPct + '%.'
@@ -3469,11 +3544,34 @@ async function bv2Save(body) {
 }
 
 $('bv2-list').addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-bv2-open]');
-  if (!btn) return;
-  const slug = btn.dataset.bv2Open;
-  if (bv2Open.has(slug)) bv2Open.delete(slug); else bv2Open.add(slug);
-  renderBudgetingV2();
+  const open = e.target.closest('[data-bv2-open]');
+  if (open) {
+    const slug = open.dataset.bv2Open;
+    if (bv2Open.has(slug)) bv2Open.delete(slug); else bv2Open.add(slug);
+    renderBudgetingV2();
+    return;
+  }
+
+  const clear = e.target.closest('[data-bv2-clear]');
+  if (clear) { bv2Focus[clear.dataset.bv2Clear] = null; renderBudgetingV2(); return; }
+
+  // A segment and its row are the same control: both say "look at this one".
+  const pick = e.target.closest('[data-bv2-pick]');
+  if (pick) {
+    const parent = pick.dataset.parent, slug = pick.dataset.bv2Pick;
+    bv2Focus[parent] = bv2Focus[parent] === slug ? null : slug;
+    renderBudgetingV2();
+  }
+});
+
+$('bv2-list').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const input = e.target.closest('.bv2-in');
+    if (input) { e.preventDefault(); input.blur(); return; }
+  }
+  // Segments are focusable, so they answer the keyboard like the buttons they are.
+  const seg = e.target.closest('rect[data-bv2-pick]');
+  if (seg && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); seg.dispatchEvent(new MouseEvent('click', { bubbles: true })); }
 });
 
 $('bv2-list').addEventListener('change', (e) => {
@@ -3489,12 +3587,6 @@ $('bv2-list').addEventListener('change', (e) => {
     return;
   }
   bv2Save({ slug: input.dataset.slug, month: input.dataset.month, monthAmount: Math.round(n * 100) });
-});
-
-$('bv2-list').addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
-  const input = e.target.closest('.bv2-in');
-  if (input) { e.preventDefault(); input.blur(); }
 });
 
 boot();

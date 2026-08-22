@@ -10,15 +10,20 @@
  *
  * What it adds over v1:
  *
- *   - A horizon rather than a month. Budgets come back for every month from the
- *     current one to the end of the year, because a plan whose shape you cannot
- *     see is a number rather than a plan.
+ *   - A whole calendar year in one row of bars. Months already gone carry what
+ *     was actually spent; the rest carry what the chosen method says they will
+ *     cost. A plan is only worth looking at next to the year that produced it,
+ *     and splitting those across two charts made comparing them a memory test.
  *   - Every method's answer, not only the chosen one. Choosing between average
  *     and seasonal is guesswork until you can see both, so each category also
- *     carries what it would have cost under each of the others and the chart
- *     draws them as lines behind the bars.
+ *     carries what it would cost under each of the others, across the months
+ *     still to come.
  *   - Manual per month. v1 has one figure repeated forever; here December can
- *     cost more than August without inventing a method to say so.
+ *     cost more than August without inventing a method to say so. Only the
+ *     months ahead are editable — a budget for a month that has already
+ *     happened is a wish.
+ *   - Income alongside, on the same scale, so the plan can be read against what
+ *     is meant to pay for it.
  */
 
 import { Hono } from "hono";
@@ -30,18 +35,23 @@ import { loadCategories, ownedAccountIds } from "./summary-routes";
 import { buildPlan } from "./projection";
 import type { Plan } from "./projection";
 import type { HistoryLookup, Method, PlanRow } from "./budget-plan";
-import { METHODS, budgetForLeaf, isMethod, resolveMethod, shareOut } from "./budget-plan";
+import {
+  METHODS, budgetForLeaf, isMethod, resolveMethod, shareOut, trimmedMean,
+} from "./budget-plan";
 
 const v2 = new Hono<{ Bindings: Env }>();
 
-/** The rest of the calendar year, starting with the month running now. */
-export function horizon(today: Date): string[] {
+/** Every month of the year now running, whether it has happened or not. */
+export function calendarYear(today: Date): string[] {
   const y = today.getUTCFullYear();
   const out: string[] = [];
-  for (let m = today.getUTCMonth(); m <= 11; m++) {
-    out.push(y + "-" + String(m + 1).padStart(2, "0"));
-  }
+  for (let m = 0; m < 12; m++) out.push(y + "-" + String(m + 1).padStart(2, "0"));
   return out;
+}
+
+/** The month now running: the first one a budget can still change. */
+export function currentMonth(today: Date): string {
+  return today.getUTCFullYear() + "-" + String(today.getUTCMonth() + 1).padStart(2, "0");
 }
 
 interface V2Row extends PlanRow {
@@ -108,22 +118,24 @@ v2.get("/budget-v2", async (c) => {
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
 
     const today = new Date();
-    const months = horizon(today);
-    const currentKey = months[0];
+    const months = calendarYear(today);
+    const firstProjected = currentMonth(today);
+    const ahead = months.filter((m) => m >= firstProjected);
+    const behind = months.filter((m) => m < firstProjected);
 
     const [ctx, ids] = await Promise.all([
       loadCategories(db, auth.user.id),
       ownedAccountIds(db, auth.user.id, "all", true),
     ]);
     const [plan, rows] = await Promise.all([
-      buildPlan(db, auth.user.id, ids, ctx, months, today),
+      buildPlan(db, auth.user.id, ids, ctx, ahead, today),
       loadV2Rows(db, auth.user.id),
     ]);
 
     const buckets = plan.buckets;
     const at = (slug: string, month: string) => buckets.get(month)?.byCategory[slug] ?? 0;
     const completed = [...buckets.keys()].sort()
-      .filter((k) => k < currentKey && (buckets.get(k)?.expense ?? 0) > 0);
+      .filter((k) => k < firstProjected && (buckets.get(k)?.expense ?? 0) > 0);
     const history: HistoryLookup = {
       at, completed,
       lastComplete: completed.length ? completed[completed.length - 1] : null,
@@ -150,9 +162,10 @@ v2.get("/budget-v2", async (c) => {
       slug: string; label: string; parentSlug: string | null; colour: string;
       method: Method; inherited: boolean; manualAmount: number;
       manualByMonth: Record<string, number>;
-      budget: Record<string, number | null>;
+      /** Actual where the month has been, budgeted where it has not. */
+      series: Record<string, number | null>;
+      /** What each method would have said, for the months still to come. */
       alternates: Record<string, Record<string, number | null>>;
-      spentLastMonth: number;
     }
     const out: Out[] = [];
 
@@ -173,16 +186,20 @@ v2.get("/budget-v2", async (c) => {
         const m = resolveMethod(kid.slug, ctx, rows);
         // An inherited manual reads the parent's per-month figures, not its own.
         const src = m.inherited ? ownRow : rowFor(kid.slug);
-        const budget: Record<string, number | null> = {};
-        const alternates: Record<string, Record<string, number | null>> = {};
-        for (const method of METHODS) alternates[method] = {};
 
-        for (const month of months) {
+        const series: Record<string, number | null> = {};
+        for (const month of behind) series[month] = at(kid.slug, month);
+        for (const month of ahead) {
           const shared = sharedFor(month);
-          budget[month] = shared
+          series[month] = shared
             ? shared.get(kid.slug) ?? 0
             : leafFor(kid.slug, month, m.method, src, history, plan);
-          for (const method of METHODS) {
+        }
+
+        const alternates: Record<string, Record<string, number | null>> = {};
+        for (const method of METHODS) {
+          alternates[method] = {};
+          for (const month of ahead) {
             alternates[method][month] = method === "manual"
               ? leafFor(kid.slug, month, "manual", rowFor(kid.slug), history, plan)
               : budgetForLeaf(kid.slug, month, method, src.manualAmount, history, plan);
@@ -193,16 +210,15 @@ v2.get("/budget-v2", async (c) => {
           slug: kid.slug, label: kid.label, parentSlug: parent.slug, colour: kid.colour,
           method: m.method, inherited: m.inherited, manualAmount: src.manualAmount,
           manualByMonth: rowFor(kid.slug).manualByMonth,
-          budget, alternates,
-          spentLastMonth: history.lastComplete ? at(kid.slug, history.lastComplete) : 0,
+          series, alternates,
         };
       });
 
       // A parent is the sum of its children, always, so the headline figure
       // cannot drift from the rows underneath it.
-      const sum = (pick: (k: Out) => Record<string, number | null>) => {
+      const sum = (pick: (k: Out) => Record<string, number | null>, over: string[]) => {
         const total: Record<string, number | null> = {};
-        for (const month of months) {
+        for (const month of over) {
           let acc: number | null = null;
           for (const kid of kidRows) {
             const v = pick(kid)[month];
@@ -214,39 +230,49 @@ v2.get("/budget-v2", async (c) => {
         return total;
       };
 
-      const onlyOwn = (method: Method) => Object.fromEntries(months.map((month) =>
-        [month, method === "manual"
-          ? leafFor(parent.slug, month, "manual", ownRow, history, plan)
-          : budgetForLeaf(parent.slug, month, method, ownRow.manualAmount, history, plan)]));
-
-      const parentBudget = kids.length
-        ? sum((k) => k.budget)
-        : Object.fromEntries(months.map((month) =>
-            [month, leafFor(parent.slug, month, own.method, ownRow, history, plan)]));
+      const parentSeries: Record<string, number | null> = kids.length
+        ? sum((k) => k.series, months)
+        : Object.fromEntries(months.map((month) => [month,
+            month < firstProjected
+              ? at(parent.slug, month)
+              : leafFor(parent.slug, month, own.method, ownRow, history, plan)]));
 
       const parentAlternates: Record<string, Record<string, number | null>> = {};
       for (const method of METHODS) {
-        parentAlternates[method] = kids.length ? sum((k) => k.alternates[method]) : onlyOwn(method);
+        parentAlternates[method] = kids.length
+          ? sum((k) => k.alternates[method], ahead)
+          : Object.fromEntries(ahead.map((month) => [month,
+              method === "manual"
+                ? leafFor(parent.slug, month, "manual", ownRow, history, plan)
+                : budgetForLeaf(parent.slug, month, method, ownRow.manualAmount, history, plan)]));
       }
 
       out.push({
         slug: parent.slug, label: parent.label, parentSlug: null, colour: parent.colour,
         method: own.method, inherited: own.inherited, manualAmount: ownRow.manualAmount,
         manualByMonth: ownRow.manualByMonth,
-        budget: parentBudget, alternates: parentAlternates,
-        spentLastMonth: history.lastComplete
-          ? kids.reduce((s, k) => s + at(k.slug, history.lastComplete!), 0)
-            + at(parent.slug, history.lastComplete)
-          : 0,
+        series: parentSeries, alternates: parentAlternates,
       });
       out.push(...kidRows);
     }
+
+    /* Income, on the same months and the same footing: what actually arrived
+       where the month has been, and a trimmed average of those months where it
+       has not. Trimmed for the same reason spending is — one bonus should not
+       become the expectation for every month after it. */
+    const earned = behind.map((m) => buckets.get(m)?.income ?? 0);
+    const expectedIncome = Math.round(trimmedMean(earned));
+    const income: Record<string, number | null> = {};
+    for (const month of behind) income[month] = buckets.get(month)?.income ?? 0;
+    for (const month of ahead) income[month] = expectedIncome > 0 ? expectedIncome : null;
 
     return c.json({
       ok: true,
       siloed: true,
       methods: METHODS,
       months,
+      firstProjected,
+      income,
       basis: plan.method,
       growthPct: plan.growthPct,
       monthsOfHistory: completed.length,
@@ -304,6 +330,10 @@ v2.put("/budget-v2", async (c) => {
       // they also change a menu.
       if (!/^\d{4}-\d{2}$/.test(body.month)) {
         return c.json({ error: "bad_request", message: "That is not a month." }, 400);
+      }
+      if (body.month < currentMonth(new Date())) {
+        return c.json({ error: "bad_request",
+          message: "That month has already happened, so it holds what was spent rather than a budget." }, 400);
       }
       const amount = Math.round(Number(body.monthAmount ?? 0));
       if (!Number.isFinite(amount) || amount < 0 || amount > 1_000_000_000) {
