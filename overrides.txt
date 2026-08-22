@@ -1,0 +1,11 @@
+  'income':'#009F70', 'salary':'#009F70', 'interest-earned':'#219E7B',
+  'dividends':'#259E48', 'refunds':'#369A98', 'other-income':'#399C56',
+  'dining':'#BF7F00', 'fast-food':'#CD771C', 'rideshare':'#11A05B',
+  'taxi':'#28759B', 'car-insurance':'#4A9A7D', 'airlines':'#005E9C',
+  'travel':'#007D9C', 'shopping':'#199D8B', 'general-stores':'#199E3B',
+  'online-shopping':'#258A9E', 'amazon':'#279C8C', 'events':'#C66DB1',
+  'subscriptions':'#8A7EE8', 'personal':'#C96EA4', 'gym':'#DD638F',
+  'family':'#469E4B', 'kids':'#469E4B', 'pets':'#C57B2D',
+  'education':'#4091D5', 'interest-paid':'#957DDD', 'fees':'#7F8E9D',
+  'giving-work':'#488898', 'business':'#488898', 'unsorted':'#6E9297',
+  'other':'#6E9297'

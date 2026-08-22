@@ -47,25 +47,34 @@
   }
 
   /* ---- Light ----
-     Not an inversion. Ink that is bright on black is muddy on white and an
-     accent that glows on black disappears on it, so every colour was chosen
-     against the background it actually sits on and checked: body text 15.4:1,
-     secondary 7.0:1, and the muted, mint, coral and warning tones all at or
-     above 4.5:1 on both the page and the tinted panels. */
-  :root[data-theme="light"]{
-    --bg:#FFFFFF; --bg-panel:#F7F9FB; --surface:#FFFFFF;
-    --hair:rgba(18,37,63,0.12); --hair-strong:rgba(18,37,63,0.22);
-    --ink:#12253F; --ink-soft:#4A5B70; --muted:#647386;
-    --mint:#0C835C; --mint-dim:#0A6B4B;
-    --mint-glow:rgba(12,131,92,0.25); --mint-bg:rgba(12,131,92,0.10);
-    --coral:#CB4056; --warning:#976A00;
-    --grid:#E4E9EF;
-    --on-mint:#FFFFFF; --mint-hot:#0A6B4B;
-    --bg-veil:rgba(255,255,255,.88);
-    --shadow:rgba(18,37,63,0.16);
+     Not an inversion, and not white either. The page is a cream taken from the
+     owl's own belly — hue 44°, the saturation dropped from 87% to 66% and the
+     lightness lifted to 94%, which lands about a tenth off white. Plain white
+     was too bright to sit in front of.
 
-    --tile-in:#E9F6F0; --tile-out:#FDEEE7; --tile-kept:#EAF1FB; --tile-rate:#E6F4F1;
-    --card-safe:#FDF6E8;
+     Every colour below was then measured against THAT cream rather than
+     against white, because the cream is a tenth darker and a tenth is enough
+     to push a 4.5 down to a 4.4. The page is the darkest ground any text sits
+     on — cards are lighter — so clearing it clears everything: headings
+     14.0:1, secondary 6.3:1, and muted, mint, coral and warning all at 4.50:1
+     or better. */
+  :root[data-theme="light"]{
+    --bg:#F9F4E4; --bg-panel:#FFFFFF; --surface:#FEFCF8;
+    --hair:rgba(18,37,63,0.13); --hair-strong:rgba(18,37,63,0.24);
+    --ink:#12253F; --ink-soft:#4A5B70; --muted:#637184;
+    --mint:#0C7F5A; --mint-dim:#0A6B4B;
+    --mint-glow:rgba(12,127,90,0.25); --mint-bg:rgba(12,127,90,0.11);
+    --coral:#CA3A51; --warning:#946800;
+    --grid:#E7DFC9;
+    --on-mint:#FFFFFF; --mint-hot:#0A6B4B;
+    --bg-veil:rgba(249,244,228,.90);
+    --shadow:rgba(74,59,20,0.14);
+
+    /* Warmed to belong on the cream, and pulled apart from each other: the
+       closest two are 7.0 in CIE76, where the first attempt had a green and a
+       teal 3.6 apart and effectively the same tile twice. */
+    --tile-in:#E0F3EA; --tile-out:#F8E6DF; --tile-kept:#E1EBF7; --tile-rate:#EEE5F5;
+    --card-safe:#F7EBCA;
 
     --line-average:#8B2FBF; --line-trend:#0B6B8F;
     --line-previous:#6E8A0F; --line-seasonal:#2A3B52;
@@ -951,17 +960,25 @@ function rememberColours(list) {
  * against its 8.3.
  */
 const CAT_LIGHT = {
-  'income':'#00A876', 'salary':'#00A876', 'interest-earned':'#23A681',
-  'dividends':'#27A64B', 'refunds':'#39A2A0', 'other-income':'#3CA45A',
-  'fast-food':'#D87D1E', 'taxi':'#2BA76C', 'travel':'#0083A4',
-  'online-shopping':'#279DA6', 'amazon':'#29A493', 'personal':'#CD78AA',
-  'gym':'#DF6F98', 'family':'#4AA64F', 'kids':'#4AA64F',
-  'education':'#4E99D8', 'interest-paid':'#9C85DF', 'fees':'#8895A4'
+  'income':'#009F70', 'salary':'#009F70', 'interest-earned':'#219E7B',
+  'dividends':'#259E5C', 'refunds':'#379C71', 'other-income':'#399B8E',
+  'dining':'#BF7F00', 'fast-food':'#CD771C', 'rideshare':'#11A03A',
+  'taxi':'#299F67', 'car-insurance':'#4A9A7D', 'airlines':'#009C9C',
+  'travel':'#00789C', 'shopping':'#199D86', 'general-stores':'#199E51',
+  'online-shopping':'#259D82', 'amazon':'#279C88', 'events':'#C66DB1',
+  'subscriptions':'#8A7EE8', 'personal':'#C96EA4', 'gym':'#DD638F',
+  'family':'#469E4B', 'kids':'#469E4B', 'pets':'#C57B2D',
+  'education':'#4091D5', 'interest-paid':'#957DDD', 'fees':'#7F8E9D',
+  'giving-work':'#489898', 'business':'#489898', 'unsorted':'#7C8EA1',
+  'other':'#7C8EA1'
 };
 
 /* A category somebody invented has no entry above, so it is darkened here on
    the same rule: keep the hue, take the lightness down only as far as reading
-   on white requires. Memoised because it runs per segment per redraw. */
+   on the cream requires. Aimed at the page rather than at white, since the
+   page is a tenth darker and that tenth is the difference between clearing
+   3:1 and missing it. Memoised because it runs per segment per redraw. */
+const LIGHT_PAGE_LUM = 0.8757;      // the relative luminance of #F9F4E4
 const readableCache = {};
 function readableOnWhite(hex) {
   if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return hex;
@@ -969,7 +986,7 @@ function readableOnWhite(hex) {
   const rgb = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
   const rel = (c) => { const f = c.map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
     return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2]; };
-  const contrast = (c) => 1.05 / (rel(c) + 0.05);
+  const contrast = (c) => (LIGHT_PAGE_LUM + 0.05) / (rel(c) + 0.05);
   let out = hex;
   if (contrast(rgb) < 3.05) {
     let lo = 0, hi = 1;
