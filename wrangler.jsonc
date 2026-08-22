@@ -62,15 +62,14 @@
     // banks open in a popup instead, which is why this went unnoticed until
     // somebody tried it on a phone.
     //
-    // Set this to exactly:  https://bilanciomoney.com/app/
-    // Trailing slash included — /app answers 307 to /app/, and a redirect in the
-    // middle of an OAuth return is a good way to lose the query string.
+    // The trailing slash is load-bearing: /app answers 307 to /app/, and a
+    // redirect in the middle of an OAuth return is a good way to lose the query
+    // string that the return depends on.
     //
-    // It must be registered FIRST under Plaid → Developers → API → Allowed
-    // redirect URIs. An unregistered value does not degrade, it makes every
-    // link attempt fail outright, so filling this in before registering it is
-    // strictly worse than leaving it empty.
-    "PLAID_REDIRECT_URI": "",
+    // Registered under Plaid → Developers → API → Allowed redirect URIs, and it
+    // has to stay that way. An unregistered value here does not degrade to the
+    // old behaviour — it fails every link attempt, OAuth or not.
+    "PLAID_REDIRECT_URI": "https://bilanciomoney.com/app/",
 
     // Where Plaid posts when an Item has news — most importantly that more
     // history has finished loading. Must be publicly reachable and HTTPS;
