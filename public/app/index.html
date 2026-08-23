@@ -72,7 +72,26 @@
        measuring against the page would have left four of these at 4.2. */
     --bg:#F9F4E4; --bg-panel:#FFFFFF; --surface:#F7EBCA;
     --hair:rgba(18,37,63,0.15); --hair-strong:rgba(18,37,63,0.26);
-    --ink:#12253F; --ink-soft:#4A5B70; --muted:#5E6C7E;
+    /* Three levels of ink on the dark theme, one on this one.
+    *
+    * The greys were set to clear 4.5:1 and most of them did — but "clears the
+    * bar" and "is comfortable to read" are different claims, and on cream at
+    * 11px they were neither dark enough to read at a glance nor light enough to
+    * recede on purpose. One of them was not even clearing: --muted on the
+    * negative tile measured 4.34:1, under the AA floor, which is where the
+    * small print on the red tiles lives.
+    *
+    *                    page     card     tile+    tile-
+    *   --ink-soft was   6.32     5.85     5.88     5.64
+    *   --muted   was    4.87     4.51     4.53     4.34   <- fails
+    *   both      now   17.16    15.91    15.98    15.31
+    *
+    * So both go to near-black and the hierarchy is carried by size and weight
+    * instead, which the layout already does — 46px against 11px is a bigger
+    * difference than any two greys were making. Slightly darker than --ink,
+    * deliberately: the text taking this is the small text, and small text needs
+    * the contrast more than a 46px figure does. */
+    --ink:#12253F; --ink-soft:#111111; --muted:#111111;
     --mint:#0B7A55; --mint-dim:#0A6B4B;
     --mint-glow:rgba(11,122,85,0.25); --mint-bg:rgba(11,122,85,0.12);
     --coral:#C3354B; --warning:#8D6300;
@@ -356,6 +375,14 @@
   /* Safe-to-spend is the one figure the page is built around, so it gets its
      own ground rather than the same card as everything else. */
   #ov-safe{ background:var(--card-safe); }
+  /* The title of the card and the two amounts against its bars.
+     Both were sized as captions when they are neither: the title names the
+     whole card, and the amounts are the figures the bars are drawing. Scoped
+     here rather than to .eyebrow and .bamt at large, so the eyebrows on Trend
+     and the Tracker keep the size they were given. */
+  #ov-safe .eyebrow{ font-size:14px; font-weight:600; letter-spacing:.1em; }
+  #ov-safe .bamt{ font-size:15.5px; }
+
   .t-label{ font-size:12.5px; color:var(--ink-soft); }
   .t-value{ font-size:25px; font-weight:600; letter-spacing:-.015em; margin-top:2px; }
   .t-foot{ display:flex; align-items:flex-end; justify-content:space-between; gap:10px; margin-top:8px; }
@@ -1028,8 +1055,8 @@
     </div>
 
     <section class="panel" id="v-overview" aria-current="true">
-      <h2 class="view">What's actually left</h2>
-      <p class="lede">Safe-to-spend, then income, expenses, net balance and your net balance rate — each against the comparable period before, and each against what the same period was expected to cost. Once spending passes the budget, a mark on the lower bar shows where that happened.</p>
+      <h2 class="view">Where things stand</h2>
+      <p class="lede">The card reads income against expenses on one scale, what that leaves you, and — once spending passes the budget — a mark showing where it did. Below it the same four figures twice over: income, expenses, net balance and net balance rate, measured first against the comparable period before, then against what this period was expected to cost.</p>
       <div class="card" id="ov-safe"></div>
       <div class="tiles" id="ov-tiles"></div>
       <p class="fc-method" id="budget-note" style="margin:14px 0 0"></p>
