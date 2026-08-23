@@ -1295,16 +1295,6 @@
         <div class="card"><p class="eyebrow">By institution</p><div id="as-inst"></div></div>
       </div>
       <div class="card" style="margin-top:16px"><p class="eyebrow">Every account</p><div id="as-accounts"></div></div>
-      <div class="card" style="margin-top:16px">
-        <p class="eyebrow">Precious metals</p>
-        <p class="hint" id="mt-note">Metal a bank cannot see. Type what you hold and it is valued at the market and counted in everything above.</p>
-        <div id="mt-rows"></div>
-        <div class="mt-foot">
-          <span id="mt-total"></span>
-          <button class="primary" id="mt-save" type="button">Save holdings</button>
-        </div>
-        <p class="msg" id="mt-msg"></p>
-      </div>
     </section>
 
     <section class="panel" id="v-transactions">
@@ -1324,6 +1314,22 @@
         </span>
       </div>
       <p class="msg" id="bank-msg"></p>
+
+      <!-- The other place a balance comes from. Banks arrive over Plaid;
+           metal is typed in, because a safe has no API. It sits on this tab
+           for the same reason the bank list does — this is where the numbers
+           enter the app, and Net Worth is where they are read. -->
+      <div class="card" style="margin-top:16px">
+        <p class="eyebrow">Precious metals</p>
+        <p class="hint" id="mt-note">Metal a bank cannot see. Enter the ounces you hold; it is priced at the market and counted in Net Worth.</p>
+        <div id="mt-rows"></div>
+        <div class="mt-foot">
+          <span id="mt-total"></span>
+          <button class="primary" id="mt-save" type="button">Save holdings</button>
+        </div>
+        <p class="msg" id="mt-msg"></p>
+      </div>
+
 
       <!-- Plaid's developer policy requires end users to be told that Plaid is
            involved and pointed at Plaid's own privacy policy, before they hand
@@ -2301,7 +2307,6 @@ async function renderAssets() {
   const [a, spend] = await Promise.all([
     authed('/api/assets?months=' + months),
     authed('/api/summary?range=last-3').catch(() => null),
-    renderMetals().catch(err => say($('mt-msg'), err.message, 'bad')),
   ]);
   assetData = a;
 
@@ -2335,6 +2340,13 @@ async function renderAssets() {
   const debtRatio = tot.assets > 0 ? tot.liabilities / tot.assets : null;
   const perMonth = a.series.length > 1
     ? (tot.netWorth - o.netWorth) / (a.series.length - 1) : 0;
+
+  if (a.metals && a.metals.unavailable) {
+    $('as-note').textContent += ' Precious metals could not be read, so they are not in these figures.';
+  } else if (a.metals && a.metals.value) {
+    $('as-note').textContent += ' ' + money(a.metals.value) +
+      ' of that is precious metal, valued at each month\'s close — enter ounces on the Banks tab.';
+  }
 
   $('as-tiles').innerHTML = [
     tile('Net worth', money(tot.netWorth), tot.netWorth, o.netWorth, 'up', '',
@@ -2590,11 +2602,10 @@ $('mt-save').addEventListener('click', async () => {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(metalForm()),
     });
-    say(msg, 'Saved.');
-    // The chart and every tile above include metal, so the whole tab is redrawn
-    // rather than just this card — a net worth that disagreed with the holding
-    // printed under it would be the worst of both.
-    await refresh();
+    say(msg, 'Saved. Net Worth will show it.');
+    // Only this card is redrawn: Net Worth is a different tab and refetches
+    // everything when it is opened, so there is no stale figure to chase.
+    await renderMetals();
   } catch (err) {
     say(msg, err.message, 'bad');
   } finally {
@@ -4406,6 +4417,10 @@ async function renderForecast() {
 /* ----------------------------------------------------------------- banks -- */
 
 async function renderBanks() {
+  // Started before the bank list and not awaited with it: a metals failure
+  // must not stop the banks rendering, and vice versa.
+  renderMetals().catch(err => say($('mt-msg'), err.message, 'bad'));
+
   const res = await authed('/api/plaid/items');
   hasBanks = res.items.length > 0;
   const host = $('bank-list');

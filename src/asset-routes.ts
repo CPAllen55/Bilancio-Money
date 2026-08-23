@@ -153,13 +153,27 @@ assets.get("/assets", async (c) => {
       .innerJoin(items, eq(accounts.itemId, items.id))
       .where(eq(items.userId, auth.user.id));
 
-    // Metal is a holding with no bank behind it, so somebody who owns nothing
-    // but bullion still has a balance sheet — the empty case is both lists
-    // being empty, not just the accounts one.
-    const held = await db
-      .select({ metal: metalHoldings.metal, ouncesE4: metalHoldings.ouncesE4 })
-      .from(metalHoldings)
-      .where(eq(metalHoldings.userId, auth.user.id));
+    /* Metal is a holding with no bank behind it, so somebody who owns nothing
+     * but bullion still has a balance sheet — the empty case is both lists
+     * being empty, not just the accounts one.
+     *
+     * Guarded, and this is the whole reason: an unguarded read here took the
+     * entire dashboard down on any deployment where the migration adding
+     * metal_holdings had not been run. The page threw before it drew a single
+     * chart, and the only thing that appeared was the metals card, because that
+     * had been started in the same Promise.all and finished on its own. A part
+     * of this page failing must cost that part and nothing else. */
+    let held: { metal: string; ouncesE4: bigint }[] = [];
+    let metalsUnavailable = false;
+    try {
+      held = await db
+        .select({ metal: metalHoldings.metal, ouncesE4: metalHoldings.ouncesE4 })
+        .from(metalHoldings)
+        .where(eq(metalHoldings.userId, auth.user.id));
+    } catch (err) {
+      console.error("metal holdings unavailable", err);
+      metalsUnavailable = true;
+    }
 
     if (!rows.length && !held.length) {
       return c.json({
@@ -168,6 +182,7 @@ assets.get("/assets", async (c) => {
         byClass: [], byInstitution: [],
         credit: { limit: 0, used: 0, utilisation: null },
         coverage: { reconstructed: 0, heldFlat: 0, exact: true },
+        metals: { value: 0, unavailable: metalsUnavailable },
       });
     }
 
@@ -223,8 +238,16 @@ assets.get("/assets", async (c) => {
        the first thing loaded in a session and a net worth missing its bullion
        is worse than a page that took an extra moment. A no-op unless the cache
        is half a day old, and it cannot throw. */
-    if (held.length) await refreshPrices(db);
-    const metalPricesAt = held.length ? await pricesAtMonthEnds(db, monthEnds) : new Map();
+    let metalPricesAt = new Map();
+    if (held.length) {
+      try {
+        await refreshPrices(db);
+        metalPricesAt = await pricesAtMonthEnds(db, monthEnds);
+      } catch (err) {
+        console.error("metal prices unavailable", err);
+        metalsUnavailable = true;
+      }
+    }
 
     const detail = rows.map((r) => {
       const klass = classOf(r.type, r.subtype);
@@ -339,9 +362,12 @@ assets.get("/assets", async (c) => {
     const last = series[series.length - 1];
     const first = series[0];
 
-    const group = <T extends string>(key: (a: typeof detail[number]) => T) => {
+    const group = <T extends string>(
+      list: typeof detail,
+      key: (a: typeof detail[number]) => T,
+    ) => {
       const out = new Map<T, { key: T; label: string; assets: number; liabilities: number; net: number; accounts: number }>();
-      for (const a of detail) {
+      for (const a of list) {
         const k = key(a);
         const row = out.get(k) ?? { key: k, label: k, assets: 0, liabilities: 0, net: 0, accounts: 0 };
         if (isDebt(a.klass)) row.liabilities += a.current; else row.assets += a.current;
@@ -352,11 +378,17 @@ assets.get("/assets", async (c) => {
       return [...out.values()];
     };
 
-    const byClass = group((a) => a.klass)
+    const byClass = group(detail, (a) => a.klass)
       .map((r) => ({ ...r, label: CLASS_LABEL[r.key as Klass] }))
       .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
 
-    const byInstitution = group((a) => (a.institution ?? "Unknown") as string)
+    /* Bank things only. Metal has no institution — it is in a safe, not at a
+       bank — and inventing "Held directly" to give it a row put a made-up
+       counterparty in a list whose whole point is who is holding the money.
+       It keeps its line in the breakdown by kind, which is where a reader
+       looks for what they own rather than for who has it. */
+    const banked = detail.filter((a) => a.klass !== "metal");
+    const byInstitution = group(banked, (a) => (a.institution ?? "Unknown") as string)
       .sort((a, b) => b.net - a.net);
 
     const creditLimit = detail.reduce((s, a) => s + (a.klass === "credit" ? (a.limit ?? 0) : 0), 0);
@@ -402,7 +434,14 @@ assets.get("/assets", async (c) => {
       series,
       byClass,
       byInstitution,
-      accounts: detail.sort((a, b) => Math.abs(b.current) - Math.abs(a.current)),
+      // Accounts, not holdings: the table is a list of things a bank can be
+      // asked about, and a row for gold with no mask and no institution reads
+      // as a broken account rather than as bullion.
+      accounts: banked.sort((a, b) => Math.abs(b.current) - Math.abs(a.current)),
+      metals: {
+        value: detail.reduce((s, a) => s + (a.klass === "metal" ? a.current : 0), 0),
+        unavailable: metalsUnavailable,
+      },
     });
   } finally {
     c.executionCtx.waitUntil(close());
