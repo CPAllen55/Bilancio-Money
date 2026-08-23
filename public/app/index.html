@@ -211,6 +211,34 @@
   :root[data-theme="light"] .tab[aria-current="true"]{
     color:var(--ink); background:none; border-bottom-color:var(--tab-line); }
 
+  /* ---- the menus, in the light ----
+     A white control on a cream page reads as a hole punched in it. They take
+     the same gold the cards do, so a menu looks like part of the surface it
+     sits on rather than something dropped onto it.
+
+     color-scheme matters as much as the fill. It is set to dark further up for
+     every menu in the app, which is what makes the native option list — the
+     part the browser draws, not us — come up dark. Left alone in the light
+     theme it opened a black list under a cream control. */
+  :root[data-theme="light"] .thf,
+  :root[data-theme="light"] select.catsel,
+  :root[data-theme="light"] select.ctl{ color-scheme:light; }
+  :root[data-theme="light"] select.ctl,
+  :root[data-theme="light"] select.catsel{
+    background:var(--surface);
+    /* The same face the tabs use, so the row of controls under them reads as
+       the same family rather than as a monospace afterthought. */
+    font-family:'IBM Plex Sans', sans-serif; font-size:13.5px; font-weight:500; }
+
+  /* The column headings in Transactions are menus too, but they are dressed as
+     table headings and belong with the table rather than with the controls, so
+     they keep their own face. Their option lists are already Plex Sans. */
+  :root[data-theme="light"] .thf option,
+  :root[data-theme="light"] .thf optgroup,
+  :root[data-theme="light"] select.catsel option,
+  :root[data-theme="light"] select.catsel optgroup,
+  :root[data-theme="light"] select.ctl option{ background:var(--surface); }
+
   /* The gap the rule leaves for the mark, at each width the mark has. These
      have to sit after the rule above rather than beside the .mark rules they
      belong with: same specificity, so whichever comes last wins, and up there
