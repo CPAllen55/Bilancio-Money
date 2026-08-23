@@ -300,7 +300,14 @@
   .fig-sub b{ color:var(--ink); font-weight:600; }
   .meter-track{ position:relative; height:10px; border-radius:2px; background:var(--grid); }
   .meter-fill{ position:absolute; inset:0 auto 0 0; border-radius:2px 4px 4px 2px; background:var(--mint); }
-  .meter-tick{ position:absolute; top:-5px; bottom:-5px; width:2px; background:var(--ink); border-radius:1px; }
+  /* The mark has to cut through a filled bar on one side and an empty track on
+     the other, so it takes the same colour the Tracker's does and carries a
+     thin halo of the card behind it — without that it disappears into whichever
+     side happens to be close to it in tone. Wider and taller than it was: it is
+     the one thing on this card worth interrupting for. */
+  .meter-tick{ position:absolute; top:-7px; bottom:-7px; width:3px; border-radius:2px;
+               background:var(--tick); box-shadow:0 0 0 1.5px var(--card-safe);
+               pointer-events:auto; cursor:default; }
 
   /* Income over spending, same scale. Both bars share a track width, so the
      shorter one is short because less went out — not because it was drawn
@@ -452,7 +459,7 @@
   /* The hover box. Bigger than a native tooltip because it is doing more than
      naming a thing — it gives the amount at a size worth reading and says what
      share of the month it was. */
-  .charttip{ position:absolute; z-index:6; pointer-events:none;
+  .charttip{ position:fixed; z-index:9; pointer-events:none;
              min-width:172px; padding:11px 14px 12px;
              background:var(--bg-panel); border:1px solid var(--hair-strong);
              border-radius:8px; box-shadow:0 10px 28px var(--shadow); }
@@ -463,6 +470,9 @@
   .ct-amount{ font-family:var(--font-num); font-size:21px; color:var(--ink);
               letter-spacing:-.02em; margin-top:6px; }
   .ct-share{ font-size:11.5px; color:var(--ink-soft); margin-top:3px; }
+  .ct-note{ font-size:11.5px; color:var(--ink-soft); margin-top:5px;
+            padding-top:5px; border-top:1px solid var(--hair); max-width:230px;
+            line-height:1.45; }
 
   .panner{ width:100%; margin-top:10px; accent-color:var(--mint-dim); cursor:grab; }
 
@@ -918,7 +928,7 @@
 
     <section class="panel" id="v-overview" aria-current="true">
       <h2 class="view">What's actually left</h2>
-      <p class="lede">Safe-to-spend with a pace line, then money in, money out, kept and your savings rate — each against the comparable period before, and each against what the same period was expected to cost.</p>
+      <p class="lede">Safe-to-spend, then money in, money out, kept and your savings rate — each against the comparable period before, and each against what the same period was expected to cost. Once spending passes the budget, a mark on the lower bar shows where that happened.</p>
       <div class="card" id="ov-safe"></div>
       <div class="tiles" id="ov-tiles"></div>
       <p class="fc-method" id="budget-note" style="margin:14px 0 0"></p>
@@ -1396,7 +1406,21 @@ async function renderOverview() {
   // the overspend is still stated in words below rather than hidden by the cap.
   const overspent = t.expense > t.income && t.income > 0;
   const spentPct = t.income ? Math.min(100, (t.expense / t.income) * 100) : (t.expense ? 100 : 0);
-  const pacePct  = Math.min(100, (safe.daysElapsed / safe.daysInPeriod) * 100);
+
+  /* The mark on the OUT bar is where the budget ran out, and it appears only
+     once it has — the same rule the Tracker uses, so a line means one thing
+     across the app. It used to be a pace line, marking how far through the
+     period you were, which looked identical and meant something else entirely
+     — and assumed spending arrives evenly, which it does not when rent lands on
+     the 1st. The badge on the right reported the same assumption and was
+     changed with it.
+
+     Positioned against whatever the track is measuring: income where there is
+     income, the spend itself where there is not. */
+  const plan = (s.budget && s.budget.available && s.budget.expense > 0) ? s.budget.expense : 0;
+  const scale = t.income || t.expense;
+  const overBudget = plan > 0 && t.expense > plan;
+  const budgetPct = overBudget && scale ? Math.min(100, (plan / scale) * 100) : null;
 
   $('ov-safe').innerHTML =
     '<p class="eyebrow">Safe to spend · ' + s.range.label.toLowerCase() + '</p>' +
@@ -1417,7 +1441,15 @@ async function renderOverview() {
         '<span class="blabel">Out</span>' +
         '<div class="btrack">' +
           '<div class="bfill out" style="width:' + spentPct.toFixed(1) + '%"></div>' +
-          '<div class="meter-tick" style="left:' + pacePct.toFixed(1) + '%" title="where a steady period would have you today"></div>' +
+          (budgetPct !== null
+            ? '<div class="meter-tick" style="left:' + budgetPct.toFixed(1) + '%" ' +
+              'data-tip="1" data-tip-label="Budget ran out here"' +
+              ' data-tip-month="' + escapeHtml(s.range.label) + '"' +
+              ' data-tip-amount="' + plan + '"' +
+              ' data-tip-note="' + escapeHtml(money(t.expense - plan) + ' has gone out past this point. ' +
+                'Everything to the right of the mark is over what was planned for ' +
+                s.range.label.toLowerCase() + '.') + '"></div>'
+            : '') +
         '</div>' +
         '<span class="bamt out">' + money(t.expense) + '</span>' +
       '</div>' +
@@ -1427,8 +1459,17 @@ async function renderOverview() {
       ? money(t.expense - t.income) + ' more went out than came in'
       : money(safe.spent) + ' spent of ' + money(safe.budget) +
         (t.income > 0 ? ' · the gap is ' + money(t.income - t.expense) + ' kept' : '')) + '</span>' +
-    '<span class="status ' + (safe.onPace ? 'good' : 'warn') + '">' +
-    (safe.onPace ? '✓ on pace' : '! ahead of pace') + '</span></div>';
+    /* This said "on pace", from the same straight-line assumption the marker
+       used to draw: income times the fraction of the period elapsed. Bills do
+       not arrive evenly. Rent clears on the 1st and the badge cried wolf for a
+       week every month, which is the fastest way to teach someone to ignore an
+       indicator. It reports against the budget now — the actual limit, no
+       prediction about when the money leaves. */
+    (plan > 0
+      ? '<span class="status ' + (overBudget ? 'warn' : 'good') + '">' +
+        (overBudget ? '! ' + money(t.expense - plan) + ' over budget'
+                    : '✓ ' + money(plan - t.expense) + ' left in budget') + '</span>'
+      : '') + '</div>';
 
   let sp = null;
   try { sp = (await authed('/api/trend?months=12')).sparklines; } catch (e) { /* cosmetic only */ }
@@ -1756,12 +1797,13 @@ const MIN_VISIBLE = 3;
 
 /* What the hover box reads, carried on the shape itself so one listener can
    serve every chart without knowing which one it is looking at. */
-function tipAttrs(label, month, amount, ofTotal) {
+function tipAttrs(label, month, amount, ofTotal, note) {
   return 'data-tip="1"' +
     ' data-tip-label="' + escapeHtml(label) + '"' +
     ' data-tip-month="' + escapeHtml(monthLabel(month)) + '"' +
     ' data-tip-amount="' + amount + '"' +
-    ' data-tip-of="' + (ofTotal || 0) + '"';
+    ' data-tip-of="' + (ofTotal || 0) + '"' +
+    (note ? ' data-tip-note="' + escapeHtml(note) + '"' : '');
 }
 
 /* The year-ago marker, in both charts.
@@ -2180,47 +2222,57 @@ function setTrendSel(next) {
   drawTrend();
 }
 
-/* One hover box for every chart on the tab.
+/* One hover box, for anything anywhere that carries data-tip.
  *
- * The native <title> tooltip could not be styled, arrived after a delay, and
- * put a system-grey box over a dark chart. This is the app's own: it follows
- * the pointer, names the category and the month, gives the amount at a size
- * worth reading, and says what share of that month it was.
+ * The native tooltip could not be styled, arrived after a delay, and put a
+ * system-grey box over the page. This is the app's own: it follows the pointer,
+ * names the thing and the period, gives the amount at a size worth reading, and
+ * adds a line of explanation where there is one to add.
+ *
+ * It used to live inside the Trend panel and listen there, which meant anything
+ * outside that panel had to fall back to the browser's. It hangs off the body
+ * and listens on the document now, so the marker on the Overview gets the same
+ * box as a bar on Trend.
  */
 (() => {
   const tip = document.createElement('div');
   tip.className = 'charttip';
   tip.hidden = true;
-  document.getElementById('v-trend').appendChild(tip);
+  document.body.appendChild(tip);
 
   const show = (el, x, y) => {
     const amount = Number(el.dataset.tipAmount);
     const of = Number(el.dataset.tipOf);
+    const note = el.dataset.tipNote;
     tip.innerHTML =
       '<div class="ct-head">' + escapeHtml(el.dataset.tipLabel) +
-        '<span class="ct-month">' + escapeHtml(el.dataset.tipMonth) + '</span></div>' +
-      '<div class="ct-amount">' + money(amount) + '</div>' +
+        (el.dataset.tipMonth
+          ? '<span class="ct-month">' + escapeHtml(el.dataset.tipMonth) + '</span>' : '') +
+        '</div>' +
+      (isFinite(amount) && el.dataset.tipAmount !== undefined
+        ? '<div class="ct-amount">' + money(amount) + '</div>' : '') +
       (of > 0 ? '<div class="ct-share">' + ((amount / of) * 100).toFixed(1) +
-        '% of that month</div>' : '');
+        '% of that month</div>' : '') +
+      (note ? '<div class="ct-note">' + escapeHtml(note) + '</div>' : '');
     tip.hidden = false;
 
-    // Kept inside the panel: near the cursor, flipped when it would run off the
-    // right edge, and above the pointer rather than under it where the hand is.
-    const host = document.getElementById('v-trend').getBoundingClientRect();
+    // Near the cursor, flipped when it would run off the right edge, and above
+    // the pointer rather than under it where the hand is. Measured against the
+    // window now that it is positioned against the window.
     const w = tip.offsetWidth, h = tip.offsetHeight;
-    let left = x - host.left + 14;
-    if (left + w > host.width - 8) left = x - host.left - w - 14;
+    let left = x + 14;
+    if (left + w > innerWidth - 8) left = x - w - 14;
     tip.style.left = Math.max(8, left) + 'px';
-    tip.style.top = Math.max(8, y - host.top - h - 12) + 'px';
+    tip.style.top = Math.max(8, y - h - 12) + 'px';
   };
 
-  document.getElementById('v-trend').addEventListener('mousemove', (e) => {
-    const el = e.target.closest('[data-tip]');
+  document.addEventListener('mousemove', (e) => {
+    const el = e.target.closest && e.target.closest('[data-tip]');
     if (!el) { tip.hidden = true; return; }
     show(el, e.clientX, e.clientY);
   });
-  document.getElementById('v-trend').addEventListener('mouseleave', () => { tip.hidden = true; });
-  document.getElementById('v-trend').addEventListener('click', () => { tip.hidden = true; });
+  document.addEventListener('click', () => { tip.hidden = true; });
+  window.addEventListener('scroll', () => { tip.hidden = true; }, true);
 })();
 
 /* Delegated once, because the chart is rebuilt on every zoom, pan and click —
