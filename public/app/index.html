@@ -284,6 +284,19 @@
   :root[data-theme="light"] table.data th,
   :root[data-theme="light"] .thf{ color:var(--ink); }
 
+  /* The keys beside the charts, for the same reason. A category name and what
+     it came to are the two things that list exists to say — they were 5.9:1 and
+     4.5:1 on the gold, which is legible rather than readable. The annotations
+     under them (income, the year-ago line, the budget shading) stay a step back,
+     because those are captions and not data.
+
+     A switched-off row keeps its grey: there it means something. */
+  :root[data-theme="light"] .kitem,
+  :root[data-theme="light"] .kamt,
+  :root[data-theme="light"] .ktotal .klabel{ color:var(--ink); }
+  :root[data-theme="light"] .kitem.static,
+  :root[data-theme="light"] .kitem.static:hover{ color:var(--ink-soft); }
+
   .panel{ display:none; padding-bottom:64px; }
   .panel[aria-current="true"]{ display:block; }
 
