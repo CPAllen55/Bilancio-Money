@@ -1054,9 +1054,7 @@
       <span class="msg" id="global-msg"></span>
     </div>
 
-    <section class="panel" id="v-overview" aria-current="true">
-      <h2 class="view">Where things stand</h2>
-      <p class="lede">The card reads income against expenses on one scale, what that leaves you, and — once spending passes the budget — a mark showing where it did. Below it the same four figures twice over: income, expenses, net balance and net balance rate, measured first against the comparable period before, then against what this period was expected to cost.</p>
+    <section class="panel" id="v-overview" aria-current="true" aria-label="Overview">
       <div class="card" id="ov-safe"></div>
       <div class="tiles" id="ov-tiles"></div>
       <p class="fc-method" id="budget-note" style="margin:14px 0 0"></p>
@@ -1103,7 +1101,7 @@
 
     <section class="panel" id="v-tracker">
       <h2 class="view">Against the plan</h2>
-      <p class="lede">How much of each budget has gone. A full bar is the whole budget; past that the bar turns red and a white line marks where the budget ran out, so the red beyond it is the overspend. Pick a month, and how many months back from it to include.</p>
+      <p class="lede">How much of each budget has gone. Green is within it, red is past it — a full bar is the whole budget, and beyond that a line marks where it ran out, so the red past the line is the overspend. A category with no budget set yet shows its spending in green. Pick a month, and how many months back from it to include.</p>
       <div class="bar" style="padding-top:0">
         <span class="bv-controls">
           <select class="ctl" id="bud-range" aria-label="Month"></select>
@@ -3205,7 +3203,19 @@ function budgetPair(label, colour, actual, budget, expand) {
       escapeHtml(label) + '">' + (expand.open ? '−' : '+') + '</button>'
     : '<span class="ctog ghost" aria-hidden="true"></span>';
 
-  const fill = hasBudget ? (over ? 'var(--coral)' : 'var(--mint)') : colour;
+  /* Green or red, and only ever those two.
+   *
+   * A category with no budget used to draw its bar in its own colour, which
+   * put a magenta bar on Travel & Entertainment and a bottle-green one on
+   * Auto & Transport — read as "red" and as "a different green" by anyone
+   * scanning the column, because that is what a bar of that colour means on
+   * every other row. The bar answers one question, "is this past its budget",
+   * and a question with two answers gets two colours.
+   *
+   * No budget is green: nothing has been exceeded. The category keeps its own
+   * colour in the swatch beside its name, which is where identity belongs —
+   * next to the label, not inside the measurement. */
+  const fill = over ? 'var(--coral)' : 'var(--mint)';
 
   return '<div class="bv-head">' + toggle +
       '<span class="swatch" style="background:' + colour + '"></span>' +
