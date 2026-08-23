@@ -64,6 +64,13 @@
       "when": 1787349757633,
       "tag": "0008_supreme_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787482404014,
+      "tag": "0009_last_doctor_doom",
+      "breakpoints": true
     }
   ]
 }

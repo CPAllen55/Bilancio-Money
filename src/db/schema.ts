@@ -218,3 +218,47 @@ export const budgetPlansV2 = pgTable("budget_plans_v2", {
 }, (t) => [
   uniqueIndex("budget_plans_v2_user_category_idx").on(t.userId, t.categoryId),
 ]);
+
+/* ------------------------------------------------------------- 12. metals -- */
+
+/**
+ * Precious metals held outside any bank.
+ *
+ * Plaid cannot see a safe, so this is the one balance the app has to be told.
+ * One row per user per metal — an upsert on that pair rather than an append,
+ * because "how much gold do you own" has one answer at a time.
+ *
+ * Ounces are stored as an integer of ten-thousandths. A tenth of an ounce is a
+ * real holding and 0.1 is not representable in binary floating point; the rest
+ * of this schema already counts money in whole cents for the same reason, and a
+ * balance sheet that drifts by a hundredth of an ounce a year is worse than one
+ * that cannot express a gram.
+ */
+export const metalHoldings = pgTable("metal_holdings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // gold | silver | platinum | palladium
+  metal: text("metal").notNull(),
+  ouncesE4: bigint("ounces_e4", { mode: "bigint" }).notNull().default(sql`0`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("metal_holdings_user_metal_idx").on(t.userId, t.metal),
+]);
+
+/**
+ * The daily close per troy ounce, in cents.
+ *
+ * Not per user: a price is a fact about the world, so one fetch serves
+ * everybody and the table is a cache rather than user data. Two years of daily
+ * closes arrive in a single request per metal, which is the same window the
+ * transactions reach — so a holding can be valued at what it was actually worth
+ * each month rather than carried flat at today's price.
+ */
+export const metalPrices = pgTable("metal_prices", {
+  metal: text("metal").notNull(),
+  date: date("date").notNull(),
+  usdPerOunce: bigint("usd_per_ounce", { mode: "bigint" }).notNull(),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("metal_prices_metal_date_idx").on(t.metal, t.date),
+]);

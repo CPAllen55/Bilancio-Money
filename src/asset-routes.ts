@@ -41,8 +41,12 @@
 import { Hono } from "hono";
 import { and, eq, gte, inArray } from "drizzle-orm";
 import { getDb } from "./db/client";
-import { accounts, items, transactions } from "./db/schema";
+import { accounts, items, metalHoldings, transactions } from "./db/schema";
 import { requireUser } from "./auth";
+import {
+  METAL_LABEL, type Metal,
+  pricesAtMonthEnds, refreshPrices, toOunces, valueCents,
+} from "./metals";
 
 const assets = new Hono<{ Bindings: Env }>();
 
@@ -59,7 +63,7 @@ const LIQUID_SUBTYPES = [
   "checking", "savings", "cash management", "money market", "prepaid", "cd",
 ];
 
-type Klass = "cash" | "investment" | "credit" | "loan" | "other";
+type Klass = "cash" | "investment" | "credit" | "loan" | "metal" | "other";
 
 function classOf(type: string, subtype: string | null): Klass {
   if (type === "depository") return "cash";
@@ -74,6 +78,7 @@ const CLASS_LABEL: Record<Klass, string> = {
   investment: "Investments",
   credit: "Credit cards",
   loan: "Loans",
+  metal: "Precious metals",
   other: "Other",
 };
 
@@ -148,7 +153,15 @@ assets.get("/assets", async (c) => {
       .innerJoin(items, eq(accounts.itemId, items.id))
       .where(eq(items.userId, auth.user.id));
 
-    if (!rows.length) {
+    // Metal is a holding with no bank behind it, so somebody who owns nothing
+    // but bullion still has a balance sheet — the empty case is both lists
+    // being empty, not just the accounts one.
+    const held = await db
+      .select({ metal: metalHoldings.metal, ouncesE4: metalHoldings.ouncesE4 })
+      .from(metalHoldings)
+      .where(eq(metalHoldings.userId, auth.user.id));
+
+    if (!rows.length && !held.length) {
       return c.json({
         ok: true, months, accounts: [], series: [],
         totals: { assets: 0, liabilities: 0, netWorth: 0, liquid: 0 },
@@ -163,6 +176,14 @@ assets.get("/assets", async (c) => {
     for (let i = months - 1; i >= 0; i--) {
       points.push(monthKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))));
     }
+    /* The last day of each month, as a date rather than a month key: a price
+       series is looked up by day, and the current month ends in the future, so
+       its point takes whatever the newest close turns out to be. */
+    const monthEnds = points.map((p) => {
+      const [y, m] = p.split("-").map(Number);
+      return ymd(new Date(Date.UTC(y, m, 0)));
+    });
+
     const firstPoint = points[0];
     const windowStart = new Date(Date.UTC(
       now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1,
@@ -198,6 +219,13 @@ assets.get("/assets", async (c) => {
       byMonth.set(m, (byMonth.get(m) ?? 0) + Number(t.amount));
     }
 
+    /* Refreshed here as well as on the metals tab, because this page can be
+       the first thing loaded in a session and a net worth missing its bullion
+       is worse than a page that took an extra moment. A no-op unless the cache
+       is half a day old, and it cannot throw. */
+    if (held.length) await refreshPrices(db);
+    const metalPricesAt = held.length ? await pricesAtMonthEnds(db, monthEnds) : new Map();
+
     const detail = rows.map((r) => {
       const klass = classOf(r.type, r.subtype);
       const current = r.current === null ? 0 : Number(r.current);
@@ -228,9 +256,68 @@ assets.get("/assets", async (c) => {
         asOf: r.asOf,
         // Whether this account's line is derived or merely carried forward.
         exact: !INVESTMENT_TYPES.includes(r.type),
+        // Only a metal row carries this; it is here so the two kinds of row
+        // have one shape and the front end does not branch on which it has.
+        ounces: null as number | null,
         history,
       };
     });
+
+    /* Metals join the same list the accounts are in, so they roll into the
+       totals, the breakdowns and the series without any of that code learning
+       what a metal is.
+     *
+     * Unlike an investment account these are NOT carried flat: two years of
+     * daily closes are cached, so a holding is valued at what it was actually
+     * worth at the end of each month. It is only inexact where the price cache
+     * does not reach back far enough, which is what `exact` reports. */
+    for (const h of held) {
+      const metal = h.metal as Metal;
+      const at = metalPricesAt.get(metal);
+      const ounces = toOunces(h.ouncesE4);
+      if (!at || !at.size) continue;   // nothing to value it with
+
+      let carried: number | null = null;
+      let everyMonthPriced = true;
+      const history = monthEnds.map((end) => {
+        const cents = at.get(end);
+        if (cents === undefined) {
+          // Before the cache begins. The earliest close known is the least
+          // wrong answer available, and the row says it is not exact.
+          everyMonthPriced = false;
+          return carried === null ? 0 : valueCents(h.ouncesE4, carried);
+        }
+        carried = cents;
+        return valueCents(h.ouncesE4, cents);
+      });
+      // A gap at the start leaves zeroes behind it; backfill them at the first
+      // price that did exist rather than drawing a holding into being.
+      const firstKnown = history.find((v) => v > 0);
+      if (firstKnown !== undefined) {
+        for (let i = 0; i < history.length && history[i] === 0; i++) history[i] = firstKnown;
+      }
+
+      detail.push({
+        id: "metal:" + metal,
+        name: METAL_LABEL[metal],
+        officialName: null,
+        mask: null,
+        type: "metal",
+        subtype: metal,
+        klass: "metal" as Klass,
+        klassLabel: CLASS_LABEL.metal,
+        institution: "Held directly",
+        current: history[history.length - 1],
+        available: null,
+        limit: null,
+        liquid: false,
+        utilisation: null,
+        asOf: null,
+        exact: everyMonthPriced,
+        ounces,
+        history,
+      } as typeof detail[number]);
+    }
 
     const sumAt = (i: number, pick: (a: typeof detail[number]) => boolean) =>
       detail.reduce((s, a) => (pick(a) ? s + a.history[i] : s), 0);

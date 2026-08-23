@@ -671,6 +671,32 @@
   .as-share{ grid-column:1 / -1; height:4px; border-radius:2px; background:var(--grid); overflow:hidden; }
   .as-share span{ display:block; height:100%; border-radius:2px; }
   .as-stat{ font-family:var(--font-num); font-size:11.5px; color:var(--ink-soft); margin-top:3px; }
+/* Four rows of the same shape: what it is, what an ounce costs, how many you
+     hold, what that comes to. The ounces column is the only thing on this tab
+     anybody types into, so it is the one that looks like a field. */
+  .mt-row{ display:grid; grid-template-columns:minmax(0,1fr) 120px 120px 120px;
+           gap:12px; align-items:center; padding:10px 0;
+           border-top:1px solid var(--hair); }
+  .mt-row:first-child{ border-top:none; }
+  .mt-name{ display:flex; align-items:center; gap:9px; font-weight:600; font-size:13px; }
+  .mt-spot{ font-family:var(--font-num); font-size:12.5px; color:var(--ink-soft); text-align:right; }
+  .mt-value{ font-family:var(--font-num); font-size:13px; text-align:right; color:var(--ink); }
+  .mt-oz{ font-family:var(--font-num); font-size:13px; width:100%; text-align:right;
+          padding:7px 9px; border-radius:6px; border:1px solid var(--hair-strong);
+          background:var(--field); color:var(--ink); }
+  .mt-oz:focus{ outline:none; border-color:var(--mint-dim); }
+  .mt-head{ display:grid; grid-template-columns:minmax(0,1fr) 120px 120px 120px; gap:12px;
+            font-family:var(--font-num); font-size:11px; letter-spacing:.08em;
+            text-transform:uppercase; color:var(--muted); padding-bottom:6px; }
+  .mt-head span:not(:first-child){ text-align:right; }
+  .mt-foot{ display:flex; align-items:center; justify-content:space-between; gap:14px;
+            margin-top:14px; padding-top:12px; border-top:1px solid var(--hair-strong);
+            font-family:var(--font-num); font-size:13.5px; color:var(--ink); }
+  @media (max-width:700px){
+    .mt-head{ display:none; }
+    .mt-row{ grid-template-columns:minmax(0,1fr) 110px; row-gap:6px; }
+    .mt-spot{ text-align:left; grid-column:1; }
+  }
 
   .charttip{ position:fixed; z-index:9; pointer-events:none;
              min-width:172px; padding:11px 14px 12px;
@@ -1139,9 +1165,9 @@
       <button class="tab" data-view="tracker">Tracker</button>
       <button class="tab" data-view="trend">Trend</button>
       <button class="tab" data-view="net">Net Activity</button>
-      <button class="tab" data-view="assets">Assets</button>
       <button class="tab" data-view="budgeting">Budgeting</button>
       <button class="tab" data-view="budgeting-v2">Budgeting v2</button>
+      <button class="tab" data-view="assets">Net Worth</button>
       <button class="tab" data-view="transactions">Transactions</button>
       <button class="tab" data-view="banks">Banks</button>
     </div>
@@ -1211,24 +1237,6 @@
       <div class="card"><div id="net-chart"></div></div>
     </section>
 
-<section class="panel" id="v-assets">
-      <h2 class="view">What you are worth</h2>
-      <p class="lede">Everything you own against everything you owe, and how the gap between them has moved. The other views ask where the money went; this one asks what is left after all of it.</p>
-      <div class="bar" style="padding-top:0">
-        <select class="ctl" id="as-range" aria-label="Months of history">
-          <option value="6">Last 6 months</option>
-          <option value="12" selected>Last 12 months</option>
-          <option value="24">Last 2 years</option>
-        </select>
-      </div>
-      <div class="card"><div id="as-chart"></div><p class="hint" id="as-note" style="margin:10px 0 0"></p></div>
-      <div class="tiles" id="as-tiles"></div>
-      <div class="as-split">
-        <div class="card"><p class="eyebrow">Where it sits</p><div id="as-class"></div></div>
-        <div class="card"><p class="eyebrow">By institution</p><div id="as-inst"></div></div>
-      </div>
-      <div class="card" style="margin-top:16px"><p class="eyebrow">Every account</p><div id="as-accounts"></div></div>
-    </section>
 
     <section class="panel" id="v-tracker">
       <h2 class="view">Against the plan</h2>
@@ -1268,6 +1276,35 @@
       <div id="bv2-list"></div>
       <p class="msg" id="bv2-msg"></p>
       <p class="fc-method" id="bv2-note" style="margin-top:10px"></p>
+    </section>
+
+    <section class="panel" id="v-assets">
+      <h2 class="view">What you are worth</h2>
+      <p class="lede">Everything you own against everything you owe, and how the gap between them has moved. The other views ask where the money went; this one asks what is left after all of it.</p>
+      <div class="bar" style="padding-top:0">
+        <select class="ctl" id="as-range" aria-label="Months of history">
+          <option value="6">Last 6 months</option>
+          <option value="12" selected>Last 12 months</option>
+          <option value="24">Last 2 years</option>
+        </select>
+      </div>
+      <div class="card"><div id="as-chart"></div><p class="hint" id="as-note" style="margin:10px 0 0"></p></div>
+      <div class="tiles" id="as-tiles"></div>
+      <div class="as-split">
+        <div class="card"><p class="eyebrow">Where it sits</p><div id="as-class"></div></div>
+        <div class="card"><p class="eyebrow">By institution</p><div id="as-inst"></div></div>
+      </div>
+      <div class="card" style="margin-top:16px"><p class="eyebrow">Every account</p><div id="as-accounts"></div></div>
+      <div class="card" style="margin-top:16px">
+        <p class="eyebrow">Precious metals</p>
+        <p class="hint" id="mt-note">Metal a bank cannot see. Type what you hold and it is valued at the market and counted in everything above.</p>
+        <div id="mt-rows"></div>
+        <div class="mt-foot">
+          <span id="mt-total"></span>
+          <button class="primary" id="mt-save" type="button">Save holdings</button>
+        </div>
+        <p class="msg" id="mt-msg"></p>
+      </div>
     </section>
 
     <section class="panel" id="v-transactions">
@@ -2264,6 +2301,7 @@ async function renderAssets() {
   const [a, spend] = await Promise.all([
     authed('/api/assets?months=' + months),
     authed('/api/summary?range=last-3').catch(() => null),
+    renderMetals().catch(err => say($('mt-msg'), err.message, 'bad')),
   ]);
   assetData = a;
 
@@ -2466,6 +2504,103 @@ function drawAssetChart(a) {
 }
 
 $('as-range').addEventListener('change', () => { refresh(); });
+
+/* ---- precious metals ---- */
+
+/* The one holding the app has to be told rather than fetched.
+ *
+ * Everything else on this tab comes from a bank; a safe does not have an API.
+ * So this is a form, and the only thing it stores is the number of ounces —
+ * price and value are both derived, so neither can go stale against the other.
+ */
+let metalData = null;
+
+async function renderMetals() {
+  const r = await authed('/api/metals');
+  metalData = r;
+
+  $('mt-rows').innerHTML =
+    '<div class="mt-head"><span>Metal</span><span>Spot / oz</span><span>Ounces</span><span>Value</span></div>' +
+    r.metals.map(m =>
+      '<div class="mt-row" data-metal="' + m.metal + '">' +
+        '<span class="mt-name"><span class="swatch" style="background:' + metalColour(m.metal) + '"></span>' +
+          escapeHtml(m.label) + '</span>' +
+        '<span class="mt-spot">' + (m.spot === null ? '—' : money(m.spot)) + '</span>' +
+        '<input class="mt-oz" type="number" min="0" step="0.0001" inputmode="decimal" ' +
+          'value="' + (m.ounces || '') + '" aria-label="Ounces of ' + escapeHtml(m.label) + '">' +
+        '<span class="mt-value">' + (m.value === null ? '—' : money(m.value)) + '</span>' +
+      '</div>').join('');
+
+  /* Said with the date the prices belong to. Metals do not trade at weekends,
+     so "as of Friday" on a Sunday is correct rather than stale — and a reader
+     comparing this against a dealer's screen needs to know which day it is. */
+  $('mt-note').textContent = r.pricesAvailable
+    ? 'Metal a bank cannot see. Valued at the front-month futures close of ' +
+      r.asOf + ', which tracks spot closely but is not identical to a dealer quote.'
+    : 'Metal a bank cannot see. Prices could not be fetched, so anything you hold is stored but not yet valued.';
+
+  metalTotal();
+}
+
+/* The metals' own colours, so a row is recognisable before it is read. Not from
+   the category palette: these are not categories and borrowing one would tie
+   two unrelated things together the next time either changed. */
+function metalColour(metal) {
+  return metal === 'gold' ? '#C9A227'
+       : metal === 'silver' ? '#9AA5AD'
+       : metal === 'platinum' ? '#7FA8B8'
+       : '#B08D57';
+}
+
+/** What the form currently says, in ounces, keyed by metal. */
+function metalForm() {
+  const out = {};
+  document.querySelectorAll('#mt-rows .mt-row').forEach(row => {
+    const raw = row.querySelector('.mt-oz').value.trim();
+    const oz = raw === '' ? 0 : Number(raw);
+    out[row.dataset.metal] = Number.isFinite(oz) && oz >= 0 ? oz : 0;
+  });
+  return out;
+}
+
+/* Recomputed as it is typed rather than on save, so the figure that decides
+   whether the number is right is on screen before it is committed. */
+function metalTotal() {
+  if (!metalData) return;
+  const form = metalForm();
+  let total = 0, priced = true;
+  document.querySelectorAll('#mt-rows .mt-row').forEach(row => {
+    const m = metalData.metals.find(x => x.metal === row.dataset.metal);
+    const cell = row.querySelector('.mt-value');
+    if (!m || m.spot === null) { cell.textContent = '—'; priced = false; return; }
+    const value = Math.round(form[row.dataset.metal] * m.spot);
+    total += value;
+    cell.textContent = money(value);
+  });
+  $('mt-total').textContent = priced ? money(total) + ' in metal' : 'Not valued';
+}
+
+$('mt-rows').addEventListener('input', metalTotal);
+
+$('mt-save').addEventListener('click', async () => {
+  const btn = $('mt-save'), msg = $('mt-msg');
+  btn.disabled = true;
+  try {
+    await authed('/api/metals', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(metalForm()),
+    });
+    say(msg, 'Saved.');
+    // The chart and every tile above include metal, so the whole tab is redrawn
+    // rather than just this card — a net worth that disagreed with the holding
+    // printed under it would be the worst of both.
+    await refresh();
+  } catch (err) {
+    say(msg, err.message, 'bad');
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 /* ----------------------------------------------------------------- trend -- */
 
