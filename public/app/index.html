@@ -38,6 +38,13 @@
     --mint-hot:#2BFFC0;                   /* that button, hovered */
     --bg-veil:rgba(5,8,11,.9);            /* behind the sticky header */
     --shadow:rgba(0,0,0,.55);
+    /* The wordmark's gold, as stops rather than as a gradient, because the
+       lettering and the stacks beside it have to be cut from the same metal
+       and they need it in two different forms — a CSS gradient and a set of
+       SVG stop-colors. These five are the marketing page's, unchanged. */
+    --gold-1:#C9A227; --gold-2:#F5DFA0; --gold-3:#FFF6DD;
+    --gold-4:#E7C567; --gold-5:#B8892A;
+    --gold-edge:#8A6A1E;                  /* the line drawn around the stacks */
 
     /* Tiles carry the same surface in the dark, and take a tint in the light
        where a flat row of eight reads as one undivided block. Two tints, not
@@ -118,6 +125,15 @@
        columns lining up without the typewriter. */
     --font-num:'IBM Plex Sans', sans-serif;
     --bg-veil:rgba(249,244,228,.90);
+    /* The same sweep a tenth of the way down. The stops above climb into
+       near-white, which is a highlight on a black page and the page itself on
+       this one — measured on the cream header they come out at 2.20, 1.20,
+       1.02, 1.52 and 2.87 to one. These keep the shape and centre on #A07026,
+       the gold out of the owl's own line work that the tabs use; every stop
+       clears 3.94:1 against the 3.0 that 23px bold needs. */
+    --gold-1:#5E430F; --gold-2:#8A6A1E; --gold-3:#A07026;
+    --gold-4:#7A5A16; --gold-5:#4E3709;
+    --gold-edge:#3B2A07;
     --shadow:rgba(74,59,20,0.14);
 
     /* Green for money arriving and for a month that kept something; red for
@@ -151,21 +167,32 @@
   .wordmark .b{
     font-family:'Space Grotesk', sans-serif;
     font-size:23px; font-weight:700; letter-spacing:-.02em;
-    background:linear-gradient(120deg, #C9A227 0%, #F5DFA0 28%, #FFF6DD 50%, #E7C567 72%, #B8892A 100%);
+    background:linear-gradient(120deg, var(--gold-1) 0%, var(--gold-2) 28%, var(--gold-3) 50%,
+                                       var(--gold-4) 72%, var(--gold-5) 100%);
     -webkit-background-clip:text; background-clip:text; color:transparent;
     filter:drop-shadow(0 0 14px rgba(245,197,24,0.28)); }
+
+  /* The five stacks the owl is perched on, at the end of the word.
+   *
+   * A blinking green block was here — a terminal cursor, which says "console"
+   * rather than "money", and which the brand does not use anywhere else. The
+   * stacks do: they are the bottom half of the mark in the corner of every
+   * page. Geometry measured off the artwork at its natural 240x285 — bar
+   * positions, widths, heights and the shared grid of coin lines — so this is
+   * the drawing scaled down, not a redrawing of it.
+   *
+   * The coin lines keep their real pitch, which at this size renders as a
+   * texture in the gold rather than as countable lines. That is what the
+   * artwork does when you shrink it too. */
+  .stacks{ height:15px; width:auto; display:inline-block; vertical-align:-1px;
+           margin-left:5px; overflow:visible; }
   /* var(--font-num) rather than the mono the marketing page names outright, so
      this follows the rule the rest of the app follows: monospace in the dark,
      the text face in the light. */
   .wordmark .m{
     font-family:var(--font-num); font-size:11px; letter-spacing:.14em;
     color:var(--ink-soft); text-transform:uppercase; }
-  .cursor{ display:inline-block; width:8px; height:1em; background:var(--mint);
-           margin-left:2px; vertical-align:-2px;
-           animation:blink 1s steps(1) infinite; }
-  @keyframes blink{ 50%{ opacity:0; } }
-  /* An animation that never stops is the kind this setting exists for. */
-  @media (prefers-reduced-motion: reduce){ .cursor{ animation:none; } }
+
   .who{ display:flex; align-items:center; gap:14px; font-family:var(--font-num);
         font-size:12px; color:var(--ink-soft); }
 
@@ -337,10 +364,9 @@
 
      The glow goes with it. A yellow bloom reads as light on a dark page and as
      a smudge on a pale one. */
-  :root[data-theme="light"] .wordmark .b{
-    background:linear-gradient(120deg, #5E430F 0%, #8A6A1E 28%, #A07026 50%, #7A5A16 72%, #4E3709 100%);
-    -webkit-background-clip:text; background-clip:text;
-    filter:none; }
+  /* A yellow bloom reads as light on a dark page and as a smudge on a pale
+     one. The stops themselves come from the tokens above. */
+  :root[data-theme="light"] .wordmark .b{ filter:none; }
 
   :root[data-theme="light"] .thf{ color:var(--ink); }
 
@@ -1040,7 +1066,7 @@
   <div class="wrap top-inner">
     <a class="wordmark" href="/" aria-label="Bilancio Money — home">
       <span class="b">Bilancio</span>
-      <span class="m" aria-hidden="true">Money<span class="cursor"></span></span>
+      <span class="m" aria-hidden="true">Money<svg class="stacks" viewBox="31 164 185 107" aria-hidden="true" focusable="false"><defs><linearGradient id="stackgold" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="var(--gold-1)"/><stop offset="28%" stop-color="var(--gold-2)"/><stop offset="50%" stop-color="var(--gold-3)"/><stop offset="72%" stop-color="var(--gold-4)"/><stop offset="100%" stop-color="var(--gold-5)"/></linearGradient></defs><g fill="url(#stackgold)" stroke="var(--gold-edge)" stroke-width="1.6"><rect x="32" y="248" width="31" height="22" rx="1"/><rect x="68" y="228" width="30" height="42" rx="1"/><rect x="104" y="209" width="31" height="61" rx="1"/><rect x="142" y="189" width="32" height="81" rx="1"/><rect x="182" y="165" width="33" height="105" rx="1"/></g><g stroke="var(--gold-edge)" stroke-width="1.2" opacity=".75"><line x1="32" y1="260" x2="63" y2="260"/><line x1="32" y1="254" x2="63" y2="254"/><line x1="68" y1="260" x2="98" y2="260"/><line x1="68" y1="254" x2="98" y2="254"/><line x1="68" y1="247" x2="98" y2="247"/><line x1="68" y1="241" x2="98" y2="241"/><line x1="68" y1="234" x2="98" y2="234"/><line x1="104" y1="260" x2="135" y2="260"/><line x1="104" y1="254" x2="135" y2="254"/><line x1="104" y1="247" x2="135" y2="247"/><line x1="104" y1="241" x2="135" y2="241"/><line x1="104" y1="234" x2="135" y2="234"/><line x1="104" y1="228" x2="135" y2="228"/><line x1="104" y1="221" x2="135" y2="221"/><line x1="104" y1="215" x2="135" y2="215"/><line x1="142" y1="260" x2="174" y2="260"/><line x1="142" y1="254" x2="174" y2="254"/><line x1="142" y1="247" x2="174" y2="247"/><line x1="142" y1="241" x2="174" y2="241"/><line x1="142" y1="234" x2="174" y2="234"/><line x1="142" y1="228" x2="174" y2="228"/><line x1="142" y1="221" x2="174" y2="221"/><line x1="142" y1="215" x2="174" y2="215"/><line x1="142" y1="208" x2="174" y2="208"/><line x1="142" y1="201" x2="174" y2="201"/><line x1="142" y1="195" x2="174" y2="195"/><line x1="182" y1="260" x2="215" y2="260"/><line x1="182" y1="254" x2="215" y2="254"/><line x1="182" y1="247" x2="215" y2="247"/><line x1="182" y1="241" x2="215" y2="241"/><line x1="182" y1="234" x2="215" y2="234"/><line x1="182" y1="228" x2="215" y2="228"/><line x1="182" y1="221" x2="215" y2="221"/><line x1="182" y1="215" x2="215" y2="215"/><line x1="182" y1="208" x2="215" y2="208"/><line x1="182" y1="201" x2="215" y2="201"/><line x1="182" y1="195" x2="215" y2="195"/><line x1="182" y1="188" x2="215" y2="188"/><line x1="182" y1="181" x2="215" y2="181"/><line x1="182" y1="175" x2="215" y2="175"/></g></svg></span>
     </a>
     <div class="who" id="who" hidden>
       <div class="acct">
@@ -1089,24 +1115,23 @@
          spans could only ever end today, so "the last three months" meant the
          three up to now and there was no way to ask for the three up to last
          March. A month to end at, and how far back to reach from it. -->
-    <div class="bar">
-      <span class="bv-controls">
-        <select class="ctl" id="ov-range" aria-label="Month"></select>
-        <select class="ctl" id="ov-trail" aria-label="Trailing periods">
-          <option value="1" selected>Month selected</option>
-          <option value="2">2 months trailing</option>
-          <option value="3">3 months trailing</option>
-          <option value="6">6 months trailing</option>
-          <option value="12">12 months trailing</option>
-          <option value="24">24 months trailing</option>
-        </select>
-      </span>
-      <span class="msg" id="global-msg"></span>
-    </div>
-
     <section class="panel" id="v-overview" aria-current="true">
       <h2 class="view">Where things stand</h2>
       <p class="lede">This period at a glance, then the same four figures twice over: against the period before, and against what the period was expected to cost.</p>
+      <div class="bar" style="padding-top:0">
+        <span class="bv-controls">
+          <select class="ctl" id="ov-range" aria-label="Month"></select>
+          <select class="ctl" id="ov-trail" aria-label="Trailing periods">
+            <option value="1" selected>Month selected</option>
+            <option value="2">2 months trailing</option>
+            <option value="3">3 months trailing</option>
+            <option value="6">6 months trailing</option>
+            <option value="12">12 months trailing</option>
+            <option value="24">24 months trailing</option>
+          </select>
+        </span>
+        <span class="msg" id="global-msg"></span>
+      </div>
       <div class="card" id="ov-safe"></div>
       <div class="tiles" id="ov-tiles"></div>
       <p class="fc-method" id="budget-note" style="margin:14px 0 0"></p>
@@ -4242,12 +4267,10 @@ $('tabs').addEventListener('click', (e) => {
   // Budgeting sets rules rather than reading a window, and the rules apply to
   // this month onward whatever the page period says. Leaving the control on
   // screen invites the reasonable belief that it changes something here.
-  // Only Overview reads the page period. Trend, Net Activity, the Tracker and
-  // Transactions each carry their own, and Budgeting sets rules rather than
-  // reading a window at all — so the control is shown where it does something
-  // and hidden everywhere else. Listing the exception rather than the rule
-  // means a new tab is hidden by default, which is the safer way round.
-  $('ov-range').closest('.bar').hidden = btn.dataset.view !== 'overview';
+  // The period menus used to sit above every tab and be hidden on all but this
+  // one. They live inside the Overview now, under its standfirst, which is
+  // where they read as belonging to it — and which means the panel hides them
+  // for free rather than a line here remembering to.
   refresh();
 });
 
