@@ -141,9 +141,31 @@
   header.top{ border-bottom:1px solid var(--hair); position:sticky; top:0;
               background:var(--bg-veil); backdrop-filter:blur(8px); z-index:5; }
   .top-inner{ display:flex; align-items:center; justify-content:space-between; padding:16px 0; gap:16px; }
-  .wordmark{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:20px;
-             letter-spacing:-.01em; text-decoration:none; color:var(--ink); }
-  .wordmark span{ color:var(--mint); }
+  /* The wordmark from the front door, brought inside.
+   *
+   * The app was showing a plain "bilancio_" while the marketing page showed
+   * gold — the same product wearing two faces depending on which side of the
+   * sign-in you were on, and the side people actually live on had the plainer
+   * one. Same markup, same stops, same blinking cursor. */
+  .wordmark{ display:flex; align-items:baseline; gap:8px; text-decoration:none; }
+  .wordmark .b{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:23px; font-weight:700; letter-spacing:-.02em;
+    background:linear-gradient(120deg, #C9A227 0%, #F5DFA0 28%, #FFF6DD 50%, #E7C567 72%, #B8892A 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 0 14px rgba(245,197,24,0.28)); }
+  /* var(--font-num) rather than the mono the marketing page names outright, so
+     this follows the rule the rest of the app follows: monospace in the dark,
+     the text face in the light. */
+  .wordmark .m{
+    font-family:var(--font-num); font-size:11px; letter-spacing:.14em;
+    color:var(--ink-soft); text-transform:uppercase; }
+  .cursor{ display:inline-block; width:8px; height:1em; background:var(--mint);
+           margin-left:2px; vertical-align:-2px;
+           animation:blink 1s steps(1) infinite; }
+  @keyframes blink{ 50%{ opacity:0; } }
+  /* An animation that never stops is the kind this setting exists for. */
+  @media (prefers-reduced-motion: reduce){ .cursor{ animation:none; } }
   .who{ display:flex; align-items:center; gap:14px; font-family:var(--font-num);
         font-size:12px; color:var(--ink-soft); }
 
@@ -303,6 +325,23 @@
      the light, which is 13.0:1 on a card. */
   :root[data-theme="light"] table.data td.date,
   :root[data-theme="light"] table.data th,
+  /* The gradient runs up into near-white, which is a highlight on the dark
+     page and the page itself on this one. Measured on the cream header, the
+     marketing stops come out at 2.20, 1.20, 1.02, 1.52 and 2.87 to one — the
+     middle of the sweep is not faint, it is the background.
+
+     So the light theme gets its own run, the same shape a tenth of the way
+     down: dark at the ends, brightest in the middle, and that middle is
+     #A07026, the gold out of the owl's own line work that the tabs already
+     use. Every stop clears 3.94:1, against the 3.0 that 23px bold needs.
+
+     The glow goes with it. A yellow bloom reads as light on a dark page and as
+     a smudge on a pale one. */
+  :root[data-theme="light"] .wordmark .b{
+    background:linear-gradient(120deg, #5E430F 0%, #8A6A1E 28%, #A07026 50%, #7A5A16 72%, #4E3709 100%);
+    -webkit-background-clip:text; background-clip:text;
+    filter:none; }
+
   :root[data-theme="light"] .thf{ color:var(--ink); }
 
   /* The keys beside the charts, for the same reason. A category name and what
@@ -999,7 +1038,10 @@
 
 <header class="top">
   <div class="wrap top-inner">
-    <a class="wordmark" href="/">bilancio<span>_</span></a>
+    <a class="wordmark" href="/" aria-label="Bilancio Money — home">
+      <span class="b">Bilancio</span>
+      <span class="m" aria-hidden="true">Money<span class="cursor"></span></span>
+    </a>
     <div class="who" id="who" hidden>
       <div class="acct">
         <button class="acct-btn" id="acct-btn" type="button"
