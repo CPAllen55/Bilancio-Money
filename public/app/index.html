@@ -5069,9 +5069,28 @@ function bv2Card(parent, kids) {
   return html + '</div></div>';
 }
 
+/* Fetch, then draw — and they are separate because most of what happens on
+ * this tab does not change the figures.
+ *
+ * Opening a card, closing one, or picking a subcategory to look at are all
+ * view state: the same numbers, arranged differently. They were each calling
+ * this whole function, so every one of them re-ran /api/budget-v2 — which
+ * aggregates two to four years of transactions and rebuilds a year of
+ * projections — to toggle a hidden attribute. On a small ledger that is a
+ * pause; on a real one it is a second or more, and two clicks in that window
+ * race each other, so the second redraw lands on the first one's state and the
+ * card appears not to open at all.
+ *
+ * Only a method or a manual amount actually changes the numbers. Everything
+ * else redraws from what is already in hand. */
 async function renderBudgetingV2() {
-  fillMethodDefs();
   bv2Data = await authed('/api/budget-v2');
+  drawBudgetingV2();
+}
+
+function drawBudgetingV2() {
+  if (!bv2Data) return;
+  fillMethodDefs();
   const host = $('bv2-list');
   const months = bv2Data.months;
   const parents = bv2Data.categories.filter(c => !c.parentSlug);
@@ -5137,19 +5156,19 @@ $('bv2-list').addEventListener('click', (e) => {
   if (open) {
     const slug = open.dataset.bv2Open;
     if (bv2Open.has(slug)) bv2Open.delete(slug); else bv2Open.add(slug);
-    renderBudgetingV2();
+    drawBudgetingV2();
     return;
   }
 
   const clear = e.target.closest('[data-bv2-clear]');
-  if (clear) { bv2Focus[clear.dataset.bv2Clear] = null; renderBudgetingV2(); return; }
+  if (clear) { bv2Focus[clear.dataset.bv2Clear] = null; drawBudgetingV2(); return; }
 
   // A segment and its row are the same control: both say "look at this one".
   const pick = e.target.closest('[data-bv2-pick]');
   if (pick) {
     const parent = pick.dataset.parent, slug = pick.dataset.bv2Pick;
     bv2Focus[parent] = bv2Focus[parent] === slug ? null : slug;
-    renderBudgetingV2();
+    drawBudgetingV2();
   }
 });
 
