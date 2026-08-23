@@ -29,6 +29,8 @@
     /* The handful of colours that used to be written into a rule directly. Each
        one has to change with the theme, and a literal in a rule cannot. */
     --on-mint:#04120C;                    /* text on a mint button */
+    --tab-line:var(--mint);               /* under the tab you are on */
+    --tick:#FFFFFF;                       /* where a budget ran out */
     --mint-hot:#2BFFC0;                   /* that button, hovered */
     --bg-veil:rgba(5,8,11,.9);            /* behind the sticky header */
     --shadow:rgba(0,0,0,.55);
@@ -72,6 +74,17 @@
     --coral:#C3354B; --warning:#8D6300;
     --grid:#E2D5B0;
     --on-mint:#FFFFFF; --mint-hot:#0A6B4B;
+    /* The dark gold out of the owl's own line work — #A07026 is the commonest
+       colour in it by a distance, 5,148 samples against the next one's 1,712.
+       3.94:1 on the page and 3.65:1 on a card, so it reads as a mark rather
+       than a smudge. */
+    --tab-line:#A07026;
+    /* The tick overhangs its bar by three pixels top and bottom, so those ends
+       land on the card rather than on the fill. White there is 1.19:1 — not
+       faint, gone — which left the mark reading as a nick inside the bar
+       instead of a line cutting through it. Near-black clears both bars at
+       3.5:1 and the card at 15.9:1. */
+    --tick:#111111;
     --bg-veil:rgba(249,244,228,.90);
     --shadow:rgba(74,59,20,0.14);
 
@@ -176,6 +189,39 @@
         border:1px solid var(--hair); border-radius:6px; background:none;
         color:var(--ink-soft); cursor:pointer; }
   .tab[aria-current="true"]{ color:var(--mint); border-color:var(--mint-dim); background:var(--mint-bg); }
+
+  /* ---- the tabs, in the light ----
+     Boxed monospace reads as a terminal, which is what the dark theme is going
+     for and exactly what fights a cream page. Here they are words: no borders,
+     no fills, a proportional face, and the one you are on marked underneath in
+     the owl's own gold.
+
+     The rule beneath them is drawn as a pseudo-element rather than a border on
+     the row, so it can stop short of the corner the mark occupies — a hairline
+     running behind the owl looks like a line drawn through the picture. */
+  :root[data-theme="light"] .tabs{ position:relative; gap:26px; }
+  :root[data-theme="light"] .tabs::after{
+    content:''; position:absolute; left:0; bottom:0; height:1px;
+    width:calc(100% - 116px); background:var(--hair); }
+  :root[data-theme="light"] .tab{
+    font-family:'IBM Plex Sans', sans-serif; font-size:14px; font-weight:500;
+    border:none; border-bottom:2px solid transparent; border-radius:0;
+    background:none; color:var(--ink-soft); padding:6px 0 11px; margin-bottom:-1px; }
+  :root[data-theme="light"] .tab:hover{ color:var(--ink); }
+  :root[data-theme="light"] .tab[aria-current="true"]{
+    color:var(--ink); background:none; border-bottom-color:var(--tab-line); }
+
+  /* The gap the rule leaves for the mark, at each width the mark has. These
+     have to sit after the rule above rather than beside the .mark rules they
+     belong with: same specificity, so whichever comes last wins, and up there
+     they lost silently — the rule stopped 116px short at every width, including
+     the ones where the mark is not on screen at all. */
+  @media (max-width:1040px){
+    :root[data-theme="light"] .tabs::after{ width:calc(100% - 98px); }
+  }
+  @media (max-width:860px){
+    :root[data-theme="light"] .tabs::after{ width:100%; }
+  }
 
   .bar{ display:flex; align-items:center; justify-content:space-between; gap:16px;
         flex-wrap:wrap; padding:16px 0 22px; }
@@ -519,10 +565,12 @@
              min-width:98px; text-align:right; }
   .bv-row{ display:flex; align-items:center; gap:12px; margin-bottom:4px; }
   .bv-row .btrack{ flex:1 1 auto; position:relative; overflow:visible; height:12px; }
-  /* Where the budget ran out. White, cutting clean through the fill, because
-     its whole job is to divide what was within budget from what was not. */
+  /* Where the budget ran out. Its whole job is to divide what was within
+     budget from what was not, so it has to cut through the bar AND read on the
+     card either side of it — which is why the colour follows the theme rather
+     than being white in both. */
   .bv-tick{ position:absolute; top:-3px; bottom:-3px; width:2px; border-radius:1px;
-            background:#fff; }
+            background:var(--tick); }
   .bv-pct{ flex:0 0 46px; text-align:right; font-family:'IBM Plex Mono', monospace;
            font-size:12px; color:var(--mint); }
   .bv-pct.bad{ color:var(--coral); }
@@ -816,7 +864,7 @@
         <select class="ctl" id="trend-range">
           <option value="3">Last 3 months</option>
           <option value="6">Last 6 months</option>
-          <option value="12" selected>Last year</option>
+          <option value="12" selected>Last 12 months</option>
           <option value="24">Last 2 years</option>
         </select>
         <span class="bar-right">
@@ -841,7 +889,7 @@
         <select class="ctl" id="net-range">
           <option value="3">Last 3 months</option>
           <option value="6">Last 6 months</option>
-          <option value="12" selected>Last year</option>
+          <option value="12" selected>Last 12 months</option>
           <option value="24">Last 2 years</option>
         </select>
       </div>
