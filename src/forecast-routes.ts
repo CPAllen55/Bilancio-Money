@@ -28,7 +28,9 @@ const forecast = new Hono<{ Bindings: Env }>();
 const ym = (y: number, m: number) => `${y}-${String(m + 1).padStart(2, "0")}`;
 
 forecast.get("/forecast", async (c) => {
-  const { db, ready, close } = getDb(c.env);
+  // Read-only and expensive: safe to serve from Hyperdrive's cache when a
+  // caching binding exists. See getDb.
+  const { db, ready, close } = getDb(c.env, { cached: true });
   try {
     await ready;
     const auth = await requireUser(c, db);

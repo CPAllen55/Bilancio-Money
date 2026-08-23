@@ -30,11 +30,36 @@
   // local work cannot touch production data.
   //
   // Dev branch id, for reference: 413bf8729d80417a8303051a59e4eb48
+  // Two bindings onto the SAME database, differing only in caching.
+  //
+  // HYPERDRIVE has caching off, and stays that way. It serves everything that
+  // is written and then read back — planning methods, categories, re-filing a
+  // transaction, metal holdings. Hyperdrive caches by query and parameters with
+  // no knowledge of writes, so a cached read after a write returns the old
+  // value; that is precisely what made the Budgeting tab appear to forget a
+  // method the moment it was chosen.
+  //
+  // HYPERDRIVE_CACHED has caching on, and serves only /summary, /trend and
+  // /forecast — read-only, and by far the most expensive queries in the app.
+  // A figure up to a minute stale there is invisible; the same staleness on a
+  // control is a bug.
+  //
+  // To create it (the id below is a placeholder until you do):
+  //
+  //   wrangler hyperdrive create bilancio-cached   //     --connection-string="<the same Neon production URL>"
+  //
+  // then paste the id it prints over PLACEHOLDER and deploy. Until then the
+  // binding simply is not there, getDb falls back to HYPERDRIVE, and behaviour
+  // is exactly what it is today.
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
       "id": "bcda6d421eb84977a4ca51385c6018fb"
     }
+    // {
+    //   "binding": "HYPERDRIVE_CACHED",
+    //   "id": "PLACEHOLDER"
+    // }
   ],
 
   // Clerk publishable keys are public by design — they ship in the front end

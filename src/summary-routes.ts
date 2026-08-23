@@ -528,7 +528,9 @@ async function budgetFor(
 /* ----------------------------------------------------------------- summary -- */
 
 summary.get("/summary", async (c) => {
-  const { db, ready, close } = getDb(c.env);
+  // Read-only and expensive: safe to serve from Hyperdrive's cache when a
+  // caching binding exists. See getDb.
+  const { db, ready, close } = getDb(c.env, { cached: true });
   try {
     await ready;
     const auth = await requireUser(c, db);
@@ -906,7 +908,9 @@ export function monthKeys(count: number, today: Date): string[] {
 }
 
 summary.get("/trend", async (c) => {
-  const { db, ready, close } = getDb(c.env);
+  // Read-only and expensive: safe to serve from Hyperdrive's cache when a
+  // caching binding exists. See getDb.
+  const { db, ready, close } = getDb(c.env, { cached: true });
   try {
     await ready;
     const auth = await requireUser(c, db);
