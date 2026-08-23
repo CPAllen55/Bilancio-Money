@@ -653,6 +653,25 @@
   /* The hover box. Bigger than a native tooltip because it is doing more than
      naming a thing — it gives the amount at a size worth reading and says what
      share of the month it was. */
+/* Two panels side by side where there is room, stacked where there is not.
+     Both are lists of the same shape, so they read as one comparison rather
+     than as two unrelated cards. */
+  .as-split{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px; margin-top:16px; }
+  @media (max-width:820px){ .as-split{ grid-template-columns:1fr; } }
+  .as-row{ display:grid; grid-template-columns:minmax(0,1fr) 96px; gap:10px;
+           align-items:center; padding:9px 0; border-top:1px solid var(--hair); }
+  .as-row:first-of-type{ border-top:none; }
+  .as-name{ display:flex; align-items:center; gap:9px; min-width:0; }
+  .as-name b{ font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .as-sub{ font-family:var(--font-num); font-size:11px; color:var(--ink-soft); }
+  .as-amt{ font-family:var(--font-num); font-size:13px; text-align:right; color:var(--ink); }
+  .as-amt.owed{ color:var(--coral); }
+  /* The share bar under a row. It is the row's weight in the total, so it is
+     drawn at the row's own width rather than as a separate column of numbers. */
+  .as-share{ grid-column:1 / -1; height:4px; border-radius:2px; background:var(--grid); overflow:hidden; }
+  .as-share span{ display:block; height:100%; border-radius:2px; }
+  .as-stat{ font-family:var(--font-num); font-size:11.5px; color:var(--ink-soft); margin-top:3px; }
+
   .charttip{ position:fixed; z-index:9; pointer-events:none;
              min-width:172px; padding:11px 14px 12px;
              background:var(--bg-panel); border:1px solid var(--hair-strong);
@@ -1120,6 +1139,7 @@
       <button class="tab" data-view="tracker">Tracker</button>
       <button class="tab" data-view="trend">Trend</button>
       <button class="tab" data-view="net">Net Activity</button>
+      <button class="tab" data-view="assets">Assets</button>
       <button class="tab" data-view="budgeting">Budgeting</button>
       <button class="tab" data-view="budgeting-v2">Budgeting v2</button>
       <button class="tab" data-view="transactions">Transactions</button>
@@ -1189,6 +1209,25 @@
         </select>
       </div>
       <div class="card"><div id="net-chart"></div></div>
+    </section>
+
+<section class="panel" id="v-assets">
+      <h2 class="view">What you are worth</h2>
+      <p class="lede">Everything you own against everything you owe, and how the gap between them has moved. The other views ask where the money went; this one asks what is left after all of it.</p>
+      <div class="bar" style="padding-top:0">
+        <select class="ctl" id="as-range" aria-label="Months of history">
+          <option value="6">Last 6 months</option>
+          <option value="12" selected>Last 12 months</option>
+          <option value="24">Last 2 years</option>
+        </select>
+      </div>
+      <div class="card"><div id="as-chart"></div><p class="hint" id="as-note" style="margin:10px 0 0"></p></div>
+      <div class="tiles" id="as-tiles"></div>
+      <div class="as-split">
+        <div class="card"><p class="eyebrow">Where it sits</p><div id="as-class"></div></div>
+        <div class="card"><p class="eyebrow">By institution</p><div id="as-inst"></div></div>
+      </div>
+      <div class="card" style="margin-top:16px"><p class="eyebrow">Every account</p><div id="as-accounts"></div></div>
     </section>
 
     <section class="panel" id="v-tracker">
@@ -1540,6 +1579,7 @@ async function refresh() {
     if (view === 'overview')     await renderOverview();
     if (view === 'trend')        await renderTrend();
     if (view === 'net')          await renderNet();
+    if (view === 'assets')       await renderAssets();
     if (view === 'tracker')      await renderBudgetView();
     if (view === 'budgeting')    await renderBudgeting();
     if (view === 'budgeting-v2') await renderBudgetingV2();
@@ -2202,6 +2242,230 @@ $('tx-list').addEventListener('change', async (e) => {
     say($('tx-msg'), err.message, 'bad');
   }
 });
+
+/* ------------------------------------------------------------------ assets -- */
+
+/* What you own against what you owe.
+ *
+ * The series is reconstructed on the server by undoing transactions backwards
+ * from today's balance — see the note at the top of src/asset-routes.ts. The
+ * front end's job is to say so where it is not exact, which is why the note
+ * under the chart is driven by the coverage the response reports rather than
+ * being a fixed sentence.
+ */
+let assetData = null;
+
+async function renderAssets() {
+  const months = Number($('as-range').value);
+  /* Two calls, because runway is a question about both sides: how much cash
+     there is, and how fast it leaves. The spending half is the summary endpoint
+     the rest of the app already trusts rather than a second implementation of
+     what counts as an expense. */
+  const [a, spend] = await Promise.all([
+    authed('/api/assets?months=' + months),
+    authed('/api/summary?range=last-3').catch(() => null),
+  ]);
+  assetData = a;
+
+  const host = $('as-chart');
+  if (!a.accounts.length) {
+    host.innerHTML = '<p class="empty">No accounts linked yet.</p>';
+    $('as-tiles').innerHTML = ''; $('as-class').innerHTML = '';
+    $('as-inst').innerHTML = ''; $('as-accounts').innerHTML = ''; $('as-note').textContent = '';
+    return;
+  }
+
+  drawAssetChart(a);
+
+  /* Said only when it is true. Every account here is reconstructed from its own
+     transactions except the ones that have none — an investment account moves
+     with the market, and nothing in a transaction feed describes that — so
+     those are carried at today's value and the line behind them is flat. */
+  $('as-note').textContent = a.coverage.exact
+    ? 'Balances are reconstructed from your transactions, so each month is what the accounts actually held at the end of it.'
+    : (a.coverage.heldFlat === 1
+        ? '1 account is carried at today\'s value: its worth moves with the market rather than with transactions, so there is nothing to reconstruct it from.'
+        : a.coverage.heldFlat + ' accounts are carried at today\'s value: their worth moves with the market rather than with transactions, so there is nothing to reconstruct them from.') +
+      ' The other ' + a.coverage.reconstructed +
+      (a.coverage.reconstructed === 1 ? ' is exact.' : ' are exact.');
+
+  /* ---- the eight figures ---- */
+  const o = a.opening, tot = a.totals;
+  const openLiquid = a.series.length ? a.series[0].liquid : 0;
+  const monthlySpend = spend && spend.totals ? spend.totals.expense / 3 : 0;
+  const runway = monthlySpend > 0 ? tot.liquid / monthlySpend : null;
+  const debtRatio = tot.assets > 0 ? tot.liabilities / tot.assets : null;
+  const perMonth = a.series.length > 1
+    ? (tot.netWorth - o.netWorth) / (a.series.length - 1) : 0;
+
+  $('as-tiles').innerHTML = [
+    tile('Net worth', money(tot.netWorth), tot.netWorth, o.netWorth, 'up', '',
+         { vs: o.label.toLowerCase(), tone: toneFor('signed', tot.netWorth) }),
+    tile('Assets', money(tot.assets), tot.assets, o.assets, 'up', '',
+         { vs: o.label.toLowerCase(), tone: toneFor('in') }),
+    // Less owed is better, so the arrow has to read the other way round.
+    tile('Liabilities', money(tot.liabilities), tot.liabilities, o.liabilities, 'down', '',
+         { vs: o.label.toLowerCase(), tone: toneFor('out') }),
+    tile('Liquid cash', money(tot.liquid), tot.liquid, openLiquid, 'up', '',
+         { vs: o.label.toLowerCase(), tone: toneFor('in') }),
+
+    statTile('Runway', runway === null ? '—' : runway.toFixed(1) + ' months',
+      runway === null ? 'needs a few months of spending to work out'
+        : 'how long the liquid cash covers ' + money(monthlySpend) + ' a month',
+      runway === null ? '' : toneFor('signed', runway - 3)),
+    statTile('Credit used',
+      a.credit.utilisation === null ? '—' : (a.credit.utilisation * 100).toFixed(0) + '%',
+      a.credit.limit > 0
+        ? money(a.credit.used) + ' of ' + money(a.credit.limit) + ' available'
+        : 'no card limits reported',
+      a.credit.utilisation === null ? '' : toneFor('signed', 0.3 - a.credit.utilisation)),
+    statTile('Debt to assets',
+      debtRatio === null ? '—' : (debtRatio * 100).toFixed(0) + '%',
+      debtRatio === null ? 'no assets to measure against'
+        : money(tot.liabilities) + ' owed against ' + money(tot.assets) + ' owned',
+      debtRatio === null ? '' : toneFor('signed', 0.5 - debtRatio)),
+    statTile('Average month',
+      (perMonth >= 0 ? '+' : '') + money(perMonth),
+      'what net worth has moved per month across the window',
+      toneFor('signed', perMonth)),
+  ].join('');
+
+  /* ---- the two breakdowns ---- */
+  const widest = Math.max.apply(null, a.byClass.map(r => Math.abs(r.net)).concat([1]));
+  $('as-class').innerHTML = a.byClass.map(r => assetRow(
+    r.label, r.accounts + ' account' + (r.accounts === 1 ? '' : 's'),
+    r.net, Math.abs(r.net) / widest, r.net < 0)).join('') ||
+    '<p class="hint">Nothing to break down.</p>';
+
+  const widestInst = Math.max.apply(null, a.byInstitution.map(r => Math.abs(r.net)).concat([1]));
+  $('as-inst').innerHTML = a.byInstitution.map(r => assetRow(
+    r.label, r.accounts + ' account' + (r.accounts === 1 ? '' : 's'),
+    r.net, Math.abs(r.net) / widestInst, r.net < 0)).join('') ||
+    '<p class="hint">Nothing to break down.</p>';
+
+  /* ---- and every account behind them ---- */
+  $('as-accounts').innerHTML =
+    '<table class="data"><thead><tr><th>Account</th><th>Institution</th><th>Kind</th>' +
+    '<th style="text-align:right">Balance</th></tr></thead><tbody>' +
+    a.accounts.map(x => {
+      const owed = x.klass === 'credit' || x.klass === 'loan';
+      return '<tr><td><b>' + escapeHtml(x.name) + '</b>' +
+        (x.mask ? ' <span class="as-sub">••' + escapeHtml(x.mask) + '</span>' : '') +
+        (x.utilisation !== null
+          ? '<div class="as-stat">' + (x.utilisation * 100).toFixed(0) + '% of its limit used</div>' : '') +
+        (!x.exact ? '<div class="as-stat">carried at today\'s value</div>' : '') +
+        '</td>' +
+        '<td>' + escapeHtml(x.institution || 'Unknown') + '</td>' +
+        '<td>' + escapeHtml(x.klassLabel) + '</td>' +
+        '<td class="num' + (owed ? '' : ' in') + '">' +
+          (owed ? '−' : '') + money(Math.abs(x.current)) + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+/* A tile that states a figure and explains it, rather than comparing it to a
+   period before. Runway has no "last month" to be measured against — it is a
+   position, not a change — and forcing it into the comparison tile would have
+   printed "no prior period" under four of the eight. */
+function statTile(label, value, note, tone) {
+  return '<div class="tile' + (tone ? ' ' + tone : '') + '">' +
+    '<div class="t-label">' + escapeHtml(label) + '</div>' +
+    '<div class="t-value">' + value + '</div>' +
+    '<div class="as-stat">' + escapeHtml(note) + '</div></div>';
+}
+
+function assetRow(label, sub, amount, share, owed) {
+  return '<div class="as-row">' +
+      '<span class="as-name"><b>' + escapeHtml(label) + '</b>' +
+        '<span class="as-sub">' + escapeHtml(sub) + '</span></span>' +
+      '<span class="as-amt' + (owed ? ' owed' : '') + '">' +
+        (owed ? '−' : '') + money(Math.abs(amount)) + '</span>' +
+      '<span class="as-share"><span style="width:' + (share * 100).toFixed(1) + '%;background:' +
+        (owed ? 'var(--coral)' : 'var(--mint)') + '"></span></span>' +
+    '</div>';
+}
+
+/* Assets above the line, liabilities below it, net worth drawn through.
+ *
+ * The gap between the two blocks IS net worth, so the line has something to be
+ * read against rather than floating on its own. Zero is always on the axis: a
+ * chart of a signed quantity that crops the line it is signed about is showing
+ * the wrong thing. */
+function drawAssetChart(a) {
+  const host = $('as-chart');
+  const rows = a.series;
+  if (!rows.length) { host.innerHTML = '<p class="empty">No history yet.</p>'; return; }
+
+  const W = 880, H = 340;
+  const PL = 74, PR = 14, PT = 22, PB = 38;
+  const plotW = W - PL - PR, plotH = H - PT - PB;
+
+  const values = rows.map(r => r.assets)
+    .concat(rows.map(r => -r.liabilities))
+    .concat(rows.map(r => r.netWorth)).concat([0]);
+  const lo = Math.min.apply(null, values), hi = Math.max.apply(null, values);
+  const step = niceStep((hi - lo) / 4 || 1);
+  const yMin = Math.floor(lo / step) * step;
+  const yMax = Math.ceil(hi / step) * step;
+  const span = (yMax - yMin) || 1;
+  const y = v => PT + plotH - ((v - yMin) / span) * plotH;
+  const zero = y(0);
+
+  const band = plotW / rows.length;
+  const barW = barWidth(band, 0.5, 34);
+
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
+    '" preserveAspectRatio="xMidYMid meet" role="img" ' +
+    'aria-label="Assets, liabilities and net worth, month by month">';
+
+  for (let v = yMin; v <= yMax + step / 2; v += step) {
+    const yy = y(v), isZero = Math.abs(v) < step / 1000;
+    svg += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + yy.toFixed(1) + '" y2="' + yy.toFixed(1) +
+      '" stroke="' + (isZero ? 'var(--hair-strong)' : 'var(--grid)') + '" stroke-width="1"/>' +
+      '<text x="' + (PL - 9) + '" y="' + (yy + 4).toFixed(1) + '" text-anchor="end" ' +
+      'font-size="10.5" fill="var(--muted)">' + money0(v) + '</text>';
+  }
+
+  rows.forEach((r, i) => {
+    const cx = PL + band * i + band / 2, x = cx - barW / 2;
+    const topA = y(r.assets), topL = y(-r.liabilities);
+    svg +=
+      '<rect x="' + x.toFixed(1) + '" y="' + topA.toFixed(1) + '" width="' + barW.toFixed(1) +
+        '" height="' + Math.max(0, zero - topA).toFixed(1) + '" rx="2" fill="var(--mint)" opacity=".85" ' +
+        tipAttrs('Assets', r.month, r.assets, 0, 'What every account you own held at the end of ' + r.label + '.') + '/>' +
+      '<rect x="' + x.toFixed(1) + '" y="' + zero.toFixed(1) + '" width="' + barW.toFixed(1) +
+        '" height="' + Math.max(0, topL - zero).toFixed(1) + '" rx="2" fill="var(--coral)" opacity=".85" ' +
+        tipAttrs('Liabilities', r.month, r.liabilities, 0, 'What every card and loan owed at the end of ' + r.label + '.') + '/>';
+  });
+
+  // The line last, so it sits over the blocks it is the difference between.
+  const pts = rows.map((r, i) => [PL + band * i + band / 2, y(r.netWorth)]);
+  let d = 'M' + pts[0][0].toFixed(1) + ',' + pts[0][1].toFixed(1);
+  for (let i = 1; i < pts.length; i++) {
+    const p0 = pts[i - 1], p1 = pts[i], mx = (p0[0] + p1[0]) / 2;
+    d += ' C' + mx.toFixed(1) + ',' + p0[1].toFixed(1) + ' ' + mx.toFixed(1) + ',' + p1[1].toFixed(1) +
+      ' ' + p1[0].toFixed(1) + ',' + p1[1].toFixed(1);
+  }
+  svg += '<path d="' + d + '" fill="none" stroke="var(--ink)" stroke-width="2.5" ' +
+    'stroke-linejoin="round" stroke-linecap="round"/>';
+
+  rows.forEach((r, i) => {
+    svg += '<circle cx="' + pts[i][0].toFixed(1) + '" cy="' + pts[i][1].toFixed(1) +
+      '" r="3.5" fill="var(--bg-panel)" stroke="var(--ink)" stroke-width="2" ' +
+      tipAttrs('Net worth', r.month, r.netWorth, 0,
+        money(r.assets) + ' owned against ' + money(r.liabilities) + ' owed.') + '/>';
+  });
+
+  rows.forEach((r, i) => {
+    const cx = PL + band * i + band / 2;
+    if (rows.length > 14 && i % 2) return;
+    svg += '<text x="' + cx.toFixed(1) + '" y="' + (H - 14) + '" text-anchor="middle" ' +
+      'font-size="10.5" fill="var(--muted)">' + monthLabel(r.month) + '</text>';
+  });
+
+  host.innerHTML = svg + '</svg>';
+}
+
+$('as-range').addEventListener('change', () => { refresh(); });
 
 /* ----------------------------------------------------------------- trend -- */
 
