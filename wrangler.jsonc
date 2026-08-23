@@ -44,13 +44,15 @@
   // A figure up to a minute stale there is invisible; the same staleness on a
   // control is a bug.
   //
-  // To create it (the id below is a placeholder until you do):
+  // To create it, in PowerShell, on ONE line — the connection string is the
+  // Neon PRODUCTION branch URL, the same database the binding above points at.
+  // Caching is on by default, which is the whole point, so pass no flag:
   //
-  //   wrangler hyperdrive create bilancio-cached   //     --connection-string="<the same Neon production URL>"
+  //   npx wrangler hyperdrive create bilancio-cached --connection-string="postgresql://..."
   //
-  // then paste the id it prints over PLACEHOLDER and deploy. Until then the
-  // binding simply is not there, getDb falls back to HYPERDRIVE, and behaviour
-  // is exactly what it is today.
+  // Paste the id it prints over PLACEHOLDER below and uncomment the block.
+  // Until then the binding is simply absent, getDb falls back to HYPERDRIVE,
+  // and behaviour is exactly what it is today.
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
