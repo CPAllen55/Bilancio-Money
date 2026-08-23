@@ -627,6 +627,14 @@
      than being white in both. */
   .bv-tick{ position:absolute; top:-3px; bottom:-3px; width:2px; border-radius:1px;
             background:var(--tick); }
+  /* The rows behind a figure, indented under the bar they explain and ruled off
+     from it so the two do not read as one block. */
+  .bv-tx{ margin:6px 0 12px 26px; padding-left:12px;
+          border-left:2px solid var(--hair-strong); }
+  .bv-tx .eyebrow{ margin:2px 0 6px; }
+  .bv-tx table.data{ font-size:12.5px; }
+  .bv-tx table.data td{ padding:5px 10px 5px 0; }
+  .bv-tx .hint{ margin:4px 0; }
   .bv-pct{ flex:0 0 46px; text-align:right; font-family:var(--font-num);
            font-size:12px; color:var(--mint); }
   .bv-pct.bad{ color:var(--coral); }
@@ -1789,7 +1797,16 @@ function priorDot(cx, cy, label, month, amount, dim) {
  * a row of overlapping figures is worse than no figures.
  */
 function stackTotal(cx, topY, total, band, month, label, selected) {
-  if (band < 52) return '';
+  /* Shown when the figure actually fits, rather than below a fixed width.
+     A flat threshold of 52 units suppressed these on the upper chart the
+     moment the budget extended the year to sixteen months — the band drops to
+     50 and every total vanished, while the chart below it kept its own because
+     it was showing fewer months. The two are meant to match.
+
+     Six characters of mono at 10.5 is about 38 units, so the test is whether
+     the label plus a little air is narrower than the band it sits in. */
+  const width = money0(total).length * 6.3 + 6;
+  if (width > band) return '';
   return '<text class="stacktotal' + (selected ? ' sel' : '') + '" ' +
     tipAttrs(label || 'Everything', month, total, 0) +
     ' x="' + cx.toFixed(1) + '" y="' + (topY - 8).toFixed(1) + '" text-anchor="middle" ' +
@@ -2691,6 +2708,12 @@ $('plan-list').addEventListener('keydown', (e) => {
    Shut by default like the Categories tab, for the same reason — a dozen
    headline comparisons read; forty rows do not. */
 const budgetOpen = new Set();
+/* Rows whose transactions are showing, and what was fetched for them. Keyed by
+   range as well as category, so changing the months asks again rather than
+   showing the last lot under a new heading. */
+const budgetTxOpen = new Set();
+const budgetTxCache = {};
+let budgetRangeLabel = '';
 
 /** A run of whole months ending at the one chosen. One month is a run of one. */
 function budgetRange() {
@@ -2738,7 +2761,13 @@ function fillBudgetRanges() {
  * bar on a small budget is not the same money as a full bar on a large one.
  * The figures on the heading carry that, and the ordering is still by spend.
  */
-function budgetPair(label, colour, actual, budget, expandable, slug, open) {
+/* The toggle on a row opens one of two things, and has to say which.
+ *
+ * A parent with children opens the children. Everything else — a child, or a
+ * parent that has none — opens the transactions behind its own figure. Both
+ * are a "+", so the difference is carried in the attribute rather than in the
+ * look, and the one handler reads it. */
+function budgetPair(label, colour, actual, budget, expand) {
   const hasBudget = budget > 0;
   const over = hasBudget && actual > budget;
   const pct = hasBudget ? (actual / budget) * 100 : 0;
@@ -2754,10 +2783,12 @@ function budgetPair(label, colour, actual, budget, expandable, slug, open) {
     : '<span class="bv-verdict ' + (over ? 'bad' : 'good') + '">' +
       money(Math.abs(actual - budget)) + (over ? ' over' : ' left') + '</span>';
 
-  const toggle = expandable
-    ? '<button class="ctog" type="button" data-bud="' + escapeHtml(slug) + '" ' +
-      'aria-expanded="' + open + '" aria-label="' + (open ? 'Hide' : 'Show') + ' what is inside ' +
-      escapeHtml(label) + '">' + (open ? '−' : '+') + '</button>'
+  const toggle = expand
+    ? '<button class="ctog" type="button" data-' + (expand.kind === 'kids' ? 'bud' : 'bud-tx') +
+      '="' + escapeHtml(expand.slug) + '" aria-expanded="' + expand.open + '" aria-label="' +
+      (expand.open ? 'Hide' : 'Show') + ' ' +
+      (expand.kind === 'kids' ? 'what is inside ' : 'the transactions behind ') +
+      escapeHtml(label) + '">' + (expand.open ? '−' : '+') + '</button>'
     : '<span class="ctog ghost" aria-hidden="true"></span>';
 
   const fill = hasBudget ? (over ? 'var(--coral)' : 'var(--mint)') : colour;
@@ -2783,6 +2814,7 @@ function budgetPair(label, colour, actual, budget, expandable, slug, open) {
 async function renderBudgetView() {
   fillBudgetRanges();
   const s = await summaryFor(budgetRange());
+  budgetRangeLabel = (s.range && s.range.label) || '';
   const host = $('bud-list');
   const bud = s.budget || { available: false, byParent: {}, byCategory: {} };
 
@@ -2806,15 +2838,26 @@ async function renderBudgetView() {
       .sort((a, b) => b[1] - a[1]);
     const expandable = kids.length > 1;
     const open = expandable && budgetOpen.has(slug);
+    // A parent with nothing underneath is not a dead end: it opens its own
+    // transactions instead, so every row on the tab answers the same question.
+    const parentExpand = expandable
+      ? { kind: 'kids', slug, open }
+      : { kind: 'tx', slug, open: budgetTxOpen.has(slug) };
+
+    const txBox = (forSlug) =>
+      '<div class="bv-tx" data-bud-tx-for="' + escapeHtml(forSlug) + '"' +
+      (budgetTxOpen.has(forSlug) ? '' : ' hidden') + '></div>';
 
     return '<div class="bv-card">' +
-      budgetPair(labelOfSlug(slug), colourOf(slug), actual, budget, expandable, slug, open) +
+      budgetPair(labelOfSlug(slug), colourOf(slug), actual, budget, parentExpand) +
       (expandable
         ? '<div class="bv-kids" data-bud-kids="' + escapeHtml(slug) + '"' + (open ? '' : ' hidden') + '>' +
           kids.map(k => '<div class="bv-kid">' +
-            budgetPair(labelOfSlug(k[0]), colourOf(k[0]), k[1], k[2], false, k[0], false) +
+            budgetPair(labelOfSlug(k[0]), colourOf(k[0]), k[1], k[2],
+                       { kind: 'tx', slug: k[0], open: budgetTxOpen.has(k[0]) }) +
+            txBox(k[0]) +
             '</div>').join('') + '</div>'
-        : '') +
+        : txBox(slug)) +
       '</div>';
   }).join('');
 
@@ -2822,23 +2865,99 @@ async function renderBudgetView() {
     host.innerHTML += '<p class="fc-method" style="margin:4px 2px 0">' +
       escapeHtml(budgetNote(bud)) + '</p>';
   }
+
+  // The list was rebuilt from scratch, so anything that was open is now an
+  // empty box. Fill it again rather than making the reader open it twice.
+  for (const slug of budgetTxOpen) drawBudgetTx(slug);
+}
+
+/**
+ * The transactions behind one figure, for the months the tab is showing.
+ *
+ * The same endpoint the Trend breakdown uses, and the same filter: asking for a
+ * parent brings its children with it, asking for a child brings only that. The
+ * period is named in the heading, because a list of dates with no span over it
+ * invites the reader to assume the wrong one.
+ */
+async function drawBudgetTx(slug) {
+  const box = $('bud-list').querySelector('[data-bud-tx-for="' + CSS.escape(slug) + '"]');
+  if (!box) return;
+
+  const range = budgetRange();
+  const key = range + '|' + slug;
+  const period = budgetRangeLabel ? ' · ' + budgetRangeLabel : '';
+  box.innerHTML = '<p class="hint">Loading…</p>';
+
+  try {
+    if (!budgetTxCache[key]) {
+      budgetTxCache[key] = await authed('/api/transactions?range=' + encodeURIComponent(range) +
+        '&bucket=' + encodeURIComponent(slug) + '&limit=50');
+    }
+    const r = budgetTxCache[key];
+    if (!budgetTxOpen.has(slug)) return;
+
+    if (!r.transactions.length) {
+      box.innerHTML = '<p class="hint">Nothing in ' + escapeHtml(labelOfSlug(slug)) +
+        (budgetRangeLabel ? ' for ' + escapeHtml(budgetRangeLabel) : '') + '.</p>';
+      return;
+    }
+
+    box.innerHTML =
+      '<p class="eyebrow">' + escapeHtml(labelOfSlug(slug)) + escapeHtml(period) + ' · ' +
+        r.total + ' transaction' + (r.total === 1 ? '' : 's') + '</p>' +
+      '<table class="data pie-table"><tbody>' +
+      r.transactions.map(tx =>
+        '<tr><td class="num date">' + tx.date + '</td>' +
+        '<td>' + escapeHtml(tx.name) + '</td>' +
+        '<td class="num' + (tx.amount > 0 ? ' in' : '') + '">' +
+          (tx.amount > 0 ? '+' : '') + money(tx.amount) + '</td></tr>').join('') +
+      '</tbody></table>' +
+      (r.total > r.transactions.length
+        ? '<p class="hint">' + (r.total - r.transactions.length) + ' more not shown.</p>'
+        : '');
+  } catch (err) {
+    box.innerHTML = '<p class="hint">' + escapeHtml(err.message) + '</p>';
+  }
 }
 
 $('bud-list').addEventListener('click', (e) => {
   const btn = e.target.closest('.ctog');
-  if (!btn || !btn.dataset.bud) return;
-  const slug = btn.dataset.bud;
-  const open = !budgetOpen.has(slug);
-  if (open) budgetOpen.add(slug); else budgetOpen.delete(slug);
+  if (!btn) return;
 
-  const kids = $('bud-list').querySelector('[data-bud-kids="' + CSS.escape(slug) + '"]');
-  if (kids) kids.hidden = !open;
-  btn.textContent = open ? '−' : '+';
-  btn.setAttribute('aria-expanded', String(open));
+  const mark = (open) => {
+    btn.textContent = open ? '−' : '+';
+    btn.setAttribute('aria-expanded', String(open));
+  };
+
+  if (btn.dataset.bud) {
+    const slug = btn.dataset.bud;
+    const open = !budgetOpen.has(slug);
+    if (open) budgetOpen.add(slug); else budgetOpen.delete(slug);
+    const kids = $('bud-list').querySelector('[data-bud-kids="' + CSS.escape(slug) + '"]');
+    if (kids) kids.hidden = !open;
+    mark(open);
+    return;
+  }
+
+  if (btn.dataset.budTx) {
+    const slug = btn.dataset.budTx;
+    const open = !budgetTxOpen.has(slug);
+    if (open) budgetTxOpen.add(slug); else budgetTxOpen.delete(slug);
+    const box = $('bud-list').querySelector('[data-bud-tx-for="' + CSS.escape(slug) + '"]');
+    if (box) box.hidden = !open;
+    mark(open);
+    if (open) drawBudgetTx(slug);
+  }
 });
 
 ['bud-range', 'bud-trail'].forEach(id =>
-  $(id).addEventListener('change', () => { summaryCache = null; refresh(); }));
+  $(id).addEventListener('change', () => {
+    summaryCache = null;
+    // The rows behind a figure belong to the months that produced it, so a new
+    // period asks again rather than reusing the last answer.
+    for (const k of Object.keys(budgetTxCache)) delete budgetTxCache[k];
+    refresh();
+  }));
 
 /* ------------------------------------------------------------------ pie -- */
 
