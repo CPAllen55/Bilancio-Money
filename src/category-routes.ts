@@ -52,9 +52,9 @@ cats.post("/categories", async (c) => {
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
 
-    let label: unknown, colour: unknown;
+    let label: unknown, colour: unknown, parent: unknown;
     try {
-      ({ label, colour } = await c.req.json());
+      ({ label, colour, parent } = await c.req.json());
     } catch {
       return c.json({ error: "bad_request", reason: "body must be JSON" }, 400);
     }
@@ -67,7 +67,46 @@ cats.post("/categories", async (c) => {
     if (!slug) return c.json({ error: "bad_request", reason: "that name has no letters or numbers in it" }, 400);
 
     // Colour is cosmetic, so a bad one is corrected rather than refused.
-    const hex = typeof colour === "string" && /^#[0-9a-fA-F]{6}$/.test(colour) ? colour : "#7E90A2";
+    const given = typeof colour === "string" && /^#[0-9a-fA-F]{6}$/.test(colour) ? colour : null;
+    let hex = given ?? "#7E90A2";
+
+    /* Under a parent, when one was named.
+     *
+     * The parent has to be one this person can actually see — a standard one or
+     * their own — and has to be top level itself. The tree is two deep on
+     * purpose: a leaf is what a transaction is filed under, a parent is what
+     * leaves roll up into, and a third level makes every total ambiguous about
+     * whether it already contains what sits beneath it.
+     */
+    let parentRow: { id: string; kind: string; colour: string } | null = null;
+    if (typeof parent === "string" && parent.trim()) {
+      const [found] = await db
+        .select({
+          id: categories.id, kind: categories.kind,
+          colour: categories.colour, parentId: categories.parentId,
+        })
+        .from(categories)
+        .where(
+          and(
+            eq(categories.slug, parent.trim()),
+            isNull(categories.archivedAt),
+            or(isNull(categories.userId), eq(categories.userId, auth.user.id)),
+          ),
+        );
+      if (!found) return c.json({ error: "bad_request", reason: "no such parent category" }, 400);
+      if (found.parentId) {
+        return c.json({
+          error: "bad_request",
+          reason: "categories go two deep — pick a top-level one to sit under",
+        }, 400);
+      }
+      parentRow = { id: found.id, kind: found.kind, colour: found.colour };
+      // An unstated colour follows the family, so a new leaf looks like the
+      // place it lives rather than like the one grey thing on the chart.
+      if (!given) hex = found.colour;
+    } else if (parent !== undefined && parent !== null && parent !== "") {
+      return c.json({ error: "bad_request", reason: "that parent is not a category" }, 400);
+    }
 
     // A system category with this slug already covers it — reusing it is better
     // than creating a private duplicate that splits the same spending in two.
@@ -92,7 +131,13 @@ cats.post("/categories", async (c) => {
 
     const [created] = await db
       .insert(categories)
-      .values({ userId: auth.user.id, slug, label: clean, colour: hex, sortOrder: 500, isSystem: false })
+      .values({
+        userId: auth.user.id, slug, label: clean, colour: hex, sortOrder: 500, isSystem: false,
+        parentId: parentRow?.id ?? null,
+        // A leaf sits on the same side of the ledger as the parent it hangs
+        // from, or the rollup would add money in to money out.
+        kind: parentRow?.kind ?? "spend",
+      })
       .returning();
 
     return c.json({ ok: true, created: true, category: created });

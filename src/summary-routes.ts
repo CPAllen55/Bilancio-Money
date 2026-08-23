@@ -177,7 +177,10 @@ interface Categorisable {
  * be labelled "To Savings" and still counted as spending — which is precisely
  * the double-count that keeping transfers out of the totals exists to avoid.
  */
-function resolveSlug(row: Categorisable, ctx: CategoryContext): { kind: string; slug: string | null } {
+function resolveSlug(
+  row: Categorisable,
+  ctx: CategoryContext,
+): { kind: string; slug: string | null; explicit: boolean } {
   // Computed once: the merchant rule looks it up, and the wholesale clubs are
   // told apart from ordinary superstores by the same normalised name.
   const key = merchantKey(row.merchantName, row.name);
@@ -187,17 +190,17 @@ function resolveSlug(row: Categorisable, ctx: CategoryContext): { kind: string; 
   // wins over both a merchant rule and Plaid's guess.
   if (row.overrideCategoryId) {
     const slug = ctx.slugById.get(row.overrideCategoryId);
-    if (slug) return { kind: ctx.kindOfSlug.get(slug) ?? "spend", slug };
+    if (slug) return { kind: ctx.kindOfSlug.get(slug) ?? "spend", slug, explicit: true };
   }
 
   // Rules do not apply to transfers: a merchant rule is about what something
   // is, and a transfer between your own accounts is not a purchase.
   if (base.kind === "spend") {
     const ruled = ctx.ruleBySlugKey.get(key);
-    if (ruled) return { kind: ctx.kindOfSlug.get(ruled) ?? "spend", slug: ruled };
+    if (ruled) return { kind: ctx.kindOfSlug.get(ruled) ?? "spend", slug: ruled, explicit: false };
   }
 
-  return base;
+  return { ...base, explicit: false };
 }
 
 /* ------------------------------------------------------------------ ranges -- */
@@ -338,14 +341,30 @@ export function displayBucket(
   ctx: CategoryContext,
 ): { kind: string; bucket: string | null; signed: number } {
   const signed = -Number(amount); // flip Plaid's sign: negative meant money in
-  const { kind, slug } = resolveSlug(row, ctx);
+  const { kind, slug, explicit } = resolveSlug(row, ctx);
 
   // Your own money changing pocket. Reported under its transfer category,
   // never added to income or expense.
   if (kind === "transfer") return { kind, bucket: slug, signed };
 
-  // Which bucket a row lands in follows the money, not the label. Somebody
-  // can file a refund under any category they like; it is still money in.
+  /* Somebody re-filing one row by hand has told us something the direction of
+   * the money cannot tell us back.
+   *
+   * The case that showed this up: money arriving from a partner, covering a
+   * bill already paid. Before, an inbound row met a spending category and was
+   * quietly rebucketed as a refund — you chose Home and the app showed Refunds,
+   * which is the app disagreeing with you in silence. Now it lands on Home as a
+   * negative and cancels the part of the bill it was paying back, which is what
+   * a reimbursement is.
+   *
+   * Only an override earns this. Plaid's guess and a merchant rule are still
+   * overruled by the way the cash actually travelled: those are generalisations
+   * about a merchant, and a generalisation must not be able to invent income.
+   */
+  if (explicit && slug) return { kind, bucket: slug, signed };
+
+  // Otherwise the bucket follows the money, not the label. Somebody can file a
+  // refund under any category they like; it is still money in.
   return signed > 0
     ? { kind: "income", bucket: bucketFor(slug, "income", ctx), signed }
     : { kind: "spend", bucket: bucketFor(slug, "spend", ctx), signed };

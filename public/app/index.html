@@ -235,6 +235,7 @@
      theme it opened a black list under a cream control. */
   :root[data-theme="light"] .thf,
   :root[data-theme="light"] select.catsel,
+  :root[data-theme="light"] .askbox select,
   :root[data-theme="light"] select.ctl{ color-scheme:light; }
   :root[data-theme="light"] select.ctl,
   :root[data-theme="light"] select.catsel{
@@ -247,6 +248,7 @@
   :root[data-theme="light"] .thf optgroup,
   :root[data-theme="light"] select.catsel option,
   :root[data-theme="light"] select.catsel optgroup,
+  :root[data-theme="light"] .askbox select option,
   :root[data-theme="light"] select.ctl option{ background:var(--surface); }
 
   /* The gap the rule leaves for the mark, at each width the mark has. These
@@ -370,7 +372,7 @@
   .thf.on{ color:var(--mint); border-color:var(--mint-dim); text-transform:none;
            letter-spacing:0; font-size:12px; }
   table.data th{ padding-bottom:0; }
-  .thf, select.catsel, select.ctl{ color-scheme:dark; }
+  .thf, select.catsel, select.ctl, .askbox select{ color-scheme:dark; }
   .thf option, .thf optgroup{
     background:var(--bg-panel); color:var(--ink);
     font-family:'IBM Plex Sans', sans-serif; font-size:13.5px;
@@ -504,6 +506,28 @@
   .stacktotal{ transform-box:fill-box; transform-origin:center; cursor:default;
                transition:transform .12s ease, fill .12s ease; }
   .stacktotal:hover, .stacktotal.sel{ transform:scale(1.22); fill:var(--ink); }
+
+  /* The subcategory dialog. Panel colours rather than the browser's, and a
+     backdrop dark enough to say the page behind it is waiting. */
+  dialog.askbox{ border:1px solid var(--hair-strong); border-radius:12px; padding:0;
+                 background:var(--bg-panel); color:var(--ink);
+                 width:min(92vw, 380px); box-shadow:0 18px 50px var(--shadow); }
+  dialog.askbox::backdrop{ background:rgba(3,7,11,0.55); }
+  .askbox form{ padding:18px 20px 16px; }
+  .askbox h3{ margin:0 0 5px; font-size:15px; color:var(--ink); }
+  .askbox .hint{ margin:0 0 15px; }
+  .askbox label{ display:block; font-size:12px; color:var(--ink-soft); margin:0 0 13px; }
+  .askbox h3, .askbox label, .askbox .askrow button{ font-family:var(--font-num); }
+  .askbox input, .askbox select{ font-family:var(--font-num);
+                 display:block; width:100%; margin-top:5px;
+                 padding:8px 10px; border-radius:7px; font-size:13.5px;
+                 border:1px solid var(--hair-strong);
+                 background:var(--field); color:var(--ink); }
+  .askrow{ display:flex; gap:8px; justify-content:flex-end; margin-top:2px; }
+  .askrow button{ padding:8px 16px; border-radius:7px; font-size:13px; cursor:pointer;
+                  border:1px solid var(--mint); background:var(--mint); color:var(--on-mint); }
+  .askrow button.ghost{ background:none; color:var(--ink-soft);
+                        border-color:var(--hair-strong); }
 
   /* The hover box. Bigger than a native tooltip because it is doing more than
      naming a thing — it gives the amount at a size worth reading and says what
@@ -1545,6 +1569,7 @@ async function renderOverview() {
 }
 
 const NEW_CATEGORY = '__new__';
+const NEW_SUBCATEGORY = '__newsub__';
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, ch =>
@@ -1569,32 +1594,125 @@ function cachedCategoryOptions(side) {
   return catOptCache[side];
 }
 
+/* Every category, whichever way the money went.
+ *
+ * The menu used to offer only the side of the ledger the cash travelled on, on
+ * the reasoning that a label cannot change direction. True, and beside the
+ * point. Money arriving from a partner to cover a bill already paid is not
+ * income; it is that bill costing less. Refusing to let it be filed under Home
+ * meant the app claiming to know better than the person who paid it.
+ *
+ * The natural side still leads, because it is right nearly every time. What
+ * changed is that the rest is now below it rather than absent, under a heading
+ * that says what choosing from there will do — money in against a spending
+ * category reimburses it, money out against an income one refunds it. */
 function categoryOptions(selectedSlug, side) {
-  // The side of the ledger the money actually moved on, plus transfers. A
-  // category cannot change the direction cash travelled, so offering "Salary"
-  // for a payment would only produce a wrong total. But "this should not count
-  // at all" is a legitimate thing to say about any row, whichever way it went,
-  // so the transfer bucket — including Ignore this — is always reachable.
-  const pool = side
-    ? categoryList.filter(c => c.kind === side || c.kind === 'transfer')
-    : categoryList;
-  const parents = pool.filter(c => !c.parentSlug);
   const opt = c => '<option value="' + c.id + '"' +
     (c.slug === selectedSlug ? ' selected' : '') + '>' +
     escapeHtml(c.label) + (c.isSystem ? '' : ' ·yours') + '</option>';
 
-  let html = '<option value="">—</option>';
-  for (const p of parents) {
-    const kids = pool.filter(c => c.parentSlug === p.slug);
-    if (!kids.length) continue;
-    html += '<optgroup label="' + escapeHtml(p.label) + '">' + kids.map(opt).join('') + '</optgroup>';
-  }
-  // Categories with no children of their own — a user's own, or a parent that
-  // has none yet. Without this they would be unreachable in the dropdown.
-  const loose = parents.filter(p => !pool.some(c => c.parentSlug === p.slug));
-  if (loose.length) html += '<optgroup label="Other">' + loose.map(opt).join('') + '</optgroup>';
+  // 0 the way the money went, 1 transfers — "this should not count at all" is a
+  // fair thing to say about any row — and 2 the opposite side.
+  const rank = c => (!side || c.kind === side) ? 0 : c.kind === 'transfer' ? 1 : 2;
+  const otherNote = side === 'income' ? ' — reimburses'
+                  : side === 'spend' ? ' — refunds' : '';
 
-  return html + '<option value="' + NEW_CATEGORY + '">+ New category…</option>';
+  /* Emitted one band at a time, so the opposite side arrives together at the
+     bottom of the menu instead of interleaved with the likely answers. A leaf
+     is banded by its parent, not by itself: a child of Home belongs with Home
+     even if its own kind were ever to disagree. */
+  const band = (want, note) => {
+    let out = '', loose = [];
+    for (const p of categoryList) {
+      if (p.parentSlug || rank(p) !== want) continue;
+      const kids = categoryList.filter(c => c.parentSlug === p.slug);
+      // A parent with nothing under it is a leaf in practice, and would be
+      // unreachable if it were only ever used as a heading.
+      if (!kids.length) { loose.push(p); continue; }
+      out += '<optgroup label="' + escapeHtml(p.label) + note + '">' +
+        kids.map(opt).join('') + '</optgroup>';
+    }
+    if (loose.length) out += '<optgroup label="Other' + note + '">' +
+      loose.map(opt).join('') + '</optgroup>';
+    return out;
+  };
+
+  return '<option value="">—</option>' +
+    band(0, '') + band(1, '') + (side ? band(2, otherNote) : '') +
+    '<option value="' + NEW_CATEGORY + '">+ New category…</option>' +
+    '<option value="' + NEW_SUBCATEGORY + '">+ New subcategory…</option>';
+}
+
+/* Naming a subcategory takes two answers — what it is called, and what it goes
+ * under — and window.prompt only holds one. Small enough to stay a dialog
+ * rather than become a page, and dressed in the page's own tokens so it does
+ * not arrive looking like something the browser put there.
+ *
+ * Resolves to { label, parent }, or to null if it was dismissed. */
+function askSubcategory(side) {
+  return new Promise((resolve) => {
+    /* Parents on the likely side first. Transfers are left out: a transfer
+       category is a statement that a row is not spending at all, and hanging a
+       subcategory off one only makes a place nothing can usefully go. */
+    const parents = categoryList
+      .filter(c => !c.parentSlug && c.kind !== 'transfer')
+      .slice()
+      .sort((a, b) => (side ? (a.kind === side ? 0 : 1) - (b.kind === side ? 0 : 1) : 0));
+
+    const dlg = document.createElement('dialog');
+    dlg.className = 'askbox';
+    dlg.innerHTML =
+      '<form method="dialog">' +
+        '<h3>New subcategory</h3>' +
+        '<p class="hint">It sits under a category you already have and rolls up ' +
+          'into it. Yours alone — nobody else sees it.</p>' +
+        '<label>Name<input id="ask-label" maxlength="40" autocomplete="off" required></label>' +
+        '<label>Under<select id="ask-parent">' +
+          parents.map(p => '<option value="' + escapeHtml(p.slug) + '">' +
+            escapeHtml(p.label) + '</option>').join('') +
+        '</select></label>' +
+        '<div class="askrow">' +
+          '<button type="button" class="ghost" id="ask-no">Cancel</button>' +
+          '<button type="submit" value="ok">Create</button>' +
+        '</div>' +
+      '</form>';
+
+    document.body.appendChild(dlg);
+
+    /* Every way out lands here, and only the first one counts. Escape fires
+       cancel and close and a keydown, and a click on Cancel fires its own; a
+       promise that resolves twice is a promise that resolved once and then lied
+       about it, so the flag decides and the rest are ignored. */
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      if (dlg.open) dlg.close('');
+      dlg.remove();
+      resolve(value);
+    };
+
+    /* The submit is stopped rather than allowed to close the dialog itself.
+       method="dialog" would close it and report the answer through the close
+       event, and that is one more thing that has to fire correctly in every
+       browser before a person's typing turns into a category. Taking the answer
+       straight off the form removes the question. Validation still runs first,
+       so an empty name never reaches this. */
+    dlg.querySelector('form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const label = dlg.querySelector('#ask-label').value.trim();
+      if (!label) return;
+      finish({ label, parent: dlg.querySelector('#ask-parent').value });
+    });
+
+    dlg.querySelector('#ask-no').addEventListener('click', () => finish(null));
+    dlg.addEventListener('cancel', () => finish(null));   // Escape, where it fires
+    dlg.addEventListener('keydown', (e) => { if (e.key === 'Escape') finish(null); });
+    dlg.addEventListener('close', () => finish(null));    // closed some other way
+
+    dlg.showModal();
+    dlg.querySelector('#ask-label').focus();
+  });
 }
 
 /* The filters live in the column headings.
@@ -1812,14 +1930,23 @@ $('tx-list').addEventListener('change', async (e) => {
   const previous = categoryList.filter(c => c.id === sel.value)[0];
 
   try {
-    if (sel.value === NEW_CATEGORY) {
-      const name = window.prompt('Name the new category');
-      if (!name) { await renderTransactions(); return; }
+    if (sel.value === NEW_CATEGORY || sel.value === NEW_SUBCATEGORY) {
+      const asked = sel.value === NEW_SUBCATEGORY
+        ? await askSubcategory(sel.dataset.side)
+        : (() => { const n = window.prompt('Name the new category'); return n ? { label: n } : null; })();
+      // Dismissed. The menu is left showing a choice nobody made, so the table
+      // is redrawn to put each row's own category back into it.
+      if (!asked) { await renderTransactions(); return; }
+
       const made = await authed('/api/categories', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: name })
+        body: JSON.stringify({ label: asked.label, parent: asked.parent })
       });
       categoryList = (await authed('/api/categories')).categories;
+      // The option markup is memoised per side, so a new category stays
+      // invisible in every other row's menu until this is thrown away.
+      catOptCache = {};
+      rememberColours(categoryList);
       await refile(txId, made.category.id, merchant);
       await renderTransactions();
       return;
@@ -2170,7 +2297,9 @@ function drawTrend() {
     const stackSum = shownTotal(m.byParent, trendOff);
     Object.keys(m.byParent).forEach(id => {
       const v = m.byParent[id];
-      if (!v || trendOff.has(id)) return;
+      // A category that took back more than it spent this month has nothing to
+      // stack. The total above the bar still counts it.
+      if (!(v > 0) || trendOff.has(id)) return;
       /* Rounded here rather than on the way out, so a segment's top is the
          same number as the one below it and the two meet exactly. Rounding
          y and height separately left a tenth of a unit between them — nothing
@@ -3240,11 +3369,11 @@ function pieWindow() {
   const perMonth = scoped.map(m => {
     const row = {};
     if (kids) {
-      for (const slug of kids) { const v = (m.byCategory || {})[slug] || 0; if (v) row[slug] = v; }
+      for (const slug of kids) { const v = (m.byCategory || {})[slug] || 0; if (v > 0) row[slug] = v; }
       const direct = (m.byCategory || {})[cat] || 0;
-      if (direct) row[cat] = direct;
+      if (direct > 0) row[cat] = direct;
     } else {
-      for (const [slug, v] of Object.entries(m.byParent || {})) if (v) row[slug] = v;
+      for (const [slug, v] of Object.entries(m.byParent || {})) if (v > 0) row[slug] = v;
     }
     const pr = priorOf(m.month);
     return { month: m.month, row, prior: pr ? pr.amount : null,
@@ -3320,7 +3449,7 @@ function pieBarsSvg(entries, w) {
     let acc = 0;
     for (const slug of order) {
       const v = m.row[slug] || 0;
-      if (!v) continue;
+      if (!(v > 0)) continue;
       /* Rounded here rather than on the way out, so a segment's top is the
          same number as the one below it and the two meet exactly. Rounding
          y and height separately left a tenth of a unit between them — nothing
@@ -4103,7 +4232,7 @@ function bv2Chart(parent, kids, focus) {
     let acc = 0;
     for (const k of stack) {
       const v = k.series[m] || 0;
-      if (!v) continue;
+      if (!(v > 0)) continue;
       /* Rounded here rather than on the way out, so a segment's top is the
          same number as the one below it and the two meet exactly. Rounding
          y and height separately left a tenth of a unit between them — nothing
