@@ -328,7 +328,10 @@
      shorter one is short because less went out — not because it was drawn
      against a different maximum. */
   .bars{ display:flex; flex-direction:column; gap:10px; margin:4px 0 12px; }
-  .brow{ display:grid; grid-template-columns:34px minmax(0,1fr) 96px; gap:12px; align-items:center; }
+  /* The label column held "In" and "Out" and was sized for them. "Expenses"
+     is four times the width, so the column grew to fit it; the track gives up
+     the difference, which it can afford — it is a proportion, not a scale. */
+  .brow{ display:grid; grid-template-columns:74px minmax(0,1fr) 96px; gap:12px; align-items:center; }
   .blabel{ font-family:var(--font-num); font-size:11px; letter-spacing:.08em;
            text-transform:uppercase; color:var(--muted); }
   .btrack{ position:relative; height:10px; border-radius:2px; background:var(--grid); }
@@ -369,6 +372,17 @@
         background:none; border:1px solid transparent; border-radius:4px;
         padding:2px 4px; margin:0 0 8px -4px; max-width:100%; cursor:pointer; }
   .thf:hover{ color:var(--ink); border-color:var(--hair); }
+
+  /* The same heading, typed into rather than opened. It carries the column name
+     as its placeholder so the row still reads as headings while it is empty,
+     and drops the heading's uppercase the moment there is a value — otherwise
+     what you typed comes back at you in capitals you did not type. */
+  input.thi{ width:100%; min-width:0; cursor:text;
+             text-transform:none; letter-spacing:0; font-size:12px; }
+  input.thi:placeholder-shown{ font-size:11px; letter-spacing:.08em; }
+  input.thi::placeholder{ text-transform:uppercase; color:var(--muted); opacity:1; }
+  input.thi:not(:placeholder-shown){ color:var(--mint); border-color:var(--mint-dim); }
+  input.thi:focus{ outline:none; border-color:var(--mint-dim); color:var(--ink); }
   .thf.on{ color:var(--mint); border-color:var(--mint-dim); text-transform:none;
            letter-spacing:0; font-size:12px; }
   table.data th{ padding-bottom:0; }
@@ -768,6 +782,20 @@
   /* The date was carrying its colour inline, which put it out of reach of the
      theme. It is a class now so it can say something different in each. */
   table.data td.date{ color:var(--muted); }
+
+  /* The date column is a number column and took the right-alignment that comes
+     with that, which put every date hard against the descriptions — ten pixels
+     from them, and a hundred from the "Date" heading it belongs under. A date
+     is not a quantity, and nothing lines up underneath it that wants its units
+     stacked, so the alignment was buying nothing and costing the one gap on the
+     row that has to be legible.
+
+     Shrunk to its contents at the same time. Left-aligned in a column the table
+     had made 188px wide, it would have traded a cramped gap for a canyon; the
+     width goes to the descriptions instead, which are what actually run out of
+     room. Scoped to this table so the Tracker's own drill-down is untouched. */
+  #tx-list table.data th:first-child,
+  #tx-list table.data td.date{ text-align:left; width:1%; white-space:nowrap; }
   table.data td{ padding:9px 10px 9px 0; border-top:1px solid var(--hair); vertical-align:top; }
   table.data td.num{ text-align:right; font-family:var(--font-num);
                      font-variant-numeric:tabular-nums; white-space:nowrap; }
@@ -1001,7 +1029,7 @@
 
     <section class="panel" id="v-overview" aria-current="true">
       <h2 class="view">What's actually left</h2>
-      <p class="lede">Safe-to-spend, then money in, money out, kept and your savings rate — each against the comparable period before, and each against what the same period was expected to cost. Once spending passes the budget, a mark on the lower bar shows where that happened.</p>
+      <p class="lede">Safe-to-spend, then income, expenses, net balance and your net balance rate — each against the comparable period before, and each against what the same period was expected to cost. Once spending passes the budget, a mark on the lower bar shows where that happened.</p>
       <div class="card" id="ov-safe"></div>
       <div class="tiles" id="ov-tiles"></div>
       <p class="fc-method" id="budget-note" style="margin:14px 0 0"></p>
@@ -1403,7 +1431,7 @@ function tile(label, value, now, before, betterWhen, spark, opts) {
 /* Green where the number is money arriving or money kept, red where it is
    money leaving or money lost.
  *
- * Kept and Savings rate follow their own sign, so a month that spent more than
+ * Net Balance and its rate follow their own sign, so a month that spent more than
  * it earned says so in the colour before anyone reads the figure. A tile with
  * nothing to show takes no tone at all — a dash tinted green would be claiming
  * something. */
@@ -1431,13 +1459,13 @@ function budgetTiles(t, b) {
                            tone: toneFor(kind, budgeted, show) });
 
   return [
-    plan('Money in · budget',  money(b.income),  b.income,  t.income,  'down',
+    plan('Income · budget',   money(b.income),  b.income,  t.income,  'down',
          haveIn, haveIn ? null : 'no income linked', 'in'),
-    plan('Money out · budget', money(b.expense), b.expense, t.expense, 'up',
+    plan('Expenses · budget', money(b.expense), b.expense, t.expense, 'up',
          haveOut, null, 'out'),
-    plan('Kept · budget',      money(b.net),     b.net,     t.net,     'down',
+    plan('Net Balance · budget', money(b.net),   b.net,     t.net,     'down',
          haveIn, haveIn ? null : 'needs income', 'signed'),
-    plan('Savings rate · budget',
+    plan('Net Balance Rate · budget',
          b.savingsRate === null ? '—' : b.savingsRate.toFixed(1) + '%',
          b.savingsRate || 0, rate, 'down',
          haveIn && b.savingsRate !== null, haveIn ? null : 'needs income', 'signed')
@@ -1467,7 +1495,7 @@ function budgetNote(b) {
 /* Said plainly rather than left as three dashes to puzzle over. */
 function incomeNote(b) {
   return b.available && !b.income
-    ? ' No account that receives income is linked yet, so money in, kept and savings rate have nothing to plan against — connect a current account and they fill in.'
+    ? ' No account that receives income is linked yet, so income, net balance and net balance rate have nothing to plan against — connect a current account and they fill in.'
     : '';
 }
 
@@ -1495,8 +1523,20 @@ async function renderOverview() {
   const overBudget = plan > 0 && t.expense > plan;
   const budgetPct = overBudget && scale ? Math.min(100, (plan / scale) * 100) : null;
 
+  /* The card was named after the figure at the top of it, but it has long
+     since grown two bars, a budget mark and a verdict — the safe-to-spend
+     number is one thing it reports, not what it is. Named for the period it
+     covers instead.
+
+     Written out in full for the month, because that is what it is called; any
+     other range keeps its own name rather than being called the current month
+     when it is a year. */
+  const perfLabel = s.range.label === 'This month'
+    ? 'Current month performance'
+    : s.range.label + ' performance';
+
   $('ov-safe').innerHTML =
-    '<p class="eyebrow">Safe to spend · ' + s.range.label.toLowerCase() + '</p>' +
+    '<p class="eyebrow">' + escapeHtml(perfLabel) + '</p>' +
     '<p class="fig">' + money(safe.remaining) + '</p>' +
     '<p class="fig-sub">' + (safe.daysLeft > 0
       ? 'That is about <b>' + money(safe.perDay) + ' a day</b> for the ' + safe.daysLeft + ' days left.'
@@ -1506,12 +1546,12 @@ async function renderOverview() {
     // a single number.
     '<div class="bars">' +
       '<div class="brow">' +
-        '<span class="blabel">In</span>' +
+        '<span class="blabel">Income</span>' +
         '<div class="btrack"><div class="bfill in" style="width:100%"></div></div>' +
         '<span class="bamt">' + money(t.income) + '</span>' +
       '</div>' +
       '<div class="brow">' +
-        '<span class="blabel">Out</span>' +
+        '<span class="blabel">Expenses</span>' +
         '<div class="btrack">' +
           '<div class="bfill out" style="width:' + spentPct.toFixed(1) + '%"></div>' +
           (budgetPct !== null
@@ -1549,14 +1589,14 @@ async function renderOverview() {
   const line = (arr, colour) => (arr && arr.some(v => v) ? sparkline(arr, colour) : '');
 
   $('ov-tiles').innerHTML = [
-    tile('Money in',  money(t.income),  t.income,  p.income,  'up',
+    tile('Income',    money(t.income),  t.income,  p.income,  'up',
          line(sp && sp.income,  'var(--mint)'), { tone: toneFor('in') }),
-    tile('Money out', money(t.expense), t.expense, p.expense, 'down',
+    tile('Expenses',  money(t.expense), t.expense, p.expense, 'down',
          line(sp && sp.expense, 'var(--coral)'), { tone: toneFor('out') }),
-    tile('Kept',      money(t.net),     t.net,     p.net,     'up',
+    tile('Net Balance', money(t.net),   t.net,     p.net,     'up',
          line(sp && sp.net, t.net < 0 ? 'var(--coral)' : 'var(--mint)'),
          { tone: toneFor('signed', t.net) }),
-    tile('Savings rate',
+    tile('Net Balance Rate',
          t.income ? ((t.net / t.income) * 100).toFixed(1) + '%' : '—',
          t.income ? (t.net / t.income) * 100 : 0,
          p.income ? (p.net / p.income) * 100 : 0, 'up',
@@ -1722,6 +1762,32 @@ function askSubcategory(side) {
    behave like every other menu on the platform — keyboard, touch, and all. */
 const txFilters = { period: '', merchant: '', category: '', amount: '' };
 
+/* The description column is filtered by typing, not by scrolling.
+ *
+ * It is the one heading whose menu is as long as the ledger — four hundred
+ * names in bank spelling, most of them near-identical — and picking
+ * WHOLEFDS MKT 10241 out of that by eye is not finding anything, it is
+ * hunting. This is a native combobox: the full list still drops down, typing
+ * narrows it, and typing something that is in no entry exactly still works,
+ * because the server matches any part of a description rather than the whole
+ * of one. So "venmo" finds every Venmo row without anybody knowing how the
+ * bank spells them.
+ */
+function txHeaderInput(id, label, value, names) {
+  const listId = id + '-list';
+  return '<span class="thwrap">' +
+    '<input class="thf thi' + (value ? ' on' : '') + '" id="' + id + '"' +
+      ' list="' + listId + '" value="' + escapeHtml(value) + '"' +
+      ' placeholder="' + escapeHtml(label) + '" autocomplete="off" spellcheck="false"' +
+      ' aria-label="Filter by ' + escapeHtml(label) + ' — type to search">' +
+    '<datalist id="' + listId + '">' +
+      (names || []).map(n => '<option value="' + escapeHtml(n) + '"></option>').join('') +
+    '</datalist>' +
+    (value ? '<button class="thx" type="button" data-clear="' + id + '" ' +
+      'title="Clear" aria-label="Clear the ' + escapeHtml(label) + ' filter">×</button>' : '') +
+    '</span>';
+}
+
 function txHeaderSelect(id, label, value, options) {
   // The clear sits at the right edge of the cell and only exists while the
   // column is doing something. Re-opening the menu to find a blank first
@@ -1763,13 +1829,22 @@ function txCategoryOptions(selected) {
   return html;
 }
 
-function txMerchantOptions(list, selected) {
-  return (list || []).map(n =>
-    '<option value="' + escapeHtml(n) + '"' + (n === selected ? ' selected' : '') + '>' +
-    escapeHtml(n) + '</option>').join('');
-}
-
 async function renderTransactions() {
+  /* The description heading is a text box now, and every filter change rebuilds
+     the table underneath it — which throws that box away mid-word and takes the
+     caret with it. Where it was is noted here and put back at the end, so
+     refining a search is typing, not typing and then finding the box again. */
+  const had = document.activeElement;
+  const caret = had && had.id === 'f-desc'
+    ? { start: had.selectionStart, end: had.selectionEnd } : null;
+  const restoreCaret = () => {
+    if (!caret) return;
+    const el = $('f-desc');
+    if (!el) return;
+    el.focus();
+    try { el.setSelectionRange(caret.start, caret.end); } catch (err) { /* not selectable */ }
+  };
+
   const r = await authed('/api/transactions' +
     '?range=' + encodeURIComponent(txFilters.period || 'all') +
     (txFilters.merchant ? '&merchant=' + encodeURIComponent(txFilters.merchant) : '') +
@@ -1782,7 +1857,7 @@ async function renderTransactions() {
 
   const head = '<thead><tr>' +
     '<th>' + txHeaderSelect('f-date', 'Date', txFilters.period, txMonthOptions(txFilters.period)) + '</th>' +
-    '<th>' + txHeaderSelect('f-desc', 'Description', txFilters.merchant, txMerchantOptions(r.merchants, txFilters.merchant)) + '</th>' +
+    '<th>' + txHeaderInput('f-desc', 'Description', txFilters.merchant, r.merchants) + '</th>' +
     '<th>' + txHeaderSelect('f-cat', 'Category', txFilters.category, txCategoryOptions(txFilters.category)) + '</th>' +
     '<th style="text-align:right">' +
       txHeaderSelect('f-amt', 'Amount', txFilters.amount,
@@ -1798,6 +1873,7 @@ async function renderTransactions() {
     host.innerHTML = '<table class="data">' + head + '</table>' +
       '<p class="empty">' + (filtering ? 'Nothing matches these filters.' : 'No transactions yet.') + '</p>' +
       (filtering ? '<p class="msg"><a href="#" id="tx-clear" style="color:var(--mint-dim)">Clear filters</a></p>' : '');
+    restoreCaret();
     return;
   }
 
@@ -1837,6 +1913,7 @@ async function renderTransactions() {
   host.innerHTML = '<table class="data">' + head + '<tbody>' + rows + '</tbody>' + foot + '</table>' +
     '<p class="msg" id="tx-msg">' + r.transactions.length + ' of ' + r.total + ' shown' +
     (filtering ? ' · <a href="#" id="tx-clear" style="color:var(--mint-dim)">clear filters</a>' : '') + '.</p>';
+  restoreCaret();
 }
 
 /* Delegated: the headings are rebuilt on every render, so binding to them

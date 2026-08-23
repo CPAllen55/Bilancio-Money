@@ -14,7 +14,7 @@
  */
 
 import { Hono } from "hono";
-import { and, asc, desc, eq, gte, isNull, lte, or, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, isNull, lte, or, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
 import {
   accounts, categories, items, merchantRules, transactionOverrides, transactions,
@@ -654,7 +654,19 @@ summary.get("/transactions", async (c) => {
           lte(transactions.date, ymd(current.end)),
         );
 
-    const where = merchant ? and(inPeriod, eq(displayName, merchant)) : inPeriod;
+    /* Any part of a description, not the whole of it.
+     *
+     * This matched exactly, which was honest while the only way to set it was
+     * to pick a whole name out of a menu. The heading can be typed into now,
+     * and somebody typing "venmo" means every Venmo row — not the one whose
+     * bank spelling happens to be exactly that, which is a string nobody knows
+     * without looking it up first.
+     *
+     * The wildcards are escaped, so a description containing % or _ still finds
+     * itself rather than matching half the ledger. */
+    const where = merchant
+      ? and(inPeriod, ilike(displayName, "%" + merchant.replace(/[\\%_]/g, (ch) => "\\" + ch) + "%"))
+      : inPeriod;
 
     const page = db
       .select({
@@ -741,8 +753,9 @@ summary.get("/transactions", async (c) => {
       moneyOut = Number(totals[0].moneyOut);
     }
 
-    // Every description in the period, for the menu on that column. Capped:
-    // past a few hundred a dropdown is not how anybody finds a merchant.
+    // Every description in the period, for the list on that column. Still
+    // capped, but the cap stopped being the limit of what is reachable when the
+    // heading became typeable — anything past it is found by typing part of it.
     const merchantRows = await db
       .selectDistinct({ name: displayName })
       .from(transactions)
