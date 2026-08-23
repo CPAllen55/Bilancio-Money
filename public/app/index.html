@@ -411,6 +411,42 @@
   .trend-wrap{ display:flex; gap:20px; align-items:flex-start; }
   .trend-plot{ flex:1 1 auto; min-width:0; }
   .trend-key{ flex:0 0 176px; display:flex; flex-direction:column; gap:1px; padding-top:8px; }
+  /* The total, above the list it adds up to. */
+  .ktotal{ display:flex; align-items:center; gap:8px; width:100%;
+           padding:3px 6px 7px; margin-bottom:3px;
+           border-bottom:1px solid var(--hair-strong); }
+  .ktotal .klabel{ font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+                   color:var(--muted); }
+  .kamt.total{ color:var(--ink); font-size:12.5px; }
+
+  /* A row is a picker and a box side by side, not one control doing both —
+     nesting a button in a button is invalid and the two mean different
+     things. */
+  .kpick{ display:flex; align-items:center; gap:8px; flex:1 1 auto; min-width:0;
+          text-align:left; border:1px solid transparent; border-radius:5px;
+          background:none; padding:3px 5px; color:inherit; cursor:pointer;
+          font-family:inherit; font-size:inherit; }
+  .kpick.static{ cursor:default; }
+  .kitem:hover .kpick:not(.static){ background:var(--bg-panel); color:var(--ink);
+                                    border-color:var(--hair); }
+  .kitem.sel .kpick{ background:var(--bg-panel); color:var(--ink);
+                     border-color:var(--mint-dim); }
+
+  /* Switched off: still listed, because knowing what you have hidden matters
+     as much as seeing what is left. */
+  .kitem.off{ opacity:.42; }
+  .kitem.off .kswatch{ filter:grayscale(1); }
+  .kitem.off .klabel{ text-decoration:line-through; }
+
+  .kbox{ flex:none; width:14px; height:14px; padding:0; border-radius:3px;
+         border:1px solid var(--hair-strong); background:none; cursor:pointer;
+         position:relative; }
+  .kbox.on{ background:var(--mint); border-color:var(--mint); }
+  .kbox.on::after{ content:''; position:absolute; left:4px; top:1px;
+                   width:4px; height:8px; border:solid var(--on-mint);
+                   border-width:0 2px 2px 0; transform:rotate(42deg); }
+  .kbox:hover{ border-color:var(--mint); }
+
   .kitem{ display:flex; align-items:center; gap:8px; width:100%; text-align:left;
           font-family:'IBM Plex Sans', sans-serif; font-size:12.5px; color:var(--ink-soft);
           background:none; border:1px solid transparent; border-radius:5px; padding:5px 7px;
@@ -1790,6 +1826,63 @@ $('tx-list').addEventListener('change', async (e) => {
    arithmetic the browser has already done. */
 let trendData = null;      // { all, prior }
 let trendVisible = 0;      // months in view
+
+/* Categories switched off in each key. Kept per chart rather than shared: the
+   upper one lists parents and the lower one lists children, and turning off
+   "Food and Dining" upstairs should not empty the chart downstairs. */
+const trendOff = new Set();
+const pieOff = new Set();
+
+/** What a month comes to once the switched-off categories are taken out. */
+function shownTotal(byWhat, off) {
+  let sum = 0;
+  for (const [slug, v] of Object.entries(byWhat || {})) if (v && !off.has(slug)) sum += v;
+  return sum;
+}
+
+/**
+ * A key, with its total above it.
+ *
+ * The total sits at the top because it is the answer the list adds up to, and
+ * an answer belongs before its working. Each row carries a box that drops it
+ * out of that total and out of the chart, so a single dominant category can be
+ * set aside to see what the rest are doing. The box beside the total puts
+ * everything back — quicker than hunting for the two things you switched off.
+ */
+function keyList(rows, off, scope, totalLabel) {
+  const total = rows.reduce((s, r) => off.has(r.slug) ? s : s + r.amount, 0);
+  const anyOff = rows.some(r => off.has(r.slug));
+
+  const head =
+    '<div class="ktotal">' +
+      '<button type="button" class="kbox' + (anyOff ? '' : ' on') + '" data-key-all="' +
+        escapeHtml(scope) + '" aria-pressed="' + (!anyOff) + '" aria-label="' +
+        (anyOff ? 'Put every category back' : 'Everything is showing') + '"></button>' +
+      '<span class="klabel">' + escapeHtml(totalLabel || 'Total') + '</span>' +
+      '<span class="kamt total">' + money0(total) + '</span>' +
+    '</div>';
+
+  const items = rows.map(r => {
+    const isOff = off.has(r.slug);
+    const inner =
+      '<span class="kswatch" style="background:' + r.colour + '"></span>' +
+      '<span class="klabel">' + escapeHtml(r.label) + '</span>' +
+      '<span class="kamt">' + r.amount_text + '</span>';
+    const body = r.pick
+      ? '<button type="button" class="kpick" ' + r.pick +
+        ' aria-pressed="' + (r.selected ? 'true' : 'false') + '">' + inner + '</button>'
+      : '<span class="kpick static">' + inner + '</span>';
+    return '<div class="kitem' + (isOff ? ' off' : '') + (r.selected ? ' sel' : '') + '">' +
+      body +
+      '<button type="button" class="kbox' + (isOff ? '' : ' on') + '" data-key-off="' +
+        escapeHtml(r.slug) + '" data-key-scope="' + escapeHtml(scope) + '"' +
+        ' aria-pressed="' + (!isOff) + '" aria-label="' + (isOff ? 'Show ' : 'Hide ') +
+        escapeHtml(r.label) + '"></button>' +
+    '</div>';
+  }).join('');
+
+  return head + items;
+}
 let trendOffset = 0;       // index of the leftmost visible month
 let trendSel = null;       // { cat, month } | { cat } | null
 
@@ -1960,7 +2053,7 @@ function drawTrend() {
   // states its own scale instead of implying a fixed one.
   const highest = rows => Math.max.apply(null, rows.concat([0]));
   const windowPeak = Math.max(
-    highest(all.map(m => m.expense)),
+    highest(all.map(m => shownTotal(m.byParent, trendOff))),
     highest(all.map(m => m.income)),
     highest(prior.map(m => m.expense))
   );
@@ -2061,9 +2154,10 @@ function drawTrend() {
     let acc = 0;
     // Stacked by parent, not leaf: nine segments read as a shape, twenty-two
     // read as noise.
+    const stackSum = shownTotal(m.byParent, trendOff);
     Object.keys(m.byParent).forEach(id => {
       const v = m.byParent[id];
-      if (!v) return;
+      if (!v || trendOff.has(id)) return;
       /* Rounded here rather than on the way out, so a segment's top is the
          same number as the one below it and the two meet exactly. Rounding
          y and height separately left a tenth of a unit between them — nothing
@@ -2074,7 +2168,7 @@ function drawTrend() {
       const colour = colourOf(id);
       svg += '<rect class="seg' + (on ? ' sel' : '') + (off ? ' dim' : '') + '"' +
              ' data-cat="' + escapeHtml(id) + '" data-month="' + escapeHtml(m.month) + '"' +
-             ' ' + tipAttrs(labelOfSlug(id), m.month, v, m.expense) +
+             ' ' + tipAttrs(labelOfSlug(id), m.month, v, stackSum) +
              ' tabindex="0" role="button"' +
              ' x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
              '" width="' + barW.toFixed(1) + '" height="' + Math.max(0.5, bot - top).toFixed(1) +
@@ -2089,8 +2183,8 @@ function drawTrend() {
       acc += v;
     });
 
-    if (m.expense > 0) {
-      svg += stackTotal(cx, y(m.expense), m.expense, band, m.month, 'Everything',
+    if (stackSum > 0) {
+      svg += stackTotal(cx, y(stackSum), stackSum, band, m.month, 'Everything',
         !!(trendSel && trendSel.month === m.month));
     }
 
@@ -2129,13 +2223,12 @@ function drawTrend() {
   }));
   const present = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
 
-  const key = present.map(id =>
-    '<button type="button" class="kitem" data-cat="' + escapeHtml(id) + '"' +
-    ' aria-pressed="' + (trendSel && trendSel.cat === id ? 'true' : 'false') + '">' +
-    '<span class="kswatch" style="background:' + colourOf(id) + '"></span>' +
-    '<span class="klabel">' + escapeHtml(labelOfSlug(id)) + '</span>' +
-    '<span class="kamt">' + money0(totals[id]) + '</span></button>'
-  ).join('');
+  const key = keyList(present.map(id => ({
+    slug: id, label: labelOfSlug(id), colour: colourOf(id),
+    amount: totals[id], amount_text: money0(totals[id]),
+    pick: 'data-cat="' + escapeHtml(id) + '"',
+    selected: !!(trendSel && trendSel.cat === id),
+  })), trendOff, 'trend');
 
   const hasIncome = all.some(m => m.income > 0);
   const extras =
@@ -2275,14 +2368,37 @@ function setTrendSel(next) {
   window.addEventListener('scroll', () => { tip.hidden = true; }, true);
 })();
 
+/* A box in a key, in either chart. Switching one off takes it out of its
+   chart and out of the total above it; the box by the total puts them all
+   back. Handled before anything else, so a box never reads as a selection. */
+function keyBoxClick(e) {
+  const all = e.target.closest('[data-key-all]');
+  if (all) {
+    (all.dataset.keyAll === 'trend' ? trendOff : pieOff).clear();
+    if (all.dataset.keyAll === 'trend') drawTrend(); else drawPie();
+    return true;
+  }
+  const one = e.target.closest('[data-key-off]');
+  if (one) {
+    const off = one.dataset.keyScope === 'trend' ? trendOff : pieOff;
+    const slug = one.dataset.keyOff;
+    if (off.has(slug)) off.delete(slug); else off.add(slug);
+    if (one.dataset.keyScope === 'trend') drawTrend(); else drawPie();
+    return true;
+  }
+  return false;
+}
+
 /* Delegated once, because the chart is rebuilt on every zoom, pan and click —
    binding per segment would leak a listener a frame. */
 $('trend-chart').addEventListener('click', (e) => {
+  if (keyBoxClick(e)) return;
+
   const seg = e.target.closest('.seg');
   if (seg) { setTrendSel({ cat: seg.dataset.cat, month: seg.dataset.month }); return; }
 
-  const item = e.target.closest('.kitem');
-  if (item && item.dataset.cat) { setTrendSel({ cat: item.dataset.cat, month: null }); return; }
+  const item = e.target.closest('[data-cat]');
+  if (item) { setTrendSel({ cat: item.dataset.cat, month: null }); return; }
 
   // A click on the background is how you put a selection down.
   if (!e.target.closest('.trend-detail') && !e.target.closest('.panner')) setTrendSel(null);
@@ -3033,6 +3149,26 @@ let pieTxCache = {};
 /* Only months that happened. A projection has no transactions behind it, and a
    pie of forecast figures next to a list of real ones would invite comparing
    them. */
+/**
+ * Which parent the lower chart is showing.
+ *
+ * It only ever shows subcategories, so it always needs a parent to be inside.
+ * With nothing selected above it takes the biggest one in view, which is where
+ * the reader was going to look first anyway. Selecting a bar above moves it.
+ */
+function pieParent() {
+  if (trendSel && trendSel.cat) return trendSel.cat;
+  if (!trendData) return null;
+  const totals = {};
+  for (const m of trendData.all.slice(trendOffset, trendOffset + trendVisible)) {
+    if (m.projected) continue;
+    for (const [slug, v] of Object.entries(m.byParent || {})) {
+      if (v > 0) totals[slug] = (totals[slug] || 0) + v;
+    }
+  }
+  return Object.keys(totals).sort((a, b) => totals[b] - totals[a])[0] || null;
+}
+
 function pieWindow() {
   if (!trendData) return { months: [], byCat: {}, title: '', level: 'parents' };
   const from = trendOffset, to = trendOffset + trendVisible;
@@ -3045,7 +3181,7 @@ function pieWindow() {
     ? months.filter(m => m.month === trendSel.month)
     : months;
 
-  const cat = trendSel && trendSel.cat;
+  const cat = pieParent();
   const kids = cat ? categoryList.filter(c => c.parentSlug === cat).map(c => c.slug) : null;
 
   const byCat = {};
@@ -3080,7 +3216,7 @@ function pieWindow() {
     const row = idx > -1 ? trendData.prior[idx] : null;
     if (!row) return null;
     const at = row.month;
-    const cat = trendSel && trendSel.cat;
+    const cat = pieParent();
     const kids = cat ? categoryList.filter(c => c.parentSlug === cat).map(c => c.slug) : null;
     if (!kids) return { month: at, amount: row.expense || 0 };
     let sum = (row.byCategory || {})[cat] || 0;
@@ -3134,7 +3270,11 @@ function pieBarsSvg(entries, w) {
   const PL = 66, PR = 14, PT = 20, PB = 38;
   const plotW = W - PL - PR, plotH = H - PT - PB;
 
-  const totals = months.map(m => Object.values(m.row).reduce((s, v) => s + v, 0));
+  /* Summed over the categories this chart was handed, not over everything in
+     the row — otherwise a switched-off category still sets the scale and still
+     shows in the figure above the bar. */
+  const order = entries.map(e => e[0]);
+  const totals = months.map(m => order.reduce((s, slug) => s + (m.row[slug] || 0), 0));
   const peak = Math.max.apply(null, totals.concat([0])) || 1;
   const mag = Math.pow(10, Math.floor(Math.log10(peak / 4)));
   const stepMul = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].filter(x => x * mag >= peak / 4)[0] || 10;
@@ -3161,7 +3301,6 @@ function pieBarsSvg(entries, w) {
 
   // Stacked in the legend's order, so the colour at the bottom of every bar is
   // the same category and the stack can be read across months.
-  const order = entries.map(e => e[0]);
   months.forEach((m, idx) => {
     const cx = PL + band * idx + band / 2;
     const monthTotal = totals[idx];
@@ -3216,18 +3355,26 @@ function drawPie() {
   const entries = Object.keys(w.byCat).map(s => [s, w.byCat[s]])
     .filter(e => e[1] > 0).sort((a, b) => b[1] - a[1]);
 
-  if (pieSel && !entries.some(e => e[0] === pieSel)) pieSel = null;
+  /* A selection has to be something on the chart. It is dropped when the
+     category leaves the window, and equally when it is switched off in the key
+     — otherwise the transactions below would go on describing a slice that is
+     no longer drawn. */
+  if (pieSel && (pieOff.has(pieSel) || !entries.some(e => e[0] === pieSel))) pieSel = null;
 
   if (!entries.length) {
     host.innerHTML = '<p class="empty">Nothing to break down in this window.</p>';
     return;
   }
 
-  const total = entries.reduce((s, e) => s + e[1], 0);
+  /* Two lists from here on. The key shows everything, so a reader can see what
+     they have put aside; the chart and the total show only what is switched on.
+     Keeping one list for both is what left a hidden category still drawn. */
+  const shown = entries.filter(([slug]) => !pieOff.has(slug));
+  const total = shown.reduce((s, e) => s + e[1], 0) || 1;
   const R = 132, CX = 150, CY = 150;
   let angle = -Math.PI / 2;
 
-  const slices = entries.map(([slug, v]) => {
+  const slices = shown.map(([slug, v]) => {
     const sweep = (v / total) * Math.PI * 2;
     const a0 = angle, a1 = angle + sweep;
     angle = a1;
@@ -3242,16 +3389,12 @@ function drawPie() {
 
   // In the bar view the key is a key and nothing more: there is no selection to
   // make when the chart cannot show one.
-  const legend = entries.map(([slug, v]) => pieView === 'bars'
-    ? '<div class="kitem static">' +
-      '<span class="kswatch" style="background:' + colourOf(slug) + '"></span>' +
-      '<span class="klabel">' + escapeHtml(labelOfSlug(slug)) + '</span>' +
-      '<span class="kamt">' + money0(v) + '</span></div>'
-    : '<button type="button" class="kitem" data-slice="' + escapeHtml(slug) + '" ' +
-      'aria-pressed="' + (pieSel === slug ? 'true' : 'false') + '">' +
-      '<span class="kswatch" style="background:' + colourOf(slug) + '"></span>' +
-      '<span class="klabel">' + escapeHtml(labelOfSlug(slug)) + '</span>' +
-      '<span class="kamt">' + ((v / total) * 100).toFixed(0) + '%</span></button>').join('');
+  const legend = keyList(entries.map(([slug, v]) => ({
+    slug, label: labelOfSlug(slug), colour: colourOf(slug), amount: v,
+    amount_text: pieView === 'bars' ? money0(v) : ((v / total) * 100).toFixed(0) + '%',
+    pick: pieView === 'bars' ? null : 'data-slice="' + escapeHtml(slug) + '"',
+    selected: pieSel === slug,
+  })), pieOff, 'pie');
 
   const donut =
     '<svg viewBox="0 0 300 300" width="300" height="300" role="img" ' +
@@ -3274,18 +3417,17 @@ function drawPie() {
     '<button type="button" class="pie-arrow" data-pie-step="1" aria-label="Next view">›</button>' +
     '</div>';
 
-  const note = w.level === 'children'
-    ? (pieView === 'bars'
-        ? 'What is inside it, month by month.'
-        : 'What is inside it, as a share. Pick a slice for the transactions behind it.')
-    : 'Every parent category in view. Select a bar above to open one up.';
+  /* Said where the reader is looking when they wonder how this thing changed,
+     which is at the name it is showing — not in a caption further down. */
+  const note = 'Click a category in the chart above to bring it down here.' +
+    (pieView === 'bars' ? '' : ' Pick a slice for the transactions behind it.');
 
   // Bars borrow the layout of the chart above as well as its shape: full width
   // with the key down the side. The share view keeps its own, because a donut
   // beside a list of transactions is the whole point of it.
   const body = pieView === 'bars'
     ? '<div class="trend-wrap">' +
-        '<div class="trend-plot">' + pieBarsSvg(entries, w) + '</div>' +
+        '<div class="trend-plot">' + pieBarsSvg(shown, w) + '</div>' +
         '<div class="trend-key">' + legend +
           // The dashed line is drawn here too, so it is named here too.
           (w.perMonth.some(m => m.prior !== null)
@@ -3373,6 +3515,7 @@ $('pie-switch').addEventListener('click', (e) => {
 });
 
 $('trend-pie').addEventListener('click', (e) => {
+  if (keyBoxClick(e)) return;
   const hit = e.target.closest('[data-slice]');
   if (!hit) return;
   pieSel = pieSel === hit.dataset.slice ? null : hit.dataset.slice;
