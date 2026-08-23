@@ -275,6 +275,15 @@
      reaches the charts as well as the tables. */
   :root[data-theme="light"]{ font-variant-numeric:tabular-nums; }
 
+  /* On the dark theme a grey date and a grey heading sit back and let the
+     description and the amount lead, which is the right order there. The same
+     grey on cream is just faint — 4.5:1 is a floor for text you have to be able
+     to read, not a target for text you read constantly. Both take full ink in
+     the light, which is 13.0:1 on a card. */
+  :root[data-theme="light"] table.data td.date,
+  :root[data-theme="light"] table.data th,
+  :root[data-theme="light"] .thf{ color:var(--ink); }
+
   .panel{ display:none; padding-bottom:64px; }
   .panel[aria-current="true"]{ display:block; }
 
@@ -665,6 +674,9 @@
   table.data th{ text-align:left; font-family:var(--font-num); font-size:11px;
                  letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
                  padding:0 10px 10px 0; font-weight:500; }
+  /* The date was carrying its colour inline, which put it out of reach of the
+     theme. It is a class now so it can say something different in each. */
+  table.data td.date{ color:var(--muted); }
   table.data td{ padding:9px 10px 9px 0; border-top:1px solid var(--hair); vertical-align:top; }
   table.data td.num{ text-align:right; font-family:var(--font-num);
                      font-variant-numeric:tabular-nums; white-space:nowrap; }
@@ -1579,7 +1591,7 @@ async function renderTransactions() {
     const source = t.categorySource === 'user' ? 'edited here'
                  : t.categorySource === 'rule' ? 'your rule' : '';
     return '<tr data-id="' + t.id + '" data-merchant="' + escapeHtml(t.name) + '">' +
-      '<td class="num" style="color:var(--muted)">' + t.date + '</td>' +
+      '<td class="num date">' + t.date + '</td>' +
       '<td>' + escapeHtml(t.name) + (t.pending ? ' <span class="pill">pending</span>' : '') +
         (source ? ' <span class="pill">' + source + '</span>' : '') + '</td>' +
       // Amount decides which side of the ledger this row is on. The menu holds
@@ -3165,7 +3177,7 @@ async function drawPieTx() {
         (r.total === 1 ? '' : 's') + '</p>' +
       '<table class="data pie-table"><tbody>' +
       r.transactions.map(t =>
-        '<tr><td class="num" style="color:var(--muted)">' + t.date + '</td>' +
+        '<tr><td class="num date">' + t.date + '</td>' +
         '<td>' + escapeHtml(t.name) + '</td>' +
         '<td class="num' + (t.amount > 0 ? ' in' : '') + '">' +
           (t.amount > 0 ? '+' : '') + money(t.amount) + '</td></tr>').join('') +
