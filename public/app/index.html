@@ -31,6 +31,10 @@
     --on-mint:#04120C;                    /* text on a mint button */
     --tab-line:var(--mint);               /* under the tab you are on */
     --tick:#FFFFFF;                       /* where a budget ran out */
+    --field:var(--bg-panel);              /* a menu you can press */
+    /* The face every figure and label is set in. Monospace is what gives the
+       dark theme its terminal look, and that look is the point there. */
+    --font-num:'IBM Plex Mono', monospace;
     --mint-hot:#2BFFC0;                   /* that button, hovered */
     --bg-veil:rgba(5,8,11,.9);            /* behind the sticky header */
     --shadow:rgba(0,0,0,.55);
@@ -85,6 +89,15 @@
        instead of a line cutting through it. Near-black clears both bars at
        3.5:1 and the card at 15.9:1. */
     --tick:#111111;
+    /* A step below the card, so a menu reads as something you can press rather
+       than as part of the surface. Ink on it is 12.0:1; its option list stays
+       on the card colour, where the muted optgroup labels still clear 4.5. */
+    --field:#F2E2B4;
+    /* And is exactly what the light theme should not have. A cream page with
+       monospace figures reads as a terminal someone painted; the same numbers
+       in the text face read as a document. Tabular figures below keep the
+       columns lining up without the typewriter. */
+    --font-num:'IBM Plex Sans', sans-serif;
     --bg-veil:rgba(249,244,228,.90);
     --shadow:rgba(74,59,20,0.14);
 
@@ -112,7 +125,7 @@
   .wordmark{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:20px;
              letter-spacing:-.01em; text-decoration:none; color:var(--ink); }
   .wordmark span{ color:var(--mint); }
-  .who{ display:flex; align-items:center; gap:14px; font-family:'IBM Plex Mono', monospace;
+  .who{ display:flex; align-items:center; gap:14px; font-family:var(--font-num);
         font-size:12px; color:var(--ink-soft); }
 
   /* The account menu. The address was already sitting here doing nothing, so it
@@ -133,7 +146,7 @@
   .acct-h{ margin:6px 0 2px; padding:0 10px; font-size:10.5px; letter-spacing:.08em;
            text-transform:uppercase; color:var(--muted); }
 
-  button{ font-family:'IBM Plex Mono', monospace; font-size:12px; background:none;
+  button{ font-family:var(--font-num); font-size:12px; background:none;
           border:1px solid var(--hair); color:var(--ink-soft); padding:7px 13px;
           border-radius:6px; cursor:pointer; }
   button:hover{ color:var(--ink); border-color:var(--mint-dim); }
@@ -185,7 +198,7 @@
     .mark{ display:none; }
     .tabs{ padding-right:0; }
   }
-  .tab{ font-family:'IBM Plex Mono', monospace; font-size:13px; padding:9px 15px;
+  .tab{ font-family:var(--font-num); font-size:13px; padding:9px 15px;
         border:1px solid var(--hair); border-radius:6px; background:none;
         color:var(--ink-soft); cursor:pointer; }
   .tab[aria-current="true"]{ color:var(--mint); border-color:var(--mint-dim); background:var(--mint-bg); }
@@ -225,14 +238,11 @@
   :root[data-theme="light"] select.ctl{ color-scheme:light; }
   :root[data-theme="light"] select.ctl,
   :root[data-theme="light"] select.catsel{
-    background:var(--surface);
+    background:var(--field);
     /* The same face the tabs use, so the row of controls under them reads as
        the same family rather than as a monospace afterthought. */
     font-family:'IBM Plex Sans', sans-serif; font-size:13.5px; font-weight:500; }
 
-  /* The column headings in Transactions are menus too, but they are dressed as
-     table headings and belong with the table rather than with the controls, so
-     they keep their own face. Their option lists are already Plex Sans. */
   :root[data-theme="light"] .thf option,
   :root[data-theme="light"] .thf optgroup,
   :root[data-theme="light"] select.catsel option,
@@ -253,8 +263,17 @@
 
   .bar{ display:flex; align-items:center; justify-content:space-between; gap:16px;
         flex-wrap:wrap; padding:16px 0 22px; }
-  select.ctl{ font-family:'IBM Plex Mono', monospace; font-size:12px; background:var(--bg-panel);
+  select.ctl{ font-family:var(--font-num); font-size:12px; background:var(--bg-panel);
               color:var(--ink); border:1px solid var(--hair-strong); border-radius:6px; padding:8px 11px; }
+
+  /* Chart labels used to name the face on every <text> they drew. One rule
+     instead, so the charts follow the theme like everything else. */
+  svg text{ font-family:var(--font-num); }
+
+  /* Columns of money have to line up. Monospace did that for free; the text
+     face needs asking, and tabular figures are the ask. Set on the root so it
+     reaches the charts as well as the tables. */
+  :root[data-theme="light"]{ font-variant-numeric:tabular-nums; }
 
   .panel{ display:none; padding-bottom:64px; }
   .panel[aria-current="true"]{ display:block; }
@@ -263,7 +282,7 @@
   p.lede{ color:var(--ink-soft); font-size:14px; margin:0 0 20px; max-width:62ch; }
 
   .card{ background:var(--surface); border:1px solid var(--hair); border-radius:6px; padding:20px 22px; }
-  .eyebrow{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.12em;
+  .eyebrow{ font-family:var(--font-num); font-size:11px; letter-spacing:.12em;
             text-transform:uppercase; color:var(--ink-soft); margin:0; }
 
   /* ---------- overview ---------- */
@@ -279,17 +298,17 @@
      against a different maximum. */
   .bars{ display:flex; flex-direction:column; gap:10px; margin:4px 0 12px; }
   .brow{ display:grid; grid-template-columns:34px minmax(0,1fr) 96px; gap:12px; align-items:center; }
-  .blabel{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.08em;
+  .blabel{ font-family:var(--font-num); font-size:11px; letter-spacing:.08em;
            text-transform:uppercase; color:var(--muted); }
   .btrack{ position:relative; height:10px; border-radius:2px; background:var(--grid); }
   .bfill{ position:absolute; inset:0 auto 0 0; border-radius:2px 4px 4px 2px; }
   .bfill.in{ background:var(--mint); opacity:.85; }
   .bfill.out{ background:var(--coral); }
-  .bamt{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; text-align:right; color:var(--ink); }
+  .bamt{ font-family:var(--font-num); font-size:12.5px; text-align:right; color:var(--ink); }
   .bamt.out{ color:var(--coral); }
   .meter-legend{ display:flex; justify-content:space-between; gap:12px; margin-top:9px;
                  font-size:12px; color:var(--muted); }
-  .meter-legend .mono{ font-family:'IBM Plex Mono', monospace; color:var(--ink-soft); }
+  .meter-legend .mono{ font-family:var(--font-num); color:var(--ink-soft); }
   .status{ display:inline-flex; align-items:center; gap:7px; font-size:13px; font-weight:600; }
   .status.good{ color:var(--mint); } .status.warn{ color:var(--warning); }
 
@@ -314,7 +333,7 @@
      replaces — same size, letter-spacing and colour — so the row still reads
      as headings rather than as a form, and only turns mint once it is doing
      something. The caret is the only hint that it opens, which is enough. */
-  .thf{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.08em;
+  .thf{ font-family:var(--font-num); font-size:11px; letter-spacing:.08em;
         text-transform:uppercase; color:var(--muted); font-weight:500;
         background:none; border:1px solid transparent; border-radius:4px;
         padding:2px 4px; margin:0 0 8px -4px; max-width:100%; cursor:pointer; }
@@ -355,11 +374,11 @@
      made a filtered list of ordinary spending look like a warning. */
   table.data tfoot td{ border-top:2px solid var(--hair-strong); padding-top:12px;
                        font-size:12.5px; }
-  .tx-total-label{ color:var(--muted); font-family:'IBM Plex Mono', monospace;
+  .tx-total-label{ color:var(--muted); font-family:var(--font-num);
                    font-size:11.5px; letter-spacing:.06em; text-transform:uppercase; }
   /* Qualified by the cell, or "table.data tfoot td" outranks it and the total
      renders smaller than the rows it is totalling. */
-  table.data tfoot td.tx-total{ font-family:'IBM Plex Mono', monospace;
+  table.data tfoot td.tx-total{ font-family:var(--font-num);
                                 font-size:15px; font-weight:600;
                                 color:var(--ink); letter-spacing:-.01em; }
 
@@ -368,7 +387,7 @@
   .zoomctl{ display:inline-flex; align-items:center; gap:8px; }
   .zoomctl button{ width:26px; height:26px; padding:0; font-size:14px; line-height:1;
                    display:inline-flex; align-items:center; justify-content:center; }
-  .zoomlabel{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--muted);
+  .zoomlabel{ font-family:var(--font-num); font-size:11.5px; color:var(--muted);
               min-width:74px; text-align:center; }
 
   /* Chart and key side by side. The key is a column because it is a list of
@@ -389,7 +408,7 @@
   .kswatch.dash{ height:0; border-top:2px dashed var(--ink); width:15px; opacity:.78; border-radius:0; }
   .kswatch.shaded{ background:var(--mint-bg); border:1px dashed var(--mint-dim); }
   .klabel{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .kamt{ margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--muted); }
+  .kamt{ margin-left:auto; font-family:var(--font-num); font-size:11px; color:var(--muted); }
 
   /* Hover and selection are the same gesture at different commitments, so they
      look the same: brighter, glowing in the segment's own colour, and widened
@@ -430,9 +449,9 @@
              border-radius:8px; box-shadow:0 10px 28px var(--shadow); }
   .ct-head{ display:flex; align-items:baseline; gap:10px; font-size:13px; color:var(--ink);
             font-weight:600; }
-  .ct-month{ margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:11px;
+  .ct-month{ margin-left:auto; font-family:var(--font-num); font-size:11px;
              color:var(--muted); font-weight:400; }
-  .ct-amount{ font-family:'IBM Plex Mono', monospace; font-size:21px; color:var(--ink);
+  .ct-amount{ font-family:var(--font-num); font-size:21px; color:var(--ink);
               letter-spacing:-.02em; margin-top:6px; }
   .ct-share{ font-size:11.5px; color:var(--ink-soft); margin-top:3px; }
 
@@ -445,7 +464,7 @@
   .dswatch{ width:11px; height:11px; border-radius:2px; flex:none; }
   .dsub{ color:var(--muted); font-size:12.5px; }
   .dfacts{ display:flex; gap:34px; flex-wrap:wrap; margin-top:9px; }
-  .dvalue{ font-family:'IBM Plex Mono', monospace; font-size:18px; color:var(--ink); }
+  .dvalue{ font-family:var(--font-num); font-size:18px; color:var(--ink); }
   .dlabel{ font-size:11.5px; color:var(--muted); margin-top:1px; }
 
   @media (max-width:760px){
@@ -473,7 +492,7 @@
   .trend-below{ margin-top:22px; }
   .pie-title{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
   .pie-title b{ font-family:'Space Grotesk', sans-serif; font-size:17px; letter-spacing:-.01em; }
-  .pie-range{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--muted);
+  .pie-range{ font-family:var(--font-num); font-size:11.5px; color:var(--muted);
               letter-spacing:.06em; text-transform:uppercase; }
   .pie-head{ display:flex; align-items:flex-start; justify-content:space-between;
              gap:16px; margin-bottom:14px; flex-wrap:wrap; }
@@ -489,7 +508,7 @@
               display:inline-flex; align-items:center; justify-content:center; }
   /* The name between the arrows says which of the two you are on — without it
      the arrows point at nothing in particular. */
-  .pie-viewname{ min-width:250px; text-align:center; font-family:'IBM Plex Mono', monospace;
+  .pie-viewname{ min-width:250px; text-align:center; font-family:var(--font-num);
                  font-size:12px; color:var(--mint); }
   @media (max-width:560px){ .pie-viewname{ min-width:0; font-size:11px; } }
   
@@ -549,17 +568,17 @@
   .bp-kids{ margin-top:6px; padding-top:6px; border-top:1px solid var(--hair); }
   /* A child following its parent says so quietly — it is the default, not an
      event, and it should not look like a warning. */
-  .bp-inherit{ font-family:'IBM Plex Mono', monospace; font-size:10px; color:var(--muted);
+  .bp-inherit{ font-family:var(--font-num); font-size:10px; color:var(--muted);
                border:1px solid var(--hair); border-radius:99px; padding:1px 6px; }
   .bp-method{ display:flex; align-items:center; gap:8px; }
   .bp-method select{ flex:1 1 auto; min-width:0; }
-  .bp-amount{ flex:0 0 92px; font-family:'IBM Plex Mono', monospace; font-size:12.5px;
+  .bp-amount{ flex:0 0 92px; font-family:var(--font-num); font-size:12.5px;
               background:var(--bg-panel); color:var(--ink); border:1px solid var(--hair-strong);
               border-radius:6px; padding:7px 9px; }
   .bp-amount:focus{ outline:none; border-color:var(--mint-dim); }
   .bp-figures{ text-align:right; display:flex; flex-direction:column; gap:1px; }
-  .bp-preview{ font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--mint); }
-  .bp-dim{ color:var(--muted); font-size:11px; font-family:'IBM Plex Mono', monospace; }
+  .bp-preview{ font-family:var(--font-num); font-size:13px; color:var(--mint); }
+  .bp-dim{ color:var(--muted); font-size:11px; font-family:var(--font-num); }
   .bp-none{ font-size:11.5px; color:var(--muted); }
   .bp-legend{ margin-top:18px; }
   .bp-defs{ margin:10px 0 0; display:grid; grid-template-columns:150px minmax(0,1fr);
@@ -585,7 +604,7 @@
   .bv-head b{ font-weight:600; }
   /* The verdict is the answer to the question the two bars pose, so it sits on
      the same line as the name rather than under the bars. */
-  .bv-verdict{ margin-left:14px; font-family:'IBM Plex Mono', monospace; font-size:12px;
+  .bv-verdict{ margin-left:14px; font-family:var(--font-num); font-size:12px;
                min-width:98px; text-align:right; }
   .bv-verdict.good{ color:var(--mint); }
   .bv-verdict.bad{ color:var(--coral); }
@@ -599,10 +618,10 @@
      than being white in both. */
   .bv-tick{ position:absolute; top:-3px; bottom:-3px; width:2px; border-radius:1px;
             background:var(--tick); }
-  .bv-pct{ flex:0 0 46px; text-align:right; font-family:'IBM Plex Mono', monospace;
+  .bv-pct{ flex:0 0 46px; text-align:right; font-family:var(--font-num);
            font-size:12px; color:var(--mint); }
   .bv-pct.bad{ color:var(--coral); }
-  .bv-figures{ margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:12.5px;
+  .bv-figures{ margin-left:auto; font-family:var(--font-num); font-size:12.5px;
                color:var(--ink); }
   .bv-dim{ color:var(--muted); }
   .bv-kids{ margin:10px 0 2px 26px; padding-left:14px; border-left:1px solid var(--hair); }
@@ -624,7 +643,7 @@
   /* The one number the tab exists to produce, so it is allowed to be loud —
      and its sign is the whole point, so the colour carries it. */
   .net-figure{ font-size:34px; font-weight:600; letter-spacing:-.02em; margin:4px 0 0;
-               font-family:'IBM Plex Mono', monospace; }
+               font-family:var(--font-num); }
   .net-figure.up{ color:var(--mint); }
   .net-figure.down{ color:var(--coral); }
 
@@ -635,7 +654,7 @@
   .swatch{ width:10px; height:10px; border-radius:2px; flex:none; }
   .ctog{ width:18px; height:18px; flex:none; padding:0; line-height:1;
          display:inline-flex; align-items:center; justify-content:center;
-         font-family:'IBM Plex Mono', monospace; font-size:13px;
+         font-family:var(--font-num); font-size:13px;
          background:none; border:1px solid var(--hair-strong); border-radius:4px;
          color:var(--ink-soft); cursor:pointer; }
   .ctog:hover{ color:var(--ink); border-color:var(--mint-dim); }
@@ -643,24 +662,24 @@
 
   /* ---------- table ---------- */
   table.data{ width:100%; border-collapse:collapse; font-size:13.5px; }
-  table.data th{ text-align:left; font-family:'IBM Plex Mono', monospace; font-size:11px;
+  table.data th{ text-align:left; font-family:var(--font-num); font-size:11px;
                  letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
                  padding:0 10px 10px 0; font-weight:500; }
   table.data td{ padding:9px 10px 9px 0; border-top:1px solid var(--hair); vertical-align:top; }
-  table.data td.num{ text-align:right; font-family:'IBM Plex Mono', monospace;
+  table.data td.num{ text-align:right; font-family:var(--font-num);
                      font-variant-numeric:tabular-nums; white-space:nowrap; }
   td.num.in{ color:var(--mint); }
-  .pill{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft);
+  .pill{ font-family:var(--font-num); font-size:11px; color:var(--ink-soft);
          border:1px solid var(--hair); border-radius:99px; padding:2px 8px; white-space:nowrap; }
   /* The category cell is editable, so it looks editable rather than like text. */
-  select.catsel{ font-family:'IBM Plex Mono', monospace; font-size:12px;
+  select.catsel{ font-family:var(--font-num); font-size:12px;
                  background:var(--bg-panel); color:var(--ink);
                  border:1px solid var(--hair); border-radius:6px;
                  padding:5px 8px; max-width:190px; cursor:pointer; }
   select.catsel:hover{ border-color:var(--mint-dim); }
 
   .toggle{ display:inline-flex; align-items:center; gap:8px; cursor:pointer;
-           font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-soft); }
+           font-family:var(--font-num); font-size:12px; color:var(--ink-soft); }
   .toggle input{ accent-color:var(--mint); width:15px; height:15px; cursor:pointer; }
 
   /* ---------- forecast ---------- */
@@ -670,13 +689,13 @@
   .fc-fig{ font-size:32px; font-weight:600; letter-spacing:-.02em; }
   .fc-fig.neg{ color:var(--coral); }
   .fc-fig.pos{ color:var(--mint); }
-  .fc-method{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--muted);
+  .fc-method{ font-family:var(--font-num); font-size:11.5px; color:var(--muted);
               max-width:52ch; line-height:1.7; }
   .fc-grid{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px;
             border-top:1px solid var(--hair); padding-top:14px; }
   .fc-grid .k{ font-size:12.5px; color:var(--ink-soft); }
-  .fc-grid .v{ font-family:'IBM Plex Mono', monospace; font-size:17px; margin-top:2px; }
-  .fc-warn{ color:var(--warning); font-family:'IBM Plex Mono', monospace; font-size:12px; }
+  .fc-grid .v{ font-family:var(--font-num); font-size:17px; margin-top:2px; }
+  .fc-warn{ color:var(--warning); font-family:var(--font-num); font-size:12px; }
   @media (max-width: 560px){ .fc-grid{ grid-template-columns:minmax(0,1fr); } }
 
   /* ---------- banks ---------- */
@@ -684,11 +703,11 @@
   .bank:first-child{ border-top:none; }
   .bank .inst{ font-size:15px; }
   .bank .acct{ display:flex; justify-content:space-between; gap:12px; color:var(--ink-soft);
-               font-family:'IBM Plex Mono', monospace; font-size:13px; line-height:1.9; padding-left:14px; }
+               font-family:var(--font-num); font-size:13px; line-height:1.9; padding-left:14px; }
   .bank .acct b{ color:var(--mint); font-weight:500; }
-  .warnpill{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--warning); }
+  .warnpill{ font-family:var(--font-num); font-size:11px; color:var(--warning); }
 
-  .msg{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-soft);
+  .msg{ font-family:var(--font-num); font-size:12px; color:var(--ink-soft);
         min-height:1.3em; margin:14px 0 0; }
   .msg.bad{ color:var(--coral); } .msg.good{ color:var(--mint); }
   .empty{ color:var(--ink-soft); font-size:14px; margin:0; }
@@ -724,7 +743,7 @@
              padding:16px 18px; margin-bottom:14px; }
   .bv2-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .bv2-head b{ font-size:14px; }
-  .bv2-total{ margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:11.5px;
+  .bv2-total{ margin-left:auto; font-family:var(--font-num); font-size:11.5px;
               color:var(--muted); text-align:right; }
   .bv2-total b{ display:block; color:var(--ink); font-size:14px; font-weight:500; }
 
@@ -750,7 +769,7 @@
   .bv2-rowhead .bv2-select{ width:100%; font-size:11px; padding:5px 7px; }
   .bv2-titled{ display:flex; flex-direction:column; gap:5px; align-items:flex-start; }
   .bv2-titled .bv2-select{ font-size:11.5px; padding:6px 9px; }
-  .bv2-mh{ font-family:'IBM Plex Mono', monospace; font-size:10px; color:var(--muted);
+  .bv2-mh{ font-family:var(--font-num); font-size:10px; color:var(--muted);
            text-align:center; padding:2px 2px 0; }
   /* The months still to come, marked in the headings as well as in the chart. */
   .bv2-mh.ahead{ color:var(--mint); }
@@ -778,11 +797,11 @@
   /* Pulled to the top of the row so each figure sits level with the name it
      belongs to. Centred, they landed in the gap between the name and its menu,
      which reads as belonging to neither. */
-  .bv2-cell{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--ink-soft);
+  .bv2-cell{ font-family:var(--font-num); font-size:10.5px; color:var(--ink-soft);
              text-align:right; padding:0 5px; align-self:start; margin-top:6px; }
   .bv2-cell.past{ color:var(--muted); }
   .bv2-cell.nil{ color:var(--muted); opacity:.6; }
-  input.bv2-in{ font-family:'IBM Plex Mono', monospace; font-size:10.5px;
+  input.bv2-in{ font-family:var(--font-num); font-size:10.5px;
                 width:calc(100% - 4px); margin:1px 2px 0; min-width:0; align-self:start;
                 background:var(--bg-panel); color:var(--ink);
                 border:1px solid var(--hair-strong); border-radius:4px;
@@ -1762,7 +1781,7 @@ function stackTotal(cx, topY, total, band, month, label, selected) {
   return '<text class="stacktotal' + (selected ? ' sel' : '') + '" ' +
     tipAttrs(label || 'Everything', month, total, 0) +
     ' x="' + cx.toFixed(1) + '" y="' + (topY - 8).toFixed(1) + '" text-anchor="middle" ' +
-    'font-family="IBM Plex Mono" font-size="10.5" fill="var(--ink-soft)">' + money0(total) + '</text>';
+    'font-size="10.5" fill="var(--ink-soft)">' + money0(total) + '</text>';
 }
 
 /**
@@ -1901,7 +1920,7 @@ function drawTrend() {
 
   if (emptyWindow) {
     svg += '<text x="' + (PL + plotW / 2) + '" y="' + (PT + plotH / 2) + '" text-anchor="middle" ' +
-           'font-family="IBM Plex Mono" font-size="12" fill="var(--muted)">' +
+           'font-size="12" fill="var(--muted)">' +
            'Nothing recorded in these months</text>';
   }
 
@@ -1926,14 +1945,14 @@ function drawTrend() {
            // read as part of the bar.
            '<rect x="' + (x0 + 6).toFixed(1) + '" y="' + (PT + 5) + '" width="60" height="17" rx="3" ' +
            'fill="var(--bg)" opacity=".72"/>' +
-           '<text x="' + (x0 + 14).toFixed(1) + '" y="' + (PT + 17) + '" font-family="IBM Plex Mono" ' +
+           '<text x="' + (x0 + 14).toFixed(1) + '" y="' + (PT + 17) + '" ' +
            'font-size="10.5" fill="var(--mint)" letter-spacing=".08em">budget</text>';
   }
 
   for (let i = 0; i <= 4; i++) {
     const v = (yMax / 4) * i, yy = y(v);
     svg += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + yy + '" y2="' + yy + '" stroke="var(--grid)" stroke-width="1"/>' +
-           '<text x="' + (PL - 9) + '" y="' + (yy + 4) + '" text-anchor="end" font-family="IBM Plex Mono" ' +
+           '<text x="' + (PL - 9) + '" y="' + (yy + 4) + '" text-anchor="end" ' +
            'font-size="10.5" fill="var(--muted)">' + money0(v) + '</text>';
   }
 
@@ -1974,7 +1993,11 @@ function drawTrend() {
     Object.keys(m.byParent).forEach(id => {
       const v = m.byParent[id];
       if (!v) return;
-      const top = y(acc + v), bot = y(acc);
+      /* Rounded here rather than on the way out, so a segment's top is the
+         same number as the one below it and the two meet exactly. Rounding
+         y and height separately left a tenth of a unit between them — nothing
+         at this scale, but it is a seam waiting for a zoom level. */
+      const top = +y(acc + v).toFixed(1), bot = +y(acc).toFixed(1);
       const on = trendSel && trendSel.cat === id && (!trendSel.month || trendSel.month === m.month);
       const off = trendSel && !on;
       const colour = colourOf(id);
@@ -1983,10 +2006,10 @@ function drawTrend() {
              ' ' + tipAttrs(labelOfSlug(id), m.month, v, m.expense) +
              ' tabindex="0" role="button"' +
              ' x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
-             '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 2).toFixed(1) +
+             '" width="' + barW.toFixed(1) + '" height="' + Math.max(0.5, bot - top).toFixed(1) +
              // color, not just fill: the hover glow is a drop-shadow in
              // currentColor, so each segment glows its own colour.
-             '" fill="' + colour + '" style="color:' + colour + '" rx="1"' +
+             '" fill="' + colour + '" style="color:' + colour + '"' +
              // Projected bars are the same colours, dimmed and outlined, so the
              // shape is comparable but never mistaken for something that happened.
              (m.projected ? ' opacity=".45" stroke="' + colour + '" stroke-width="1" stroke-dasharray="2 2"' : '') +
@@ -2004,7 +2027,7 @@ function drawTrend() {
       const parts = m.month.split('-');
       const label = MONTH_NAMES[Number(parts[1]) - 1] +
         (parts[1] === '01' || i === 0 ? " '" + parts[0].slice(2) : '');
-      svg += '<text x="' + cx + '" y="' + (H - PB + 18) + '" text-anchor="middle" font-family="IBM Plex Mono" ' +
+      svg += '<text x="' + cx + '" y="' + (H - PB + 18) + '" text-anchor="middle" ' +
              'font-size="10.5" fill="' + (m.projected ? 'var(--mint-dim)' : 'var(--muted)') + '">' + label + '</text>';
     }
   });
@@ -2317,7 +2340,7 @@ function drawNet() {
     svg += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + yy.toFixed(1) + '" y2="' + yy.toFixed(1) +
            '" stroke="' + (isZero ? 'var(--hair-strong)' : 'var(--grid)') + '" stroke-width="1"/>' +
            '<text x="' + (PL - 9) + '" y="' + (yy + 4).toFixed(1) + '" text-anchor="end" ' +
-           'font-family="IBM Plex Mono" font-size="10.5" fill="var(--muted)">' + money0(v) + '</text>';
+           'font-size="10.5" fill="var(--muted)">' + money0(v) + '</text>';
   }
 
   /* ---- the running total, as a wave ----
@@ -2381,7 +2404,7 @@ function drawNet() {
       const label = MONTH_NAMES[Number(parts[1]) - 1] +
         (parts[1] === '01' || i === 0 ? " '" + parts[0].slice(2) : '');
       svg += '<text x="' + cx.toFixed(1) + '" y="' + (H - PB + 18) + '" text-anchor="middle" ' +
-             'font-family="IBM Plex Mono" font-size="10.5" fill="var(--muted)">' + label + '</text>';
+             'font-size="10.5" fill="var(--muted)">' + label + '</text>';
     }
   });
   svg += '</svg>';
@@ -2949,7 +2972,7 @@ function pieBarsSvg(entries, w) {
     const v = (yMax / 4) * k, yy = y(v);
     svg += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + yy + '" y2="' + yy +
       '" stroke="var(--grid)" stroke-width="1"/>' +
-      '<text x="' + (PL - 9) + '" y="' + (yy + 4) + '" text-anchor="end" font-family="IBM Plex Mono" ' +
+      '<text x="' + (PL - 9) + '" y="' + (yy + 4) + '" text-anchor="end" ' +
       'font-size="10.5" fill="var(--muted)">' + money0(v) + '</text>';
   }
 
@@ -2963,11 +2986,15 @@ function pieBarsSvg(entries, w) {
     for (const slug of order) {
       const v = m.row[slug] || 0;
       if (!v) continue;
-      const top = y(acc + v), bot = y(acc);
+      /* Rounded here rather than on the way out, so a segment's top is the
+         same number as the one below it and the two meet exactly. Rounding
+         y and height separately left a tenth of a unit between them — nothing
+         at this scale, but it is a seam waiting for a zoom level. */
+      const top = +y(acc + v).toFixed(1), bot = +y(acc).toFixed(1);
       svg += '<rect class="seg noclick" ' + tipAttrs(labelOfSlug(slug), m.month, v, monthTotal) +
         ' x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
-        '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 2).toFixed(1) +
-        '" fill="' + colourOf(slug) + '" style="color:' + colourOf(slug) + '" rx="1"></rect>';
+        '" width="' + barW.toFixed(1) + '" height="' + Math.max(0.5, bot - top).toFixed(1) +
+        '" fill="' + colourOf(slug) + '" style="color:' + colourOf(slug) + '"></rect>';
       acc += v;
     }
 
@@ -2978,7 +3005,7 @@ function pieBarsSvg(entries, w) {
       const label = MONTH_NAMES[Number(parts[1]) - 1] +
         (parts[1] === '01' || idx === 0 ? " '" + parts[0].slice(2) : '');
       svg += '<text x="' + cx.toFixed(1) + '" y="' + (H - PB + 18) + '" text-anchor="middle" ' +
-        'font-family="IBM Plex Mono" font-size="10.5" fill="var(--muted)">' + label + '</text>';
+        'font-size="10.5" fill="var(--muted)">' + label + '</text>';
     }
   });
 
@@ -3047,9 +3074,9 @@ function drawPie() {
     '<svg viewBox="0 0 300 300" width="300" height="300" role="img" ' +
     'aria-label="Share of spending by category">' + slices +
     '<circle cx="' + CX + '" cy="' + CY + '" r="68" fill="var(--surface)"/>' +
-    '<text x="' + CX + '" y="' + (CY - 5) + '" text-anchor="middle" font-family="IBM Plex Mono" ' +
+    '<text x="' + CX + '" y="' + (CY - 5) + '" text-anchor="middle" ' +
       'font-size="17" fill="var(--ink)">' + money0(total) + '</text>' +
-    '<text x="' + CX + '" y="' + (CY + 15) + '" text-anchor="middle" font-family="IBM Plex Mono" ' +
+    '<text x="' + CX + '" y="' + (CY + 15) + '" text-anchor="middle" ' +
       'font-size="11" fill="var(--muted)">total</text>' +
     '</svg>';
 
@@ -3728,7 +3755,7 @@ function bv2Chart(parent, kids, focus) {
     svg += '<line x1="0" x2="' + W + '" y1="' + yy.toFixed(1) + '" y2="' + yy.toFixed(1) +
       '" stroke="var(--grid)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
     if (k) {
-      svg += '<text x="4" y="' + (yy - 3).toFixed(1) + '" font-family="IBM Plex Mono" ' +
+      svg += '<text x="4" y="' + (yy - 3).toFixed(1) + '" ' +
         'font-size="9" fill="var(--muted)" opacity=".75">' + money0(v) + '</text>';
     }
   }
@@ -3738,15 +3765,19 @@ function bv2Chart(parent, kids, focus) {
     for (const k of stack) {
       const v = k.series[m] || 0;
       if (!v) continue;
-      const top = y(acc + v), bot = y(acc);
+      /* Rounded here rather than on the way out, so a segment's top is the
+         same number as the one below it and the two meet exactly. Rounding
+         y and height separately left a tenth of a unit between them — nothing
+         at this scale, but it is a seam waiting for a zoom level. */
+      const top = +y(acc + v).toFixed(1), bot = +y(acc).toFixed(1);
       const on = focus === k.slug;
       const dim = focus && !on;
       svg += '<rect class="seg' + (on ? ' sel' : '') + (dim ? ' dim' : '') + '"' +
         ' data-bv2-pick="' + escapeHtml(k.slug) + '" data-parent="' + escapeHtml(parent.slug) + '"' +
         ' tabindex="0" role="button"' +
         ' x="' + (cx(i) - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
-        '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, bot - top - 1).toFixed(1) +
-        '" fill="' + themed(k.slug, k.colour) + '" style="color:' + themed(k.slug, k.colour) + '" rx="1">' +
+        '" width="' + barW.toFixed(1) + '" height="' + Math.max(0.5, bot - top).toFixed(1) +
+        '" fill="' + themed(k.slug, k.colour) + '" style="color:' + themed(k.slug, k.colour) + '">' +
         '<title>' + escapeHtml(k.label) + ' · ' + escapeHtml(monthLabel(m)) + ': ' + money(v) +
         (m >= first ? ' (planned)' : '') + '</title></rect>';
       acc += v;
@@ -3754,7 +3785,7 @@ function bv2Chart(parent, kids, focus) {
 
     if (totals[i] > 0) {
       svg += '<text x="' + cx(i).toFixed(1) + '" y="' + (y(totals[i]) - 7).toFixed(1) +
-        '" text-anchor="middle" font-family="IBM Plex Mono" font-size="13" ' +
+        '" text-anchor="middle" font-size="13" ' +
         'fill="var(--ink)">' + money0(totals[i]) + '</text>';
     }
   });
