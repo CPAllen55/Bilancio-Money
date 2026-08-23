@@ -1043,14 +1043,22 @@
       <button class="tab" data-view="banks">Banks</button>
     </div>
 
+    <!-- The Tracker's pair, for the same reason it has them: one menu of fixed
+         spans could only ever end today, so "the last three months" meant the
+         three up to now and there was no way to ask for the three up to last
+         March. A month to end at, and how far back to reach from it. -->
     <div class="bar">
-      <select class="ctl" id="range">
-        <option value="this-month" selected>This month</option>
-        <option value="last-month">Last month</option>
-        <option value="last-3">Last 3 months</option>
-        <option value="last-6">Last 6 months</option>
-        <option value="ytd">Year to date</option>
-      </select>
+      <span class="bv-controls">
+        <select class="ctl" id="ov-range" aria-label="Month"></select>
+        <select class="ctl" id="ov-trail" aria-label="Trailing periods">
+          <option value="1" selected>Month selected</option>
+          <option value="2">2 months trailing</option>
+          <option value="3">3 months trailing</option>
+          <option value="6">6 months trailing</option>
+          <option value="12">12 months trailing</option>
+          <option value="24">24 months trailing</option>
+        </select>
+      </span>
       <span class="msg" id="global-msg"></span>
     </div>
 
@@ -1339,7 +1347,54 @@ async function authed(path, options) {
 
 /* ----------------------------------------------------------------- views -- */
 
-const range = () => $('range').value;
+/* The two menus, as a range the API understands.
+ *
+ * A single month is deliberately NOT sent as a one-month span. "span:2026-08..
+ * 2026-08" resolves to a label of "August 2026 to August 2026", and — because a
+ * span assumes whole months — to a period of thirty elapsed days out of thirty,
+ * which tells the Overview that the current month is over and there is nothing
+ * left to spend per day. The named forms already answer both correctly: the
+ * current month knows how far through it is, and a past month knows it is
+ * complete. So one month asks for one month, and only a real run asks for a
+ * span.
+ *
+ * The budget is unaffected either way — budgetFor counts the months a window
+ * covers, not its end date, and all three forms cover the same months. */
+function spanRange(monthSel, trailSel) {
+  const end = $(monthSel).value;
+  if (!end) return 'this-month';   // menu not filled in yet
+
+  const back = Math.max(1, Number($(trailSel).value || 1)) - 1;
+  const [y, m] = end.split('-').map(Number);
+
+  if (!back) {
+    const now = new Date();
+    return (y === now.getUTCFullYear() && m === now.getUTCMonth() + 1)
+      ? 'this-month'
+      : 'month:' + end;
+  }
+
+  const d = new Date(Date.UTC(y, m - 1 - back, 1));
+  const start = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+  return 'span:' + start + '..' + end;
+}
+
+/* Two years of months to end at, most recent first and selected. */
+function fillMonthOptions(selId) {
+  const sel = $(selId);
+  if (sel.options.length) return;
+  const now = new Date();
+  let html = '';
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    const key = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+    html += '<option value="' + key + '"' + (i === 0 ? ' selected' : '') + '>' +
+      MONTH_NAMES[d.getUTCMonth()] + ' ' + d.getUTCFullYear() + '</option>';
+  }
+  sel.innerHTML = html;
+}
+
+const range = () => spanRange('ov-range', 'ov-trail');
 let summaryCache = null;
 
 async function summaryFor(r) {
@@ -1525,6 +1580,7 @@ function incomeNote(b) {
 }
 
 async function renderOverview() {
+  fillMonthOptions('ov-range');
   const s = await summaryFor(range());
   const t = s.totals, p = s.previous, safe = s.safeToSpend;
 
@@ -1555,7 +1611,10 @@ async function renderOverview() {
 
      Written out in full for the month, because that is what it is called; any
      other range keeps its own name rather than being called the current month
-     when it is a year. */
+     when it is a year. The name is the period the API resolved, so the two
+     menus above rename this card by moving — "August 2025 performance" for a
+     past month on its own, "June 2026 to August 2026 performance" for a run of
+     three — and the word stays put whatever they say. */
   const perfLabel = s.range.label === 'This month'
     ? 'Current month performance'
     : s.range.label + ' performance';
@@ -3127,34 +3186,11 @@ const budgetTxOpen = new Set();
 const budgetTxCache = {};
 let budgetRangeLabel = '';
 
-/** A run of whole months ending at the one chosen. One month is a run of one. */
-function budgetRange() {
-  const end = $('bud-range').value;
-  if (!end) return 'this-month';
-  const back = Math.max(1, Number($('bud-trail').value || 1)) - 1;
-  const [y, m] = end.split('-').map(Number);
-  const d = new Date(Date.UTC(y, m - 1 - back, 1));
-  const start = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
-  return 'span:' + start + '..' + end;
-}
-
-/* The month menu names an END, and the trailing menu says how far back from
-   it to reach. Aggregates used to live in the month menu, which meant "last 6
-   months" could only ever end today — you could look at a single past month or
-   at a run ending now, and never at the six months up to last March. */
-function fillBudgetRanges() {
-  const sel = $('bud-range');
-  if (sel.options.length) return;
-  const now = new Date();
-  let html = '';
-  for (let i = 0; i < 24; i++) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
-    const key = d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
-    html += '<option value="' + key + '"' + (i === 0 ? ' selected' : '') + '>' +
-      MONTH_NAMES[d.getUTCMonth()] + ' ' + d.getUTCFullYear() + '</option>';
-  }
-  sel.innerHTML = html;
-}
+/* The same pair of menus as the Overview, so they mean the same thing. Reading
+   them through the shared mapper also drops the Tracker's old one-month span,
+   which was labelling its drill-downs "August 2026 to August 2026". */
+const budgetRange = () => spanRange('bud-range', 'bud-trail');
+const fillBudgetRanges = () => fillMonthOptions('bud-range');
 
 /* One bar, read as a proportion of its own budget.
  *
@@ -3500,6 +3536,31 @@ function pieWindow() {
 
 function arcPath(cx, cy, r, a0, a1) {
   const p = (a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+
+  /* A slice that is the whole circle has to be drawn as two.
+   *
+   * When one category is the only one left showing — the only child of its
+   * parent, or the only box still ticked — its sweep is a full turn, so both
+   * ends of the arc land on the same point. An elliptical arc whose endpoints
+   * are identical is, per the SVG spec, "equivalent to omitting the elliptical
+   * arc segment entirely": the wedge is not drawn small or drawn wrong, it is
+   * silently not drawn. The chart came up empty under a key reading 100%.
+   *
+   * The tolerance is a tenth of a degree rather than a float epsilon, because
+   * the endpoints are written to one decimal place. Two angles closer together
+   * than about 0.1/r round to the same coordinates, which reproduces the same
+   * degenerate arc from a sweep that was merely near a full turn rather than
+   * exactly one. At that size it is a full circle to any eye anyway.
+   *
+   * Two half turns have distinct endpoints, so both arcs draw, and the pair
+   * closes the disc. The hole is punched by the centre circle as before. */
+  if (a1 - a0 >= Math.PI * 2 - 1e-3) {
+    const [xa, ya] = p(a0), [xb, yb] = p(a0 + Math.PI);
+    return 'M' + xa.toFixed(1) + ',' + ya.toFixed(1) +
+      ' A' + r + ',' + r + ' 0 1 1 ' + xb.toFixed(1) + ',' + yb.toFixed(1) +
+      ' A' + r + ',' + r + ' 0 1 1 ' + xa.toFixed(1) + ',' + ya.toFixed(1) + ' Z';
+  }
+
   const [x0, y0] = p(a0), [x1, y1] = p(a1);
   const large = a1 - a0 > Math.PI ? 1 : 0;
   return 'M' + cx + ',' + cy + ' L' + x0.toFixed(1) + ',' + y0.toFixed(1) +
@@ -4142,11 +4203,12 @@ $('tabs').addEventListener('click', (e) => {
   // reading a window at all — so the control is shown where it does something
   // and hidden everywhere else. Listing the exception rather than the rule
   // means a new tab is hidden by default, which is the safer way round.
-  $('range').closest('.bar').hidden = btn.dataset.view !== 'overview';
+  $('ov-range').closest('.bar').hidden = btn.dataset.view !== 'overview';
   refresh();
 });
 
-$('range').addEventListener('change', () => { summaryCache = null; refresh(); });
+['ov-range', 'ov-trail'].forEach(id =>
+  $(id).addEventListener('change', () => { summaryCache = null; refresh(); }));
 $('trend-range').addEventListener('change', refresh);
 // The chart draws the projected months too, so the toggle has to redraw the
 // chart — renderTrend ends by rendering the forecast box anyway. Wiring it
