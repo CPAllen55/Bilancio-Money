@@ -44,7 +44,11 @@
        SVG stop-colors. These five are the marketing page's, unchanged. */
     --gold-1:#C9A227; --gold-2:#F5DFA0; --gold-3:#FFF6DD;
     --gold-4:#E7C567; --gold-5:#B8892A;
-    --gold-edge:#8A6A1E;                  /* the line drawn around the stacks */
+    /* The stacks take their own three rather than the lettering's five.
+       Lettering is strokes with page showing between them, so it can carry the
+       near-white highlight; a stack is four pixels of solid fill and needs a
+       gold that reads as gold at that size, top-lit the way stacked coins are. */
+    --stack-1:#F5DFA0; --stack-2:#E7C567; --stack-3:#C9A227;
 
     /* Tiles carry the same surface in the dark, and take a tint in the light
        where a flat row of eight reads as one undivided block. Two tints, not
@@ -133,7 +137,12 @@
        clears 3.94:1 against the 3.0 that 23px bold needs. */
     --gold-1:#5E430F; --gold-2:#8A6A1E; --gold-3:#A07026;
     --gold-4:#7A5A16; --gold-5:#4E3709;
-    --gold-edge:#3B2A07;
+    /* Light mode had the stacks in the lettering's browns behind a #3B2A07
+       outline, and at four pixels wide the outline was most of the bar — five
+       dark smudges rather than gold. Solid fill now, and the range moves up to
+       where the owl's own gold lives: the lightest is #A07026 at 3.94:1 on the
+       page, clear of the 3:1 a graphic needs to hold its shape. */
+    --stack-1:#A07026; --stack-2:#8A6A1E; --stack-3:#6B4E12;
     --shadow:rgba(74,59,20,0.14);
 
     /* Green for money arriving and for a month that kept something; red for
@@ -175,15 +184,21 @@
   /* The five stacks the owl is perched on, at the end of the word.
    *
    * A blinking green block was here — a terminal cursor, which says "console"
-   * rather than "money", and which the brand does not use anywhere else. The
-   * stacks do: they are the bottom half of the mark in the corner of every
-   * page. Geometry measured off the artwork at its natural 240x285 — bar
-   * positions, widths, heights and the shared grid of coin lines — so this is
-   * the drawing scaled down, not a redrawing of it.
+   * rather than "money", and which the brand does not use anywhere else.
    *
-   * The coin lines keep their real pitch, which at this size renders as a
-   * texture in the gold rather than as countable lines. That is what the
-   * artwork does when you shrink it too. */
+   * This is a reduction of the artwork, not a scaling of it. Scaled, the
+   * drawing's own gaps are 5, 6, 7 and 8 units, and once the outline stroke had
+   * eaten 1.6 from each they landed at 0.48, 0.62, 0.76 and 0.90 of a pixel —
+   * so only the last one was near enough to a whole pixel to show, and the
+   * stacks looked like they were spaced at random. The coin lines went the same
+   * way: at a real pitch of 0.94px they were a tint over the gold rather than
+   * lines, and they were the reason the bars had no room to separate.
+   *
+   * So the glyph is drawn at the size it is used, one unit to the pixel. The
+   * heights keep the drawing's proportions (0.20, 0.40, 0.60, 0.80, 1.00
+   * against its 0.21, 0.40, 0.58, 0.77, 1.00); the pitch becomes an integer 6,
+   * which puts every bar at the same sub-pixel phase so all four gaps render
+   * alike wherever the glyph happens to start. */
   .stacks{ height:15px; width:auto; display:inline-block; vertical-align:-1px;
            margin-left:5px; overflow:visible; }
   /* var(--font-num) rather than the mono the marketing page names outright, so
@@ -1066,7 +1081,7 @@
   <div class="wrap top-inner">
     <a class="wordmark" href="/" aria-label="Bilancio Money — home">
       <span class="b">Bilancio</span>
-      <span class="m" aria-hidden="true">Money<svg class="stacks" viewBox="31 164 185 107" aria-hidden="true" focusable="false"><defs><linearGradient id="stackgold" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="var(--gold-1)"/><stop offset="28%" stop-color="var(--gold-2)"/><stop offset="50%" stop-color="var(--gold-3)"/><stop offset="72%" stop-color="var(--gold-4)"/><stop offset="100%" stop-color="var(--gold-5)"/></linearGradient></defs><g fill="url(#stackgold)" stroke="var(--gold-edge)" stroke-width="1.6"><rect x="32" y="248" width="31" height="22" rx="1"/><rect x="68" y="228" width="30" height="42" rx="1"/><rect x="104" y="209" width="31" height="61" rx="1"/><rect x="142" y="189" width="32" height="81" rx="1"/><rect x="182" y="165" width="33" height="105" rx="1"/></g><g stroke="var(--gold-edge)" stroke-width="1.2" opacity=".75"><line x1="32" y1="260" x2="63" y2="260"/><line x1="32" y1="254" x2="63" y2="254"/><line x1="68" y1="260" x2="98" y2="260"/><line x1="68" y1="254" x2="98" y2="254"/><line x1="68" y1="247" x2="98" y2="247"/><line x1="68" y1="241" x2="98" y2="241"/><line x1="68" y1="234" x2="98" y2="234"/><line x1="104" y1="260" x2="135" y2="260"/><line x1="104" y1="254" x2="135" y2="254"/><line x1="104" y1="247" x2="135" y2="247"/><line x1="104" y1="241" x2="135" y2="241"/><line x1="104" y1="234" x2="135" y2="234"/><line x1="104" y1="228" x2="135" y2="228"/><line x1="104" y1="221" x2="135" y2="221"/><line x1="104" y1="215" x2="135" y2="215"/><line x1="142" y1="260" x2="174" y2="260"/><line x1="142" y1="254" x2="174" y2="254"/><line x1="142" y1="247" x2="174" y2="247"/><line x1="142" y1="241" x2="174" y2="241"/><line x1="142" y1="234" x2="174" y2="234"/><line x1="142" y1="228" x2="174" y2="228"/><line x1="142" y1="221" x2="174" y2="221"/><line x1="142" y1="215" x2="174" y2="215"/><line x1="142" y1="208" x2="174" y2="208"/><line x1="142" y1="201" x2="174" y2="201"/><line x1="142" y1="195" x2="174" y2="195"/><line x1="182" y1="260" x2="215" y2="260"/><line x1="182" y1="254" x2="215" y2="254"/><line x1="182" y1="247" x2="215" y2="247"/><line x1="182" y1="241" x2="215" y2="241"/><line x1="182" y1="234" x2="215" y2="234"/><line x1="182" y1="228" x2="215" y2="228"/><line x1="182" y1="221" x2="215" y2="221"/><line x1="182" y1="215" x2="215" y2="215"/><line x1="182" y1="208" x2="215" y2="208"/><line x1="182" y1="201" x2="215" y2="201"/><line x1="182" y1="195" x2="215" y2="195"/><line x1="182" y1="188" x2="215" y2="188"/><line x1="182" y1="181" x2="215" y2="181"/><line x1="182" y1="175" x2="215" y2="175"/></g></svg></span>
+      <span class="m" aria-hidden="true">Money<svg class="stacks" viewBox="0 0 28 15" shape-rendering="crispEdges" aria-hidden="true" focusable="false"><defs><linearGradient id="stackgold" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--stack-1)"/><stop offset="55%" stop-color="var(--stack-2)"/><stop offset="100%" stop-color="var(--stack-3)"/></linearGradient></defs><g fill="url(#stackgold)"><rect x="0" y="12" width="4" height="3"/><rect x="6" y="9" width="4" height="6"/><rect x="12" y="6" width="4" height="9"/><rect x="18" y="3" width="4" height="12"/><rect x="24" y="0" width="4" height="15"/></g></svg></span>
     </a>
     <div class="who" id="who" hidden>
       <div class="acct">
