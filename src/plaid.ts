@@ -69,6 +69,39 @@ async function plaidPost<T>(env: Env, path: string, body: Record<string, unknown
  * guess breaks linking entirely. It is only needed for banks that use an OAuth
  * hand-off, which none of the sandbox institutions do.
  */
+
+/**
+ * A Link token for repairing an existing connection, not making a new one.
+ *
+ * When a bank changes credentials, adds an MFA step, or simply expires its
+ * consent, Plaid puts the Item into ITEM_LOGIN_REQUIRED and every sync fails
+ * until a person signs in again. Update mode is how they do that: the same
+ * Link flow, opened against the Item that already exists, so the access token
+ * survives and so does every transaction already stored against it.
+ *
+ * Two differences from a first link, both required rather than stylistic:
+ *
+ *   - `access_token` names the Item being repaired.
+ *   - `products` must be ABSENT. Sending it alongside an access token is an
+ *     error, because products are a property of an Item that already exists
+ *     and cannot be renegotiated here. `transactions.days_requested` goes with
+ *     it for the same reason — history was fixed when the Item was created.
+ *
+ * The public token Link hands back on success is NOT exchanged. The Item is
+ * already ours; exchanging would mint a second one pointed at the same bank.
+ */
+export function createUpdateLinkToken(env: Env, clerkUserId: string, accessToken: string) {
+  return plaidPost<{ link_token: string; expiration: string }>(env, "/link/token/create", {
+    user: { client_user_id: clerkUserId },
+    client_name: "Bilancio Money",
+    access_token: accessToken,
+    ...(env.PLAID_WEBHOOK_URL ? { webhook: env.PLAID_WEBHOOK_URL } : {}),
+    country_codes: ["US"],
+    language: "en",
+    ...(env.PLAID_REDIRECT_URI ? { redirect_uri: env.PLAID_REDIRECT_URI } : {}),
+  });
+}
+
 export function createLinkToken(env: Env, clerkUserId: string) {
   return plaidPost<{ link_token: string; expiration: string }>(env, "/link/token/create", {
     user: { client_user_id: clerkUserId },

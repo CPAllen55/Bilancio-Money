@@ -741,6 +741,12 @@
   .fr-body{ color:var(--ink-soft); font-size:14px; margin:0 auto 18px; max-width:46ch; line-height:1.6; }
   .bank .inst{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
   .unlink{ font-size:11.5px; padding:5px 10px; flex:none; }
+  /* The repair, next to the removal. Mint rather than plain, because when a
+     bank has stopped working this is the button that is wanted and the one
+     beside it throws two years of history away. */
+  .relink{ font-size:11.5px; padding:5px 10px; flex:none; margin-right:8px;
+           color:var(--mint); border-color:var(--mint-dim); }
+  .relink:hover{ background:var(--mint-bg); }
   .unlink:hover{ color:var(--coral); border-color:var(--coral); }
   /* Set apart and never the default-looking button on the page: everything here
      is irreversible and touches somebody's bank. */
@@ -4459,7 +4465,17 @@ async function renderBanks() {
     '<div class="bank">' +
       '<div class="inst"><span>' + escapeHtml(it.institution || 'Bank') + ' — ' + it.accounts.length +
         ' account' + (it.accounts.length === 1 ? '' : 's') +
-        (it.awaitingFirstSync ? ' <span class="warnpill">· waiting for transactions</span>' : '') + '</span>' +
+        (it.awaitingFirstSync ? ' <span class="warnpill">· waiting for transactions</span>' : '') +
+        (it.status && it.status !== 'good'
+          ? ' <span class="warnpill">· needs you to sign in again</span>' : '') + '</span>' +
+        /* Offered before Disconnect, and styled as the primary of the two,
+           because a bank asking for a fresh sign-in is repaired by signing in —
+           not by throwing the connection away and re-importing two years of
+           history to fix an expired password. */
+        (it.status && it.status !== 'good'
+          ? '<button class="relink" type="button" data-item="' + escapeHtml(it.id) + '" ' +
+            'data-name="' + escapeHtml(it.institution || 'this bank') + '">Reconnect</button>'
+          : '') +
         '<button class="unlink" type="button" data-item="' + escapeHtml(it.id) + '" ' +
           'data-name="' + escapeHtml(it.institution || 'this bank') + '">Disconnect</button></div>' +
       it.accounts.map(a =>
@@ -4493,6 +4509,32 @@ document.addEventListener('click', (e) => {
 });
 
 $('bank-list').addEventListener('click', async (e) => {
+  const relink = e.target.closest('.relink');
+  if (relink) {
+    const msg = $('bank-msg');
+    relink.disabled = true;
+    say(msg, 'Opening ' + relink.dataset.name + '…');
+    try {
+      await loadPlaid();
+      const res = await authed('/api/plaid/link-token/update', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: relink.dataset.item }),
+      });
+      // Stored before Link opens for the same reason a first link does: an
+      // OAuth bank can navigate away the moment it is picked, and the return
+      // handler has nothing else to go on.
+      localStorage.setItem(PLAID_TOKEN_KEY, res.linkToken);
+      window.Plaid.create({
+        token: res.linkToken,
+        ...plaidLinkOptions(msg, relink, { update: true }),
+      }).open();
+    } catch (err) {
+      say(msg, err.message, 'bad');
+      relink.disabled = false;
+    }
+    return;
+  }
+
   const btn = e.target.closest('.unlink');
   if (!btn) return;
   const msg = $('bank-msg');
@@ -4572,10 +4614,20 @@ function loadPlaid() {
 const PLAID_TOKEN_KEY = 'bilancio.plaidLinkToken';
 
 /** Everything Link needs, minus the token, so both entry points agree. */
-function plaidLinkOptions(msg, btn) {
+/* opts.update marks a repair rather than a new connection.
+ *
+ * The difference is one that matters: in update mode the Item already exists
+ * and its access token is still ours, so the public token Link returns is not
+ * exchanged. Exchanging it would mint a second Item pointed at the same bank,
+ * and the accounts would appear twice. */
+function plaidLinkOptions(msg, btn, opts) {
+  const update = !!(opts && opts.update);
   return {
     onSuccess: async (publicToken) => {
       try {
+        if (update) {
+          say(msg, 'Signed back in. Catching up…');
+        } else {
         say(msg, 'Storing the connection…');
         const ex = await authed('/api/plaid/exchange', {
           method: 'POST',
@@ -4583,6 +4635,7 @@ function plaidLinkOptions(msg, btn) {
           body: JSON.stringify({ publicToken: publicToken })
         });
         say(msg, 'Linked ' + (ex.item.institution || 'bank') + '. Pulling transactions…');
+        }
         const sync = await authed('/api/plaid/sync', { method: 'POST' });
         if (sync.pending && sync.pending.length) {
           say(msg, sync.pending.join(', ') + ' is still preparing transactions — click Sync in a moment.');

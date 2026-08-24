@@ -18,6 +18,7 @@ import {
   removeItem,
   PlaidError,
   createLinkToken,
+  createUpdateLinkToken,
   exchangePublicToken,
   getAccounts,
   getInstitution,
@@ -46,6 +47,52 @@ export function plaidFailure(err: unknown) {
 }
 
 /* ---------------------------------------------------------------- link token */
+
+/**
+ * POST /api/plaid/link-token/update — repair an existing connection.
+ *
+ * Without this a bank that asks for a fresh login is unrecoverable: the sync
+ * fails forever, and the only control on the page is Disconnect, which throws
+ * away the Item and every transaction under it to fix a expired password.
+ *
+ * No separate "it worked" call is needed afterwards. A successful sync already
+ * sets the Item back to good, so repairing it and syncing is the whole repair.
+ */
+plaid.post("/link-token/update", async (c) => {
+  const { db, ready, close } = getDb(c.env);
+  try {
+    await ready;
+    const auth = await requireUser(c, db);
+    if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+
+    let itemId: unknown;
+    try { ({ itemId } = await c.req.json()); }
+    catch { return c.json({ error: "bad_request", reason: "body must be JSON" }, 400); }
+    if (typeof itemId !== "string" || !itemId) {
+      return c.json({ error: "bad_request", reason: "itemId is required" }, 400);
+    }
+
+    // Joined on the user, so an id from somewhere else matches nothing rather
+    // than handing back a link token onto a stranger's bank.
+    const [item] = await db
+      .select()
+      .from(items)
+      .where(and(eq(items.id, itemId), eq(items.userId, auth.user.id)));
+    if (!item) return c.json({ error: "not_found" }, 404);
+
+    try {
+      const token = await openToken(c.env, item.accessTokenCiphertext, item.accessTokenIv);
+      const { link_token, expiration } = await createUpdateLinkToken(
+        c.env, auth.user.clerkUserId, token,
+      );
+      return c.json({ linkToken: link_token, expiration, institution: item.institutionName });
+    } catch (err) {
+      return c.json(plaidFailure(err), 502);
+    }
+  } finally {
+    c.executionCtx.waitUntil(close());
+  }
+});
 
 plaid.post("/link-token", async (c) => {
   const { db, ready, close } = getDb(c.env);
