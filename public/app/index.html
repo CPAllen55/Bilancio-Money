@@ -752,14 +752,24 @@
   /* The stacked year, and the handles on it. touch-action:none is what lets a
      finger drag a segment instead of scrolling the page. */
   .bg-svg{ display:block; margin-top:10px; touch-action:none; }
-  .bg-seg{ cursor:ns-resize; }
+  /* The block lights up in its own colour rather than a generic highlight, so
+     a lit block still reads as the category it belongs to. --seg carries the
+     fill, which an SVG attribute cannot hand to a CSS filter on its own. */
+  .bg-seg{ cursor:ns-resize; transition:filter .12s ease; }
   .bg-seg.past{ opacity:.42; }
   .bg-seg.empty{ opacity:.16; }
-  .bg-seg:hover{ stroke:var(--ink); stroke-width:1.2; }
-  .bg-seg:focus{ outline:none; stroke:var(--ink); stroke-width:1.8; }
-  .bg-svg.dragging .bg-seg:not(.on){ opacity:.3; }
-  .bg-svg.dragging .bg-seg.on{ opacity:1; stroke:var(--ink); stroke-width:1.4; }
+  .bg-seg:hover{ stroke:var(--ink); stroke-width:1.2;
+                 filter:drop-shadow(0 0 4px var(--seg)); }
+  .bg-seg:focus{ outline:none; stroke:var(--ink); stroke-width:1.8;
+                 filter:drop-shadow(0 0 5px var(--seg)); }
+  .bg-svg.dragging .bg-seg:not(.on){ opacity:.28; filter:none; }
+  .bg-svg.dragging .bg-seg.on{ opacity:1; stroke:var(--ink); stroke-width:1.4;
+    filter:drop-shadow(0 0 5px var(--seg)) drop-shadow(0 0 13px var(--seg)); }
   .bg-mlab{ font-family:var(--font-num); font-size:9px; fill:var(--muted); }
+  /* The month's total, above its column. Dimmed until something is happening
+     to that column, so twelve numbers do not compete with the bars. */
+  .bg-total{ font-family:var(--font-num); font-size:9.5px; fill:var(--muted); }
+  .bg-total.on{ fill:var(--ink); font-weight:600; }
   .bg-legend{ display:flex; flex-wrap:wrap; gap:5px 14px; margin-top:9px; }
   .bg-key{ display:inline-flex; align-items:center; gap:5px; font-size:11.5px;
            color:var(--ink-soft); }
@@ -767,6 +777,14 @@
   .bg-cap{ font-family:var(--font-num); font-size:11.5px; color:var(--muted);
            margin-top:7px; min-height:16px; }
   .bg-cap.live{ color:var(--ink); }
+
+  /* The readout that follows the block being moved. Same box as the chart
+     tooltip everywhere else, with a line for the change so far. */
+  .bg-tip{ z-index:11; }
+  .bg-delta{ font-family:var(--font-num); font-size:12px; margin-top:5px; }
+  .bg-delta.up{ color:var(--coral); }
+  .bg-delta.down{ color:var(--mint); }
+  .bg-from{ font-size:11.5px; color:var(--muted); margin-top:2px; }
 
   .charttip{ position:fixed; z-index:9; pointer-events:none;
              min-width:172px; padding:11px 14px 12px;
@@ -3632,7 +3650,8 @@ function drawBudgeting() {
       '</div>' +
       (shown.length
         ? bgChart(shown, p.slug) + bgLegend(shown) +
-          '<div class="bg-cap">Drag any block up or down to change that month.</div>'
+          '<div class="bg-cap">Drag any block up or down to change that month' +
+          ' — or tab to the chart and use the arrow keys.</div>'
         : '') +
       '<div class="bg-kids">' + kids.map(bgLeaf).join('') + '</div>' +
     '</div>';
@@ -3711,7 +3730,9 @@ function bgMonths(row, plan) {
  * Months already gone are dimmed but not locked, because a plan for a month
  * that has happened is still what the Tracker measures against.
  */
-const BG_W = 720, BG_H = 176, BG_PL = 2, BG_PT = 6, BG_PB = 18;
+/* The top padding is where the monthly totals sit; the plot keeps the height
+   it had rather than losing 16 pixels to them. */
+const BG_W = 720, BG_H = 192, BG_PL = 2, BG_PT = 22, BG_PB = 18;
 const BG_PLOT = BG_H - BG_PT - BG_PB;
 /* A block has to be big enough to get hold of, so a small one is drawn at a
    floor rather than at its true height, and a month with nothing in it still
@@ -3769,18 +3790,28 @@ function bgChart(kids, parentSlug) {
       const v = plans[k][m];
       const h = v > 0 ? Math.max(BG_MIN_SEG, (v / hi) * BG_PLOT) : BG_MIN_SEG;
       y -= h;
+      const fill = themed(r.slug, r.colour);
       svg += '<rect class="bg-seg' + (v > 0 ? '' : ' empty') + (past ? ' past' : '') +
         '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) +
-        '" height="' + h.toFixed(1) + '" rx="1.5" fill="' + themed(r.slug, r.colour) + '" ' +
+        '" height="' + h.toFixed(1) + '" rx="1.5" fill="' + fill + '" ' +
+        'style="--seg:' + fill + '" ' +
         'data-seg="' + escapeHtml(r.slug) + '" data-month="' + m + '" ' +
-        'tabindex="0" role="slider" aria-valuemin="0" ' +
+        // One tab stop per chart, not one per block: forty-eight stops in a
+        // card, times a dozen cards, is a page nobody can tab through. The
+        // arrow keys move between blocks once inside.
+        'tabindex="' + (i === 0 && k === 0 ? '0' : '-1') + '" ' +
+        'role="slider" aria-valuemin="0" ' +
         'aria-valuenow="' + Math.round(v / 100) + '" ' +
         'aria-valuetext="' + escapeHtml(money(v)) + '" ' +
         'aria-label="' + escapeHtml(r.label) + ', ' + bgData.labels[i] + '"></rect>';
     });
-    svg += '<text class="bg-mlab" x="' + (BG_PL + band * i + band / 2).toFixed(1) +
-      '" y="' + (BG_H - 5) + '" text-anchor="middle">' +
-      bgData.labels[i].slice(0, 1) + '</text>';
+    const mid = (BG_PL + band * i + band / 2).toFixed(1);
+    const total = kids.reduce((s, r, k) => s + plans[k][m], 0);
+    svg += '<text class="bg-total" data-total="' + m + '" x="' + mid +
+      '" y="' + bgTotalY(y).toFixed(1) + '" text-anchor="middle">' +
+      escapeHtml(money0(total)) + '</text>' +
+      '<text class="bg-mlab" x="' + mid + '" y="' + (BG_H - 5) +
+      '" text-anchor="middle">' + bgData.labels[i].slice(0, 1) + '</text>';
   });
   return svg + '</svg>';
 }
@@ -3806,8 +3837,10 @@ function bgFit(svg) {
 
   bgData.months.forEach((m) => {
     let y = BG_PT + BG_PLOT;
+    let total = 0;
     rows.forEach((r, k) => {
       const v = plans[k][m];
+      total += v;
       const h = v > 0 ? Math.max(BG_MIN_SEG, (v / hi) * BG_PLOT) : BG_MIN_SEG;
       y -= h;
       const rect = svg.querySelector('rect[data-seg="' + CSS.escape(r.slug) +
@@ -3819,23 +3852,77 @@ function bgFit(svg) {
       rect.setAttribute('aria-valuetext', money(v));
       rect.classList.toggle('empty', !(v > 0));
     });
+    const lab = svg.querySelector('text[data-total="' + m + '"]');
+    if (lab) {
+      lab.textContent = money0(total);
+      lab.setAttribute('y', bgTotalY(y).toFixed(1));
+      lab.classList.toggle('on', !!(bgDrag && bgDrag.svg === svg && bgDrag.month === m));
+    }
   });
 }
 
-/** The line under a chart: what is being pointed at, and what it costs. */
-function bgCaption(svg, text, live) {
-  const cap = svg.parentNode && svg.parentNode.querySelector('.bg-cap');
-  if (!cap) return;
-  cap.textContent = text || 'Drag any block up or down to change that month.';
-  cap.classList.toggle('live', !!live);
+/* Just clear of the column, and never off the top of the drawing. */
+function bgTotalY(columnTop) {
+  return Math.max(11, columnTop - 6);
 }
 
-function bgSegText(row, month) {
+/* The readout that follows the block being moved.
+ *
+ * It borrows the chart tooltip's styling so it reads as the same object as the
+ * box on Trend and on the Overview, but it is a separate element with its own
+ * listeners. That one hides itself on any click and whenever the pointer is
+ * over something without a data-tip, and a drag is both of those things.
+ */
+let bgTipEl = null;
+
+function bgTip() {
+  if (!bgTipEl) {
+    bgTipEl = document.createElement('div');
+    bgTipEl.className = 'charttip bg-tip';
+    bgTipEl.hidden = true;
+    document.body.appendChild(bgTipEl);
+    window.addEventListener('scroll', () => { bgTipEl.hidden = true; }, true);
+  }
+  return bgTipEl;
+}
+
+/* start is where the block was when it was picked up, or null when nothing is
+   being dragged — the difference decides whether this is a reading or a
+   running commentary. */
+function bgTipShow(row, month, start, x, y) {
+  const el = bgTip();
   const i = bgData.months.indexOf(month);
   const v = bgPlanOf(row)[month];
-  return row.label + ' · ' + (i >= 0 ? bgData.labels[i] : month) + ' · ' + money(v) +
-    (row.pinned[month] !== undefined ? ' (pinned)' : '');
+  const moved = (start === null || start === undefined) ? 0 : v - start;
+
+  el.innerHTML =
+    '<div class="ct-head">' + escapeHtml(row.label) +
+      '<span class="ct-month">' + escapeHtml(bgData.labels[i] || month) + '</span></div>' +
+    '<div class="ct-amount">' + money(v) + '</div>' +
+    (moved
+      // Up is more spending, so up is the unwelcome direction and takes the
+      // colour that means so everywhere else on the page.
+      ? '<div class="bg-delta ' + (moved > 0 ? 'up' : 'down') + '">' +
+          (moved > 0 ? '▲ +' : '▼ −') + money(Math.abs(moved)) + '</div>' +
+        '<div class="bg-from">was ' + money(start) + '</div>'
+      : '<div class="ct-share">' +
+          (row.pinned[month] !== undefined ? 'Pinned · drag to change'
+                                           : 'Drag to change this month') + '</div>');
+  el.hidden = false;
+  bgTipAt(x, y);
 }
+
+/* Beside the pointer, flipped where it would run off the right, and above it
+   rather than under the hand holding the block. */
+function bgTipAt(x, y) {
+  const el = bgTip();
+  let left = x + 16;
+  if (left + el.offsetWidth > innerWidth - 8) left = x - el.offsetWidth - 16;
+  el.style.left = Math.max(8, left) + 'px';
+  el.style.top = Math.max(8, y - el.offsetHeight - 14) + 'px';
+}
+
+function bgTipHide() { if (bgTipEl) bgTipEl.hidden = true; }
 
 /* Saved after a pause, not on every keystroke. The figure on screen is already
    right — this only persists it, so there is nothing to wait for.
@@ -4003,20 +4090,31 @@ $('bg-list').addEventListener('pointerdown', (e) => {
   try { seg.setPointerCapture(e.pointerId); } catch (err) { /* older engines */ }
   svg.classList.add('dragging');
   seg.classList.add('on');
-  bgCaption(svg, bgSegText(row, month), true);
+  // Lights the month's total as well as the block, so the number being moved
+  // towards is as obvious as the one being moved.
+  bgFit(svg);
+  bgTipShow(row, month, start, e.clientX, e.clientY);
 });
 
 $('bg-list').addEventListener('pointermove', (e) => {
-  if (!bgDrag) return;
+  if (!bgDrag) {
+    // Not dragging: the readout still follows a hovered block.
+    const over = bgSeg(e);
+    if (over) bgTipAt(e.clientX, e.clientY); else bgTipHide();
+    return;
+  }
   const d = bgDrag;
   const up = (d.pointerY - e.clientY) / d.perUnit;      // SVG units; up is more
   let v = Math.round(d.start + up * (d.hi / BG_PLOT));
   v = Math.max(0, Math.min(v, Math.max(0, d.hi - d.others)));
-  if (v === bgPlanOf(d.row)[d.month]) return;
-  d.row.pinned[d.month] = v;
-  d.moved = true;
-  bgLive();
-  bgCaption(d.svg, bgSegText(d.row, d.month), true);
+  if (v !== bgPlanOf(d.row)[d.month]) {
+    d.row.pinned[d.month] = v;
+    d.moved = true;
+    bgLive();
+  }
+  // Outside the guard above: at the top and bottom stops the figure holds
+  // still, and a box that froze with it would read as a dropped gesture.
+  bgTipShow(d.row, d.month, d.start, e.clientX, e.clientY);
 });
 
 function bgDragEnd(e) {
@@ -4026,7 +4124,8 @@ function bgDragEnd(e) {
   d.svg.classList.remove('dragging');
   d.seg.classList.remove('on');
   try { d.seg.releasePointerCapture(e.pointerId); } catch (err) { /* already gone */ }
-  if (!d.moved) { bgCaption(d.svg, bgSegText(d.row, d.month), false); return; }
+  bgTipHide();
+  if (!d.moved) { bgFit(d.svg); return; }
   bgSave({ slug: d.row.slug, month: d.month, amount: d.row.pinned[d.month] });
   /* Only now: the scale is free to change again, and the row below needs its
      pinned styling and its count. A redraw here is safe and nowhere earlier. */
@@ -4039,34 +4138,79 @@ $('bg-list').addEventListener('pointerover', (e) => {
   const seg = bgDrag ? null : bgSeg(e);
   if (!seg) return;
   const row = bgData && bgData.categories.find(r => r.slug === seg.dataset.seg);
-  if (row) bgCaption(seg.ownerSVGElement, bgSegText(row, seg.dataset.month), false);
+  if (row) bgTipShow(row, seg.dataset.month, null, e.clientX, e.clientY);
 });
 
 $('bg-list').addEventListener('pointerout', (e) => {
-  const seg = bgDrag ? null : bgSeg(e);
-  if (seg) bgCaption(seg.ownerSVGElement, '', false);
+  if (!bgDrag && bgSeg(e)) bgTipHide();
 });
 
-/* The same edit without a pointer, because a bar you can only reach by dragging
-   is a bar some people cannot reach at all. Ten dollars a step, a hundred with
-   Shift, and Home empties the month. */
+// A block reached by keyboard gets the same box, anchored to itself.
+$('bg-list').addEventListener('focusout', (e) => { if (bgSeg(e)) bgTipHide(); });
+
+/* Moves focus within a chart and keeps the single tab stop on whatever was
+   last used, so tabbing back returns to where the reader was. */
+function bgFocusSeg(svg, slug, month) {
+  const next = svg.querySelector('rect[data-seg="' + CSS.escape(slug) +
+    '"][data-month="' + month + '"]');
+  if (!next) return null;
+  svg.querySelectorAll('.bg-seg').forEach(s => s.setAttribute('tabindex', '-1'));
+  next.setAttribute('tabindex', '0');
+  next.focus();
+  return next;
+}
+
+/* The same edits without a pointer, because a control you can only reach by
+   dragging is one some people cannot reach at all.
+ *
+ *   up / down      ten dollars, a hundred with Shift
+ *   left / right   the month either side
+ *   page up/down   the subcategory above or below in the stack
+ *   delete         drop the pin and go back to what history says
+ */
 $('bg-list').addEventListener('keydown', (e) => {
   const seg = bgSeg(e);
   if (!seg) return;
+  const svg = seg.ownerSVGElement;
   const row = bgData && bgData.categories.find(r => r.slug === seg.dataset.seg);
-  if (!row) return;
+  if (!svg || !row) return;
   const month = seg.dataset.month;
+
+  // Moving, rather than changing.
+  const slugs = (svg.dataset.kids || '').split(',').filter(Boolean);
+  const mi = bgData.months.indexOf(month), ki = slugs.indexOf(row.slug);
+  let to = null;
+  if (e.key === 'ArrowLeft'  && mi > 0) to = [slugs[ki], bgData.months[mi - 1]];
+  if (e.key === 'ArrowRight' && mi < bgData.months.length - 1) to = [slugs[ki], bgData.months[mi + 1]];
+  // The stack is drawn bottom-up, so Page Up walks towards the end of the list.
+  if (e.key === 'PageUp'   && ki < slugs.length - 1) to = [slugs[ki + 1], month];
+  if (e.key === 'PageDown' && ki > 0)                to = [slugs[ki - 1], month];
+  if (to) {
+    e.preventDefault();
+    const moved = bgFocusSeg(svg, to[0], to[1]);
+    const r2 = bgData.categories.find(r => r.slug === to[0]);
+    if (moved && r2) {
+      const at = moved.getBoundingClientRect();
+      bgTipShow(r2, to[1], null, at.left + at.width / 2, at.top);
+    }
+    return;
+  }
+
+  // Changing.
   const now = bgPlanOf(row)[month];
-  let next = null;
+  let next = null, unpin = false;
   if (e.key === 'ArrowUp')   next = now + (e.shiftKey ? 10000 : 1000);
   if (e.key === 'ArrowDown') next = now - (e.shiftKey ? 10000 : 1000);
-  if (e.key === 'Home')      next = 0;
-  if (next === null) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') unpin = true;
+  if (next === null && !unpin) return;
   e.preventDefault();
-  row.pinned[month] = Math.max(0, next);
+
+  if (unpin) delete row.pinned[month];
+  else row.pinned[month] = Math.max(0, next);
   bgLive();
-  bgCaption(seg.ownerSVGElement, bgSegText(row, month), true);
-  bgSave({ slug: row.slug, month: month, amount: row.pinned[month] });
+  const at = seg.getBoundingClientRect();
+  bgTipShow(row, month, unpin ? null : now, at.left + at.width / 2, at.top);
+  bgSave({ slug: row.slug, month: month, amount: unpin ? null : row.pinned[month] });
 });
 
 /* ------------------------------------------------------- budget vs actual -- */
