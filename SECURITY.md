@@ -111,9 +111,16 @@ someone else matches no rows rather than returning their data.
 **Administrative access** is limited to the single Member, protected by
 multi-factor authentication on Cloudflare, Neon, Clerk, Plaid and GitHub.
 
-**Database roles.** The application connects with a dedicated role rather than a
-superuser. Schema migrations are run separately, from a developer machine,
-against an explicitly named target.
+**Database roles.** The application connects as a dedicated role created for it
+rather than as the database owner. Schema migrations are run separately, from a
+developer machine, against an explicitly named target — production is never the
+default.
+
+Stated precisely, because it is a real gap: that same role is used for both the
+application and its migrations, so it carries DDL rights the running application
+never needs. Splitting it — a read-write role for the Worker, a separate one for
+migrations — is a planned change, and would mean that leaked Worker credentials
+could not drop a table.
 
 ## 7. Secure development
 
