@@ -44,24 +44,22 @@
   // A figure up to a minute stale there is invisible; the same staleness on a
   // control is a bug.
   //
-  // To create it, in PowerShell, on ONE line — the connection string is the
-  // Neon PRODUCTION branch URL, the same database the binding above points at.
-  // Caching is on by default, which is the whole point, so pass no flag:
+  // Both point at the Neon PRODUCTION branch. If either is ever recreated, use
+  // `npm run hyperdrive:cached`, which reads the connection string from .env
+  // rather than asking anybody to paste one past a shell — and answer N when
+  // wrangler offers to edit this file, because it writes the binding as
+  // HYPERDRIVE, which would collide with the entry above.
   //
-  //   npx wrangler hyperdrive create bilancio-cached --connection-string="postgresql://..."
-  //
-  // Paste the id it prints over PLACEHOLDER below and uncomment the block.
-  // Until then the binding is simply absent, getDb falls back to HYPERDRIVE,
-  // and behaviour is exactly what it is today.
+  // Config ids are not secrets; they name a config, they do not open it.
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
       "id": "bcda6d421eb84977a4ca51385c6018fb"
+    },
+    {
+      "binding": "HYPERDRIVE_CACHED",
+      "id": "f5a8039ada524930b74a21390f1aae5e"
     }
-    // {
-    //   "binding": "HYPERDRIVE_CACHED",
-    //   "id": "PLACEHOLDER"
-    // }
   ],
 
   // Clerk publishable keys are public by design — they ship in the front end

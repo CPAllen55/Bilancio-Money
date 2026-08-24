@@ -16,6 +16,8 @@
  */
 import "dotenv/config";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const NAME = "bilancio-cached";
 
@@ -39,13 +41,29 @@ const shown = url.replace(/:[^:@/]+@/, ":****@");
 console.log(`Creating Hyperdrive config "${NAME}", caching ON, pointed at:`);
 console.log(`  ${shown}\n`);
 
-/* windows needs the .cmd shim, and shell:true with it — but the connection
-   string still travels as its own argv entry, so it is never parsed. */
-const isWindows = process.platform === "win32";
+/* Node is run against wrangler's own entry point rather than the npx shim.
+ *
+ * The obvious version of this — spawn npx.cmd with shell:true, because Windows
+ * cannot execute a .cmd otherwise — undoes the entire point of the file. With
+ * shell:true Node concatenates the arguments back into a command line and hands
+ * it to cmd.exe, so the connection string is parsed by a shell after all, and
+ * Node says so: "arguments are not escaped, only concatenated". A password
+ * containing & would be cut in half there.
+ *
+ * Going straight to the .js needs no shim and therefore no shell, on any
+ * platform, and the string stays one argument from here to wrangler. */
+const wrangler = fileURLToPath(
+  new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url),
+);
+if (!existsSync(wrangler)) {
+  console.error("wrangler is not installed — run npm install first.");
+  process.exit(1);
+}
+
 const child = spawn(
-  isWindows ? "npx.cmd" : "npx",
-  ["wrangler", "hyperdrive", "create", NAME, "--connection-string", url],
-  { stdio: "inherit", shell: isWindows },
+  process.execPath,
+  [wrangler, "hyperdrive", "create", NAME, "--connection-string", url],
+  { stdio: "inherit" },
 );
 
 child.on("exit", (code) => {
