@@ -749,6 +749,25 @@
   .bg-mon input.pin{ border-color:var(--mint-dim); color:var(--mint); }
   .bg-reset{ font-size:11px; padding:4px 8px; }
 
+  /* The stacked year, and the handles on it. touch-action:none is what lets a
+     finger drag a segment instead of scrolling the page. */
+  .bg-svg{ display:block; margin-top:10px; touch-action:none; }
+  .bg-seg{ cursor:ns-resize; }
+  .bg-seg.past{ opacity:.42; }
+  .bg-seg.empty{ opacity:.16; }
+  .bg-seg:hover{ stroke:var(--ink); stroke-width:1.2; }
+  .bg-seg:focus{ outline:none; stroke:var(--ink); stroke-width:1.8; }
+  .bg-svg.dragging .bg-seg:not(.on){ opacity:.3; }
+  .bg-svg.dragging .bg-seg.on{ opacity:1; stroke:var(--ink); stroke-width:1.4; }
+  .bg-mlab{ font-family:var(--font-num); font-size:9px; fill:var(--muted); }
+  .bg-legend{ display:flex; flex-wrap:wrap; gap:5px 14px; margin-top:9px; }
+  .bg-key{ display:inline-flex; align-items:center; gap:5px; font-size:11.5px;
+           color:var(--ink-soft); }
+  .bg-key i{ width:9px; height:9px; border-radius:2px; display:inline-block; flex:none; }
+  .bg-cap{ font-family:var(--font-num); font-size:11.5px; color:var(--muted);
+           margin-top:7px; min-height:16px; }
+  .bg-cap.live{ color:var(--ink); }
+
   .charttip{ position:fixed; z-index:9; pointer-events:none;
              min-width:172px; padding:11px 14px 12px;
              background:var(--bg-panel); border:1px solid var(--hair-strong);
@@ -3537,6 +3556,7 @@ $('net-range').addEventListener('change', () => { netSel = null; refresh(); });
 let bgData = null;
 const bgOpen = new Set();     // leaves showing their twelve months
 let bgSaveTimer = null;
+let bgDrag = null;            // the segment under the pointer, mid-gesture
 
 async function renderBudgeting() {
   bgData = await authed('/api/budget');
@@ -3600,10 +3620,9 @@ function drawBudgeting() {
   host.innerHTML = parents.map(p => {
     const kids = bgData.categories.filter(r => r.parentSlug === p.slug);
     if (!kids.length) return '';
-    const perMonth = bgData.months.map(m =>
-      kids.reduce((s, r) => s + bgPlanOf(r)[m], 0));
-    const year = perMonth.reduce((a, b) => a + b, 0);
+    const year = bgYearOf(kids);
     if (!year) return '';
+    const shown = bgShownKids(p.slug);
 
     return '<div class="bg-card">' +
       '<div class="bg-head">' +
@@ -3611,7 +3630,10 @@ function drawBudgeting() {
         '<b>' + escapeHtml(p.label) + '</b>' +
         '<span class="bg-annual">' + money(year) + ' a year</span>' +
       '</div>' +
-      bgChart(perMonth, p.slug) +
+      (shown.length
+        ? bgChart(shown, p.slug) + bgLegend(shown) +
+          '<div class="bg-cap">Drag any block up or down to change that month.</div>'
+        : '') +
       '<div class="bg-kids">' + kids.map(bgLeaf).join('') + '</div>' +
     '</div>';
   }).join('') || '<p class="empty">Nothing to plan yet — link a bank and sync some history.</p>';
@@ -3674,46 +3696,178 @@ function bgMonths(row, plan) {
     '</div>';
 }
 
-/* The year at a glance. Months already gone are drawn from what was actually
-   spent, so the plan ahead is read against the record behind it rather than
-   against nothing. */
-function bgChart(perMonth, slug) {
-  const W = 720, H = 96, PL = 2, PB = 16;
-  const plotH = H - PB;
-  const hi = Math.max.apply(null, perMonth.concat([1]));
-  const band = (W - PL * 2) / perMonth.length;
-  const barW = Math.min(38, band * 0.62);
-  const nowIdx = bgData.months.indexOf(bgData.currentMonth);
+/* The year at a glance, broken out by subcategory and editable by hand.
+ *
+ * A column is one month. It is stacked by subcategory rather than drawn as a
+ * single parent total because the parent figure is only ever the sum of its
+ * children — the children are the part there is a decision to make about, and
+ * a solid bar hides which one is doing the damage.
+ *
+ * Any block can be dragged. Doing so pins that subcategory in that month: the
+ * same edit the month boxes below make, reached the way people actually think
+ * about a budget, which is "that one is too big". The savings figure at the
+ * top moves as the block moves.
+ *
+ * Months already gone are dimmed but not locked, because a plan for a month
+ * that has happened is still what the Tracker measures against.
+ */
+const BG_W = 720, BG_H = 176, BG_PL = 2, BG_PT = 6, BG_PB = 18;
+const BG_PLOT = BG_H - BG_PT - BG_PB;
+/* A block has to be big enough to get hold of, so a small one is drawn at a
+   floor rather than at its true height, and a month with nothing in it still
+   gets a faint slab — otherwise a category sitting at zero could never be
+   dragged up off the axis. The floor costs a few pixels of accuracy on the
+   smallest blocks; being unable to grab them costs the whole feature. */
+const BG_MIN_SEG = 3;
+/* Room above the tallest month to drag into. The scale is frozen for the
+   length of a gesture so the block tracks the pointer exactly, and re-fits
+   once it is let go. */
+const BG_HEADROOM = 1.15;
 
-  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
-    '" preserveAspectRatio="none" role="img" aria-hidden="true" style="margin-top:8px">';
-  perMonth.forEach((v, i) => {
-    const h = (v / hi) * (plotH - 6);
-    const x = PL + band * i + (band - barW) / 2;
+/** The subcategories worth drawing: those with anything planned this year. */
+function bgShownKids(parentSlug) {
+  return bgData.categories.filter(r => r.parentSlug === parentSlug)
+    .filter(r => { const p = bgPlanOf(r); return bgData.months.some(m => p[m] > 0); });
+}
+
+function bgYearOf(rows) {
+  return rows.reduce((s, r) => {
+    const p = bgPlanOf(r);
+    return s + bgData.months.reduce((a, m) => a + p[m], 0);
+  }, 0);
+}
+
+function bgScaleOf(rows) {
+  let hi = 1;
+  for (const m of bgData.months) {
+    const total = rows.reduce((s, r) => s + bgPlanOf(r)[m], 0);
+    if (total > hi) hi = total;
+  }
+  return hi * BG_HEADROOM;
+}
+
+function bgChart(kids, parentSlug) {
+  const hi = bgScaleOf(kids);
+  const band = (BG_W - BG_PL * 2) / bgData.months.length;
+  const barW = Math.min(44, band * 0.66);
+  const nowIdx = bgData.months.indexOf(bgData.currentMonth);
+  const plans = kids.map(bgPlanOf);
+
+  /* The drawn order is recorded on the element. Re-fitting mid-drag walks that
+     same list rather than recomputing which children qualify, so a category
+     dragged down to zero cannot drop out of the stack under the pointer. */
+  let svg = '<svg class="bg-svg" viewBox="0 0 ' + BG_W + ' ' + BG_H + '" width="100%" height="' +
+    BG_H + '" preserveAspectRatio="none" data-parent="' + escapeHtml(parentSlug) +
+    '" data-hi="' + hi.toFixed(2) + '" data-kids="' +
+    escapeHtml(kids.map(r => r.slug).join(',')) + '">';
+
+  bgData.months.forEach((m, i) => {
+    const x = BG_PL + band * i + (band - barW) / 2;
     const past = nowIdx >= 0 && i < nowIdx;
-    svg += '<rect x="' + x.toFixed(1) + '" y="' + (plotH - h).toFixed(1) +
-      '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, h).toFixed(1) +
-      '" rx="2" fill="' + themed(slug, colourOf(slug)) + '" opacity="' + (past ? '.42' : '.92') + '"/>' +
-      '<text x="' + (PL + band * i + band / 2).toFixed(1) + '" y="' + (H - 4) +
-      '" text-anchor="middle" font-size="9" fill="var(--muted)">' +
+    let y = BG_PT + BG_PLOT;
+    kids.forEach((r, k) => {
+      const v = plans[k][m];
+      const h = v > 0 ? Math.max(BG_MIN_SEG, (v / hi) * BG_PLOT) : BG_MIN_SEG;
+      y -= h;
+      svg += '<rect class="bg-seg' + (v > 0 ? '' : ' empty') + (past ? ' past' : '') +
+        '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) +
+        '" height="' + h.toFixed(1) + '" rx="1.5" fill="' + themed(r.slug, r.colour) + '" ' +
+        'data-seg="' + escapeHtml(r.slug) + '" data-month="' + m + '" ' +
+        'tabindex="0" role="slider" aria-valuemin="0" ' +
+        'aria-valuenow="' + Math.round(v / 100) + '" ' +
+        'aria-valuetext="' + escapeHtml(money(v)) + '" ' +
+        'aria-label="' + escapeHtml(r.label) + ', ' + bgData.labels[i] + '"></rect>';
+    });
+    svg += '<text class="bg-mlab" x="' + (BG_PL + band * i + band / 2).toFixed(1) +
+      '" y="' + (BG_H - 5) + '" text-anchor="middle">' +
       bgData.labels[i].slice(0, 1) + '</text>';
   });
   return svg + '</svg>';
 }
 
+function bgLegend(kids) {
+  return '<div class="bg-legend">' + kids.map(r =>
+    '<span class="bg-key"><i style="background:' + themed(r.slug, r.colour) + '"></i>' +
+    escapeHtml(r.label) + '</span>').join('') + '</div>';
+}
+
+/* Geometry only, applied to the blocks already on screen. A redraw would
+   replace the element the pointer has captured and end the gesture, so nothing
+   is rebuilt during a drag — the same rects are moved. */
+function bgFit(svg) {
+  const slugs = (svg.dataset.kids || '').split(',').filter(Boolean);
+  const rows = slugs.map(s => bgData.categories.find(r => r.slug === s)).filter(Boolean);
+  /* Frozen only for the chart being dragged. Every other chart re-fits, so a
+     figure typed into a month box still rescales its own year. */
+  const frozen = !!(bgDrag && bgDrag.svg === svg);
+  const hi = (frozen ? Number(svg.dataset.hi) : bgScaleOf(rows)) || 1;
+  if (!frozen) svg.dataset.hi = hi.toFixed(2);
+  const plans = rows.map(bgPlanOf);
+
+  bgData.months.forEach((m) => {
+    let y = BG_PT + BG_PLOT;
+    rows.forEach((r, k) => {
+      const v = plans[k][m];
+      const h = v > 0 ? Math.max(BG_MIN_SEG, (v / hi) * BG_PLOT) : BG_MIN_SEG;
+      y -= h;
+      const rect = svg.querySelector('rect[data-seg="' + CSS.escape(r.slug) +
+        '"][data-month="' + m + '"]');
+      if (!rect) return;
+      rect.setAttribute('y', y.toFixed(1));
+      rect.setAttribute('height', h.toFixed(1));
+      rect.setAttribute('aria-valuenow', Math.round(v / 100));
+      rect.setAttribute('aria-valuetext', money(v));
+      rect.classList.toggle('empty', !(v > 0));
+    });
+  });
+}
+
+/** The line under a chart: what is being pointed at, and what it costs. */
+function bgCaption(svg, text, live) {
+  const cap = svg.parentNode && svg.parentNode.querySelector('.bg-cap');
+  if (!cap) return;
+  cap.textContent = text || 'Drag any block up or down to change that month.';
+  cap.classList.toggle('live', !!live);
+}
+
+function bgSegText(row, month) {
+  const i = bgData.months.indexOf(month);
+  const v = bgPlanOf(row)[month];
+  return row.label + ' · ' + (i >= 0 ? bgData.labels[i] : month) + ' · ' + money(v) +
+    (row.pinned[month] !== undefined ? ' (pinned)' : '');
+}
+
 /* Saved after a pause, not on every keystroke. The figure on screen is already
-   right — this only persists it, so there is nothing to wait for. */
+   right — this only persists it, so there is nothing to wait for.
+ *
+ * Edits queue by what they touch rather than by when they arrived. Resetting
+ * the timer and replacing a single pending body threw the earlier edit away,
+ * which was survivable while every change cost a deliberate keystroke and is
+ * not now: one drag across three months is three edits inside a second.
+ */
+const bgPending = new Map();
+
 function bgSave(body) {
+  bgPending.set(body.slug + '|' + (body.month || 'baseline'), body);
   clearTimeout(bgSaveTimer);
-  bgSaveTimer = setTimeout(async () => {
-    try {
+  bgSaveTimer = setTimeout(bgFlush, 450);
+}
+
+async function bgFlush() {
+  const queued = Array.from(bgPending.values());
+  bgPending.clear();
+  if (!queued.length) return;
+  try {
+    /* One at a time. The endpoint reads the row, amends it and writes it back,
+       so two overlapping writes to the same category would lose one of them. */
+    for (const body of queued) {
       await authed('/api/budget', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      say($('bg-msg'), 'Saved.');
-    } catch (err) { say($('bg-msg'), err.message, 'bad'); }
-  }, 450);
+    }
+    say($('bg-msg'), queued.length > 1 ? 'Saved ' + queued.length + ' changes.' : 'Saved.');
+  } catch (err) { say($('bg-msg'), err.message, 'bad'); }
 }
 
 $('bg-list').addEventListener('input', (e) => {
@@ -3761,12 +3915,38 @@ function bgLive() {
   if (figs[0]) figs[0].textContent = money(t.incomeYear);
   if (figs[1]) figs[1].textContent = money(t.spendYear);
 
-  // Each leaf's annual figure, and its parent's, without touching the inputs.
+  // Each leaf's annual figure, without touching the inputs.
   for (const row of bgData.categories) {
     const plan = bgPlanOf(row);
     const year = bgData.months.reduce((s, m) => s + plan[m], 0);
     const el = $('bg-list').querySelector('.bg-leaf[data-slug="' + CSS.escape(row.slug) + '"] .bg-year');
     if (el) el.textContent = money(year);
+  }
+
+  /* The charts. Mid-gesture only the one being dragged is touched: the others
+     cannot have changed, and refitting twelve of them on every pointermove is
+     work nobody sees. */
+  const charts = bgDrag ? [bgDrag.svg] : $('bg-list').querySelectorAll('.bg-svg');
+  for (const svg of charts) bgFit(svg);
+
+  // Each parent's annual figure, from the children actually drawn above it.
+  for (const card of $('bg-list').querySelectorAll('.bg-card')) {
+    const svg = card.querySelector('.bg-svg');
+    const el = card.querySelector('.bg-annual');
+    if (!svg || !el) continue;
+    const rows = bgData.categories.filter(r => r.parentSlug === svg.dataset.parent);
+    el.textContent = money(bgYearOf(rows)) + ' a year';
+  }
+
+  /* The month boxes, where they are open. Dragging a block and typing in a box
+     are two ways to make the same edit, so one has to show the other's work —
+     except in the box being typed into, which would fight the caret. */
+  for (const inp of $('bg-list').querySelectorAll('input[data-pin]')) {
+    if (inp === document.activeElement) continue;
+    const row = bgData.categories.find(r => r.slug === inp.dataset.pin);
+    if (!row) continue;
+    inp.value = (bgPlanOf(row)[inp.dataset.month] / 100).toFixed(0);
+    inp.classList.toggle('pin', row.pinned[inp.dataset.month] !== undefined);
   }
 }
 
@@ -3776,6 +3956,117 @@ $('bg-list').addEventListener('click', (e) => {
   const slug = tog.dataset.bgOpen;
   if (bgOpen.has(slug)) bgOpen.delete(slug); else bgOpen.add(slug);
   drawBudgeting();
+});
+
+/* Dragging a block.
+ *
+ * The scale is read once, when the gesture starts, and held for its duration.
+ * A chart that refitted while the pointer was down would shrink the block away
+ * from the finger holding it; everything refits on release instead.
+ *
+ * Pointer capture keeps the gesture alive after it leaves the block — and, with
+ * touch-action:none on the chart, stops a touch scrolling the page instead of
+ * moving the bar.
+ */
+const bgSeg = (e) => (e.target && e.target.closest) ? e.target.closest('.bg-seg') : null;
+
+$('bg-list').addEventListener('pointerdown', (e) => {
+  if (e.button > 0) return;
+  const seg = bgSeg(e);
+  if (!seg) return;
+  const svg = seg.ownerSVGElement;
+  const row = bgData && bgData.categories.find(r => r.slug === seg.dataset.seg);
+  if (!svg || !row) return;
+
+  e.preventDefault();
+  const month = seg.dataset.month;
+  const box = svg.getBoundingClientRect();
+  const start = bgPlanOf(row)[month];
+  const column = (svg.dataset.kids || '').split(',').filter(Boolean).reduce((s, sl) => {
+    const r = bgData.categories.find(x => x.slug === sl);
+    return s + (r ? bgPlanOf(r)[month] : 0);
+  }, 0);
+
+  bgDrag = {
+    seg: seg, svg: svg, row: row, month: month,
+    pointerY: e.clientY,
+    start: start,
+    /* What the rest of the stack occupies. Holding it lets the column be kept
+       inside the plot without the frozen scale having to move. */
+    others: column - start,
+    hi: Number(svg.dataset.hi) || 1,
+    /* The chart is drawn at its own height, but CSS is entitled to disagree,
+       so the conversion is measured rather than assumed. */
+    perUnit: (box.height || BG_H) / BG_H,
+    moved: false,
+  };
+  try { seg.setPointerCapture(e.pointerId); } catch (err) { /* older engines */ }
+  svg.classList.add('dragging');
+  seg.classList.add('on');
+  bgCaption(svg, bgSegText(row, month), true);
+});
+
+$('bg-list').addEventListener('pointermove', (e) => {
+  if (!bgDrag) return;
+  const d = bgDrag;
+  const up = (d.pointerY - e.clientY) / d.perUnit;      // SVG units; up is more
+  let v = Math.round(d.start + up * (d.hi / BG_PLOT));
+  v = Math.max(0, Math.min(v, Math.max(0, d.hi - d.others)));
+  if (v === bgPlanOf(d.row)[d.month]) return;
+  d.row.pinned[d.month] = v;
+  d.moved = true;
+  bgLive();
+  bgCaption(d.svg, bgSegText(d.row, d.month), true);
+});
+
+function bgDragEnd(e) {
+  if (!bgDrag) return;
+  const d = bgDrag;
+  bgDrag = null;
+  d.svg.classList.remove('dragging');
+  d.seg.classList.remove('on');
+  try { d.seg.releasePointerCapture(e.pointerId); } catch (err) { /* already gone */ }
+  if (!d.moved) { bgCaption(d.svg, bgSegText(d.row, d.month), false); return; }
+  bgSave({ slug: d.row.slug, month: d.month, amount: d.row.pinned[d.month] });
+  /* Only now: the scale is free to change again, and the row below needs its
+     pinned styling and its count. A redraw here is safe and nowhere earlier. */
+  drawBudgeting();
+}
+$('bg-list').addEventListener('pointerup', bgDragEnd);
+$('bg-list').addEventListener('pointercancel', bgDragEnd);
+
+$('bg-list').addEventListener('pointerover', (e) => {
+  const seg = bgDrag ? null : bgSeg(e);
+  if (!seg) return;
+  const row = bgData && bgData.categories.find(r => r.slug === seg.dataset.seg);
+  if (row) bgCaption(seg.ownerSVGElement, bgSegText(row, seg.dataset.month), false);
+});
+
+$('bg-list').addEventListener('pointerout', (e) => {
+  const seg = bgDrag ? null : bgSeg(e);
+  if (seg) bgCaption(seg.ownerSVGElement, '', false);
+});
+
+/* The same edit without a pointer, because a bar you can only reach by dragging
+   is a bar some people cannot reach at all. Ten dollars a step, a hundred with
+   Shift, and Home empties the month. */
+$('bg-list').addEventListener('keydown', (e) => {
+  const seg = bgSeg(e);
+  if (!seg) return;
+  const row = bgData && bgData.categories.find(r => r.slug === seg.dataset.seg);
+  if (!row) return;
+  const month = seg.dataset.month;
+  const now = bgPlanOf(row)[month];
+  let next = null;
+  if (e.key === 'ArrowUp')   next = now + (e.shiftKey ? 10000 : 1000);
+  if (e.key === 'ArrowDown') next = now - (e.shiftKey ? 10000 : 1000);
+  if (e.key === 'Home')      next = 0;
+  if (next === null) return;
+  e.preventDefault();
+  row.pinned[month] = Math.max(0, next);
+  bgLive();
+  bgCaption(seg.ownerSVGElement, bgSegText(row, month), true);
+  bgSave({ slug: row.slug, month: month, amount: row.pinned[month] });
 });
 
 /* ------------------------------------------------------- budget vs actual -- */
