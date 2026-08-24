@@ -206,6 +206,32 @@ by string concatenation from user input.
 
 ## 10. Data retention and deletion
 
+### Retention
+
+Data is kept for as long as it is being used for the purpose it was collected
+for, and no longer. In practice that means while the account exists — a budget
+derived from history needs the history, and a two-year window is what the
+product is built around.
+
+| Data | Kept |
+|---|---|
+| Transactions, balances, accounts | While the account exists; deleted with it |
+| Plaid access tokens | While the bank is connected; destroyed on disconnect |
+| Categories, rules, budget settings | While the account exists |
+| Authentication identity | While the account exists, held by Clerk |
+| Waitlist email addresses | Until the person is invited or asks to be removed |
+| Request and error logs | The retention window of the platform, currently days |
+
+**Disconnecting a bank deletes its data immediately** — the item, its accounts
+and every transaction under it, by cascade — without waiting for the account to
+be closed. Categories and merchant rules survive, because they are the user’s
+own work rather than the bank’s data, and will be there if they reconnect.
+
+There is no archive, no cold storage and no analytics copy. When a row is
+deleted there is no second copy of it anywhere in our systems.
+
+### Deletion
+
 Users can **delete their account from inside the application**. Deletion:
 
 1. Revokes every bank connection at Plaid first, so no connection is left live
@@ -216,6 +242,11 @@ Users can **delete their account from inside the application**. Deletion:
 
 This is a hard delete, not a flag. If revocation at Plaid fails, nothing is
 deleted and the user is told, rather than being given a false confirmation.
+
+This section is reviewed annually with the rest of this policy, and whenever the
+data model changes. Its adequacy under applicable state privacy law is part of
+the outside legal review of the published privacy policy and terms, which is in
+progress at the time of writing.
 
 ## 11. Logging and monitoring
 
