@@ -702,6 +702,53 @@
     .mt-spot{ text-align:left; grid-column:1; }
   }
 
+/* ---- the plan ---- */
+  /* The savings figure is the reason anybody opens this tab, so it is the
+     largest thing on it and it moves while you type rather than after you
+     save. Everything below is in service of this number going up. */
+  .bg-hero{ display:flex; flex-wrap:wrap; align-items:flex-end; gap:26px 40px; }
+  .bg-big{ font-size:44px; line-height:1.05; font-weight:600; letter-spacing:-.02em;
+           font-family:var(--font-num); }
+  .bg-big.up{ color:var(--mint); } .bg-big.down{ color:var(--coral); }
+  .bg-sub{ font-size:13px; color:var(--ink-soft); margin-top:4px; }
+  .bg-side{ display:flex; gap:34px; margin-left:auto; }
+  .bg-fig{ font-family:var(--font-num); font-size:19px; }
+  .bg-fig.out{ color:var(--coral); }
+
+  .bg-card{ background:var(--surface); border:1px solid var(--hair); border-radius:6px;
+            padding:16px 18px; margin-top:14px; }
+  .bg-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .bg-head b{ font-size:14.5px; }
+  .bg-annual{ margin-left:auto; font-family:var(--font-num); font-size:13.5px; }
+  .bg-kids{ margin-top:12px; padding-top:10px; border-top:1px solid var(--hair); }
+
+  .bg-leaf{ display:grid; grid-template-columns:minmax(0,1fr) 128px 104px 30px;
+            gap:12px; align-items:center; padding:7px 0; }
+  .bg-leaf + .bg-leaf{ border-top:1px solid var(--hair); }
+  .bg-name{ font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bg-in{ font-family:var(--font-num); font-size:13px; width:100%; text-align:right;
+          padding:6px 9px; border-radius:6px; border:1px solid var(--hair-strong);
+          background:var(--field); color:var(--ink); }
+  .bg-in:focus{ outline:none; border-color:var(--mint-dim); }
+  .bg-in.moved{ border-color:var(--mint-dim); color:var(--mint); }
+  .bg-year{ font-family:var(--font-num); font-size:13px; text-align:right; color:var(--ink-soft); }
+  .bg-note{ font-family:var(--font-num); font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+
+  /* The twelve pins. Only shown for a leaf that has been opened, because most
+     categories never need one and a wall of inputs would say otherwise. */
+  .bg-months{ grid-column:1 / -1; display:grid; gap:6px; margin:8px 0 4px;
+              grid-template-columns:repeat(12, minmax(0,1fr)); }
+  @media (max-width:900px){ .bg-months{ grid-template-columns:repeat(6, minmax(0,1fr)); } }
+  @media (max-width:520px){ .bg-months{ grid-template-columns:repeat(3, minmax(0,1fr)); } }
+  .bg-mon{ display:flex; flex-direction:column; gap:3px; }
+  .bg-mon span{ font-family:var(--font-num); font-size:10px; letter-spacing:.06em;
+                text-transform:uppercase; color:var(--muted); text-align:center; }
+  .bg-mon input{ font-family:var(--font-num); font-size:11.5px; width:100%; text-align:center;
+                 padding:5px 2px; border-radius:5px; border:1px solid var(--hair);
+                 background:var(--bg-panel); color:var(--ink); }
+  .bg-mon input.pin{ border-color:var(--mint-dim); color:var(--mint); }
+  .bg-reset{ font-size:11px; padding:4px 8px; }
+
   .charttip{ position:fixed; z-index:9; pointer-events:none;
              min-width:172px; padding:11px 14px 12px;
              background:var(--bg-panel); border:1px solid var(--hair-strong);
@@ -1176,7 +1223,6 @@
       <button class="tab" data-view="trend">Trend</button>
       <button class="tab" data-view="net">Net Activity</button>
       <button class="tab" data-view="budgeting">Budgeting</button>
-      <button class="tab" data-view="budgeting-v2">Budgeting v2</button>
       <button class="tab" data-view="assets">Net Worth</button>
       <button class="tab" data-view="transactions">Transactions</button>
       <button class="tab" data-view="banks">Banks</button>
@@ -1268,27 +1314,15 @@
     </section>
 
     <section class="panel" id="v-budgeting">
-      <h2 class="view">How the budget is worked out</h2>
-      <p class="lede">Pick a method per category. A parent's choice applies to everything inside it until a child says otherwise. Each row shows what its method produces for this month, so the choice is made by looking rather than guessing.</p>
-      <div id="plan-list" class="bp-list"></div>
-      <p class="msg" id="plan-msg"></p>
-      <p class="fc-method" id="plan-note" style="margin-top:10px"></p>
-      <div class="card bp-legend">
-        <p class="eyebrow">The methods</p>
-        <dl class="bp-defs"></dl>
-      </div>
+      <h2 class="view">Your plan</h2>
+      <p class="lede">Worked out from what you actually spend, then yours to move. Lower a category and watch what it frees up — the figure at the top is planned income minus planned spending, and it changes as you type.</p>
+      <div class="card bg-hero" id="bg-hero"></div>
+      <div id="bg-list"></div>
+      <p class="msg" id="bg-msg"></p>
+      <p class="fc-method" id="bg-note" style="margin-top:14px"></p>
     </section>
 
-    <section class="panel" id="v-budgeting-v2">
-      <h2 class="view">Budgeting v2</h2>
-      <p class="lede">The same choice per category as before, but across the rest of the year rather than one month at a time. Each parent shows what its children add up to per month, with the methods you did not pick drawn behind as lines — so choosing between them is a matter of looking rather than guessing.</p>
-      <p class="bv2-note"><b>This is a workshop.</b> Nothing set here reaches the Tracker, the Overview tiles or the Trend budget — it is kept in its own table until the shape is right and it is adopted deliberately. The original Budgeting tab is still the one that counts.</p>
-      <div id="bv2-list"></div>
-      <p class="msg" id="bv2-msg"></p>
-      <p class="fc-method" id="bv2-note" style="margin-top:10px"></p>
-    </section>
-
-    <section class="panel" id="v-assets">
+        <section class="panel" id="v-assets">
       <h2 class="view">What you are worth</h2>
       <p class="lede">Everything you own against everything you owe, and how the gap between them has moved. The other views ask where the money went; this one asks what is left after all of it.</p>
       <div class="bar" style="padding-top:0">
@@ -1635,7 +1669,6 @@ async function refresh() {
     if (view === 'assets')       await renderAssets();
     if (view === 'tracker')      await renderBudgetView();
     if (view === 'budgeting')    await renderBudgeting();
-    if (view === 'budgeting-v2') await renderBudgetingV2();
     if (view === 'transactions') await renderTransactions();
     if (view === 'banks')        await renderBanks();
     say(msg, '');
@@ -3493,204 +3526,260 @@ $('net-range').addEventListener('change', () => { netSel = null; refresh(); });
 
 /* -------------------------------------------------------------- budgeting -- */
 
-/* Where the budget is decided, as opposed to the Tracker where it is judged.
+/* ------------------------------------------------------------------ plan -- */
+
+/* One method, and a plan you can move.
  *
- * Each parent picks how its budget is worked out and its children follow unless
- * they say otherwise — the same shape as the categories themselves, and the
- * same shape as how a person actually thinks: "average everything, except
- * holidays, which are seasonal".
- *
- * Every row shows what its current method produces for this month, because
- * choosing between "average" and "seasonal" is guesswork until you can see what
- * each one would give you.
+ * The arithmetic here deliberately mirrors applyOverride on the server, line
+ * for line: a baseline scales the shaped year, a pinned month replaces it
+ * outright. It is duplicated rather than fetched because the whole point of
+ * the page is that the savings figure moves WHILE you type — a round trip per
+ * keystroke would make it lag, and a figure that lags is a figure nobody
+ * trusts. The saved value is recomputed server-side from the same rule, so the
+ * two cannot drift.
  */
-const METHOD_LABEL = {
-  average: 'Historical Average',
-  trend: 'Historical Trend',
-  previous: 'Same as last month',
-  seasonal: 'Seasonal',
-  manual: 'Manual',
-  none: 'Not budgeted',
-};
-
-const METHOD_NOTE = {
-  average: 'A typical month, with the most and least expensive set aside so one unusual month does not become the plan.',
-  trend: 'A line through the months so far, carried forward. What Historical Average misses on anything that has been climbing or falling all year. Held between a quarter and three times a typical month, because a line extended far enough will predict a figure nobody would ever spend.',
-  previous: 'Whatever the last complete month cost, repeated.',
-  seasonal: 'The same month a year ago, scaled by how this year is running. Keeps the spikes — the only method that expects December to cost more than August.',
-  manual: 'A figure you set. On a parent it is shared across its children in proportion to what they actually cost.',
-  none: 'Deliberately not budgeted. Counts as zero rather than as missing.',
-};
-
-let planData = null;
-const planOpen = new Set();
-
-function methodOptions(selected, inherited, isParent) {
-  let html = '';
-  if (!isParent) {
-    html += '<option value="inherit"' + (inherited ? ' selected' : '') + '>Follow the parent</option>';
-  }
-  for (const m of (planData ? planData.methods : Object.keys(METHOD_LABEL))) {
-    html += '<option value="' + m + '"' + (!inherited && m === selected ? ' selected' : '') + '>' +
-      escapeHtml(METHOD_LABEL[m] || m) + '</option>';
-  }
-  return html;
-}
-
-function planRowHtml(c, isParent, open) {
-  const previewed = c.preview === null
-    ? '<span class="bp-none">nothing to go on</span>'
-    : '<span class="bp-preview">' + money(c.preview) + '<span class="bp-dim"> a month</span></span>';
-
-  const toggle = isParent
-    ? '<button class="ctog" type="button" data-plan-open="' + escapeHtml(c.slug) + '" ' +
-      'aria-expanded="' + open + '">' + (open ? '−' : '+') + '</button>'
-    : '<span class="ctog ghost" aria-hidden="true"></span>';
-
-  return '<div class="bp-row' + (isParent ? ' parent' : ' child') + '" data-slug="' + escapeHtml(c.slug) + '">' +
-    '<div class="bp-name">' + toggle +
-      '<span class="swatch" style="background:' + themed(c.slug, c.colour) + '"></span>' +
-      (isParent ? '<b>' + escapeHtml(c.label) + '</b>' : escapeHtml(c.label)) +
-      (c.inherited && !isParent ? '<span class="bp-inherit">inherited</span>' : '') + '</div>' +
-    '<div class="bp-method">' +
-      '<select class="ctl bp-select" data-slug="' + escapeHtml(c.slug) + '" aria-label="Method for ' +
-        escapeHtml(c.label) + '">' + methodOptions(c.method, c.inherited, isParent) + '</select>' +
-      (c.method === 'manual' && !c.inherited
-        ? '<input class="bp-amount" type="text" inputmode="decimal" data-slug="' + escapeHtml(c.slug) +
-          '" value="' + (c.manualAmount ? (c.manualAmount / 100).toFixed(2) : '') +
-          '" placeholder="0.00" aria-label="Monthly amount for ' + escapeHtml(c.label) + '">'
-        : '') +
-    '</div>' +
-    '<div class="bp-figures">' + previewed +
-      '<span class="bp-dim bp-last">' + (c.spentLastMonth ? money(c.spentLastMonth) + ' last month' : '—') + '</span>' +
-    '</div></div>';
-}
-
-function fillMethodDefs() {
-  const dl = document.querySelector('.bp-defs');
-  if (!dl || dl.children.length) return;
-  dl.innerHTML = Object.keys(METHOD_LABEL).map(m =>
-    '<dt>' + escapeHtml(METHOD_LABEL[m]) + '</dt><dd>' + escapeHtml(METHOD_NOTE[m]) + '</dd>').join('');
-}
+let bgData = null;
+const bgOpen = new Set();     // leaves showing their twelve months
+let bgSaveTimer = null;
 
 async function renderBudgeting() {
-  fillMethodDefs();
-  planData = await authed('/api/budget-plan');
-  const host = $('plan-list');
-  const parents = planData.categories.filter(c => !c.parentSlug);
+  bgData = await authed('/api/budget');
+  drawBudgeting();
+}
 
-  if (!parents.length) {
-    host.innerHTML = '<p class="empty">No spending categories yet.</p>';
+/** A leaf's planned year, with whatever the reader has done to it. */
+function bgPlanOf(row) {
+  const scale = row.baselineOverride && row.baseline > 0
+    ? row.baselineOverride / row.baseline : 1;
+  const out = {};
+  for (const m of bgData.months) {
+    const pin = row.pinned[m];
+    out[m] = pin !== undefined && pin !== null
+      ? Math.max(0, Math.round(pin))
+      : Math.max(0, Math.round((row.computed[m] || 0) * scale));
+  }
+  return out;
+}
+
+function bgTotals() {
+  const expense = {}, savings = {};
+  let annual = 0, spendYear = 0, incomeYear = 0;
+  for (const m of bgData.months) expense[m] = 0;
+  for (const row of bgData.categories) {
+    const p = bgPlanOf(row);
+    for (const m of bgData.months) expense[m] += p[m];
+  }
+  const inc = bgPlanOf(bgData.income);
+  for (const m of bgData.months) {
+    savings[m] = inc[m] - expense[m];
+    annual += savings[m];
+    spendYear += expense[m];
+    incomeYear += inc[m];
+  }
+  return { expense, savings, annual, spendYear, incomeYear, income: inc };
+}
+
+function drawBudgeting() {
+  if (!bgData) return;
+  const t = bgTotals();
+
+  /* Income minus spending, per month and for the year. Both are shown because
+     the monthly figure is the one somebody feels and the annual one is the
+     reason to bother. */
+  $('bg-hero').innerHTML =
+    '<div><div class="bg-big ' + (t.annual >= 0 ? 'up' : 'down') + '">' +
+      (t.annual >= 0 ? '+' : '') + money(Math.round(t.annual / 12)) + '</div>' +
+      '<div class="bg-sub">left over each month on this plan &middot; ' +
+        (t.annual >= 0 ? '+' : '') + money(t.annual) + ' across the year</div></div>' +
+    '<div class="bg-side">' +
+      '<div><div class="t-label">Income planned</div>' +
+        '<div class="bg-fig">' + money(t.incomeYear) + '</div></div>' +
+      '<div><div class="t-label">Spending planned</div>' +
+        '<div class="bg-fig out">' + money(t.spendYear) + '</div></div>' +
+    '</div>';
+
+  const parents = categoryList.filter(c => !c.parentSlug && c.kind === 'spend');
+  const host = $('bg-list');
+
+  host.innerHTML = parents.map(p => {
+    const kids = bgData.categories.filter(r => r.parentSlug === p.slug);
+    if (!kids.length) return '';
+    const perMonth = bgData.months.map(m =>
+      kids.reduce((s, r) => s + bgPlanOf(r)[m], 0));
+    const year = perMonth.reduce((a, b) => a + b, 0);
+    if (!year) return '';
+
+    return '<div class="bg-card">' +
+      '<div class="bg-head">' +
+        '<span class="swatch" style="background:' + themed(p.slug, p.colour) + '"></span>' +
+        '<b>' + escapeHtml(p.label) + '</b>' +
+        '<span class="bg-annual">' + money(year) + ' a year</span>' +
+      '</div>' +
+      bgChart(perMonth, p.slug) +
+      '<div class="bg-kids">' + kids.map(bgLeaf).join('') + '</div>' +
+    '</div>';
+  }).join('') || '<p class="empty">Nothing to plan yet — link a bank and sync some history.</p>';
+
+  const withPins = bgData.categories.filter(r => Object.keys(r.pinned).length).length;
+  const moved = bgData.categories.filter(r => r.baselineOverride).length;
+  $('bg-note').textContent =
+    'Worked from ' + bgData.monthsOfHistory + ' complete months. One-off costs are kept out of the ' +
+    'monthly figure and set aside separately; a month that runs heavy every year keeps running heavy. ' +
+    (moved || withPins
+      ? 'You have moved ' + moved + ' baseline' + (moved === 1 ? '' : 's') +
+        (withPins ? ' and pinned months in ' + withPins + ' categor' + (withPins === 1 ? 'y' : 'ies') : '') + '. '
+      : '') +
+    'This plan does not drive the Overview or Tracker yet.';
+}
+
+/** One leaf: what it costs a month, and the twelve months behind that. */
+function bgLeaf(row) {
+  const plan = bgPlanOf(row);
+  const year = bgData.months.reduce((s, m) => s + plan[m], 0);
+  const shown = row.baselineOverride ?? row.baseline;
+  const open = bgOpen.has(row.slug);
+  const pins = Object.keys(row.pinned).length;
+
+  const note = [];
+  if (row.irregularPerMonth > 0) {
+    note.push(money(row.irregularPerMonth) + '/mo set aside for one-offs');
+  }
+  if (row.outliers.length) {
+    note.push(row.outliers.length + ' one-off' + (row.outliers.length === 1 ? '' : 's') +
+      ' left out (' + row.outliers.map(o => monthLabel(o.month)).join(', ') + ')');
+  }
+  if (pins) note.push(pins + ' month' + (pins === 1 ? '' : 's') + ' pinned');
+
+  return '<div class="bg-leaf" data-slug="' + escapeHtml(row.slug) + '">' +
+      '<div><div class="bg-name">' + escapeHtml(row.label) + '</div>' +
+        (note.length ? '<div class="bg-note">' + escapeHtml(note.join(' · ')) + '</div>' : '') + '</div>' +
+      '<input class="bg-in' + (row.baselineOverride ? ' moved' : '') + '" type="number" min="0" step="1" ' +
+        'inputmode="decimal" data-baseline="' + escapeHtml(row.slug) + '" ' +
+        'aria-label="Monthly budget for ' + escapeHtml(row.label) + '" ' +
+        'value="' + (shown / 100).toFixed(0) + '">' +
+      '<span class="bg-year">' + money(year) + '</span>' +
+      '<button class="ctog" type="button" data-bg-open="' + escapeHtml(row.slug) + '" ' +
+        'aria-expanded="' + open + '" aria-label="Set individual months for ' +
+        escapeHtml(row.label) + '">' + (open ? '−' : '+') + '</button>' +
+      (open ? bgMonths(row, plan) : '') +
+    '</div>';
+}
+
+/* The twelve months, for the trip that is already booked. The engine finds a
+   pattern that repeats; this is for the one that has not happened yet. */
+function bgMonths(row, plan) {
+  return '<div class="bg-months">' + bgData.months.map((m, i) =>
+    '<label class="bg-mon"><span>' + bgData.labels[i].slice(0, 3) + '</span>' +
+      '<input type="number" min="0" step="1" inputmode="decimal" ' +
+        'class="' + (row.pinned[m] !== undefined ? 'pin' : '') + '" ' +
+        'data-pin="' + escapeHtml(row.slug) + '" data-month="' + m + '" ' +
+        'aria-label="' + bgData.labels[i] + ' for ' + escapeHtml(row.label) + '" ' +
+        'value="' + (plan[m] / 100).toFixed(0) + '"></label>').join('') +
+    '</div>';
+}
+
+/* The year at a glance. Months already gone are drawn from what was actually
+   spent, so the plan ahead is read against the record behind it rather than
+   against nothing. */
+function bgChart(perMonth, slug) {
+  const W = 720, H = 96, PL = 2, PB = 16;
+  const plotH = H - PB;
+  const hi = Math.max.apply(null, perMonth.concat([1]));
+  const band = (W - PL * 2) / perMonth.length;
+  const barW = Math.min(38, band * 0.62);
+  const nowIdx = bgData.months.indexOf(bgData.currentMonth);
+
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
+    '" preserveAspectRatio="none" role="img" aria-hidden="true" style="margin-top:8px">';
+  perMonth.forEach((v, i) => {
+    const h = (v / hi) * (plotH - 6);
+    const x = PL + band * i + (band - barW) / 2;
+    const past = nowIdx >= 0 && i < nowIdx;
+    svg += '<rect x="' + x.toFixed(1) + '" y="' + (plotH - h).toFixed(1) +
+      '" width="' + barW.toFixed(1) + '" height="' + Math.max(1, h).toFixed(1) +
+      '" rx="2" fill="' + themed(slug, colourOf(slug)) + '" opacity="' + (past ? '.42' : '.92') + '"/>' +
+      '<text x="' + (PL + band * i + band / 2).toFixed(1) + '" y="' + (H - 4) +
+      '" text-anchor="middle" font-size="9" fill="var(--muted)">' +
+      bgData.labels[i].slice(0, 1) + '</text>';
+  });
+  return svg + '</svg>';
+}
+
+/* Saved after a pause, not on every keystroke. The figure on screen is already
+   right — this only persists it, so there is nothing to wait for. */
+function bgSave(body) {
+  clearTimeout(bgSaveTimer);
+  bgSaveTimer = setTimeout(async () => {
+    try {
+      await authed('/api/budget', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      say($('bg-msg'), 'Saved.');
+    } catch (err) { say($('bg-msg'), err.message, 'bad'); }
+  }, 450);
+}
+
+$('bg-list').addEventListener('input', (e) => {
+  const base = e.target.closest('[data-baseline]');
+  if (base) {
+    const row = bgData.categories.find(r => r.slug === base.dataset.baseline);
+    if (!row) return;
+    const raw = base.value.trim();
+    const cents = raw === '' ? null : Math.round(Number(raw) * 100);
+    if (cents !== null && (!isFinite(cents) || cents < 0)) return;
+    row.baselineOverride = cents;
+    bgLive();
+    bgSave({ slug: row.slug, baseline: cents });
     return;
   }
 
-  host.innerHTML = parents.map(p => {
-    const kids = planData.categories.filter(c => c.parentSlug === p.slug);
-    const open = planOpen.has(p.slug);
-    return '<div class="bp-card">' + planRowHtml(p, true, open) +
-      (kids.length
-        ? '<div class="bp-kids" data-kids="' + escapeHtml(p.slug) + '"' + (open ? '' : ' hidden') + '>' +
-          kids.map(k => planRowHtml(k, false, false)).join('') + '</div>'
-        : '') +
-      '</div>';
-  }).join('');
-
-  const chosen = $('plan-note');
-  const sel = planData.categories.find(c => !c.inherited);
-  chosen.textContent = 'Figures are what each method would give for ' + monthLabel(planData.month) +
-    ', from ' + planData.monthsOfHistory + ' complete month' + (planData.monthsOfHistory === 1 ? '' : 's') +
-    ' of history.' + (planData.basis === 'seasonal-growth' && planData.growthPct !== null
-      ? ' Seasonal is using last year scaled by ' + (planData.growthPct >= 0 ? '+' : '') + planData.growthPct + '%.'
-      : planData.basis === 'recent-average'
-        ? ' There is not yet a full year behind you, so Seasonal falls back to a recent average.'
-        : '');
-  void sel;
-}
-
-/* Saves in flight. The redraw waits for the last of them.
- *
- * Every change used to redraw the whole list as soon as its own save landed,
- * which rebuilt every <select> on the page. Change a second category while the
- * first is still saving and the rebuild replaced the menu under the pointer —
- * the choice looked like it had been rejected, when it was on its way to the
- * server and arrived a moment later.
- *
- * Now the list holds still until nothing is pending, so what you picked stays
- * picked while it saves.
- */
-let planSaving = 0;
-
-async function savePlan(slug, method, manualAmount) {
-  const msg = $('plan-msg');
-  planSaving++;
-  say(msg, 'Saving…');
-  let failed = null;
-  try {
-    await authed('/api/budget-plan', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug: slug, method: method, manualAmount: manualAmount })
-    });
-    // The budget these methods produce is what every other tab reads.
-    summaryCache = null;
-  } catch (err) {
-    failed = err;
-  } finally {
-    planSaving--;
+  const pin = e.target.closest('[data-pin]');
+  if (pin) {
+    const row = bgData.categories.find(r => r.slug === pin.dataset.pin);
+    if (!row) return;
+    const raw = pin.value.trim();
+    const month = pin.dataset.month;
+    if (raw === '') { delete row.pinned[month]; bgLive(); bgSave({ slug: row.slug, month, amount: null }); return; }
+    const cents = Math.round(Number(raw) * 100);
+    if (!isFinite(cents) || cents < 0) return;
+    row.pinned[month] = cents;
+    bgLive();
+    bgSave({ slug: row.slug, month, amount: cents });
   }
+});
 
-  if (failed) { say(msg, failed.message, 'bad'); return; }
-  say(msg, 'Saved.', 'good');
+/* Only the figures move while somebody is typing. A full redraw would rebuild
+   the input they are inside and take the caret with it. */
+function bgLive() {
+  const t = bgTotals();
+  const big = $('bg-hero').querySelector('.bg-big');
+  if (big) {
+    big.textContent = (t.annual >= 0 ? '+' : '') + money(Math.round(t.annual / 12));
+    big.className = 'bg-big ' + (t.annual >= 0 ? 'up' : 'down');
+  }
+  const sub = $('bg-hero').querySelector('.bg-sub');
+  if (sub) sub.innerHTML = 'left over each month on this plan &middot; ' +
+    (t.annual >= 0 ? '+' : '') + money(t.annual) + ' across the year';
+  const figs = $('bg-hero').querySelectorAll('.bg-fig');
+  if (figs[0]) figs[0].textContent = money(t.incomeYear);
+  if (figs[1]) figs[1].textContent = money(t.spendYear);
 
-  // Someone else is still saving; let them do the redrawing when they finish.
-  if (planSaving > 0) return;
-  await renderBudgeting();
-
-  // Switching to manual asks for a number, so the cursor goes where the
-  // number belongs rather than leaving an empty box to be found.
-  if (method === 'manual') {
-    const box = $('plan-list').querySelector('.bp-amount[data-slug="' + slug + '"]');
-    if (box) { box.focus(); box.select(); }
+  // Each leaf's annual figure, and its parent's, without touching the inputs.
+  for (const row of bgData.categories) {
+    const plan = bgPlanOf(row);
+    const year = bgData.months.reduce((s, m) => s + plan[m], 0);
+    const el = $('bg-list').querySelector('.bg-leaf[data-slug="' + CSS.escape(row.slug) + '"] .bg-year');
+    if (el) el.textContent = money(year);
   }
 }
 
-$('plan-list').addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-plan-open]');
-  if (!btn) return;
-  const slug = btn.dataset.planOpen;
-  const open = !planOpen.has(slug);
-  if (open) planOpen.add(slug); else planOpen.delete(slug);
-  const kids = $('plan-list').querySelector('[data-kids="' + CSS.escape(slug) + '"]');
-  if (kids) kids.hidden = !open;
-  btn.textContent = open ? '−' : '+';
-  btn.setAttribute('aria-expanded', String(open));
-});
-
-$('plan-list').addEventListener('change', (e) => {
-  const sel = e.target.closest('.bp-select');
-  if (!sel) return;
-  const slug = sel.dataset.slug;
-  const cat = planData.categories.find(c => c.slug === slug);
-  // Switching to manual keeps whatever was typed before, so flipping away and
-  // back does not lose the number.
-  savePlan(slug, sel.value, cat ? cat.manualAmount : 0);
-});
-
-/* Saved when the field is left rather than on every keystroke — one request per
-   decision, not one per digit. */
-$('plan-list').addEventListener('change', (e) => {
-  const input = e.target.closest('.bp-amount');
-  if (!input) return;
-  const raw = input.value.trim().replace(/[$,\s]/g, '');
-  const n = Number(raw);
-  if (!raw || !isFinite(n) || n < 0) { say($('plan-msg'), 'That needs to be a number, zero or more.', 'bad'); return; }
-  savePlan(input.dataset.slug, 'manual', Math.round(n * 100));
-});
-
-$('plan-list').addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
-  const input = e.target.closest('.bp-amount');
-  if (input) { e.preventDefault(); input.blur(); }
+$('bg-list').addEventListener('click', (e) => {
+  const tog = e.target.closest('[data-bg-open]');
+  if (!tog) return;
+  const slug = tog.dataset.bgOpen;
+  if (bgOpen.has(slug)) bgOpen.delete(slug); else bgOpen.add(slug);
+  drawBudgeting();
 });
 
 /* ------------------------------------------------------- budget vs actual -- */
@@ -4856,438 +4945,6 @@ $('signout').addEventListener('click', async () => {
   location.reload();
 });
 
-/* ------------------------------------------------------- budgeting v2 -- *//*
- * The same decision as the Budgeting tab, made across a whole calendar year
- * instead of one month at a time, and in its own table so that trying things
- * out here cannot move a number on any other tab.
- *
- * The chart is the point of it. Months already gone carry what was actually
- * spent; the rest carry what the chosen method says they will cost, under a
- * shade so the two are never mistaken for each other. The methods not chosen
- * run across the projected half as lines, because deciding between "average"
- * and "seasonal" by reading their definitions is guesswork and seeing the two
- * curves is not.
- *
- * Selecting a subcategory narrows all of that to it — its bars, its lines, its
- * comparison — so the question "is Groceries the problem" can be asked without
- * reading a stack.
- */
-let bv2Data = null;
-const bv2Open = new Set();
-/* Whether the opening card has been chosen yet. Choosing it is a first-load
-   decision, not something to redo on every redraw — see drawBudgetingV2. */
-let bv2Seeded = false;
-/** parent slug -> the subcategory being looked at, if any. */
-const bv2Focus = {};
-
-/* The three computed methods. Manual is whatever you typed, so comparing
-   against it says nothing; "none" is zero and would only ever be a flat line
-   along the floor. */
-const BV2_COMPARE = ['average', 'trend', 'previous', 'seasonal'];
-/* Chosen against the category palette rather than for their own sake. The old
-   three sat on top of it: the seasonal line was 7.9 from Food and Dining in
-   CIE76, which is to say the same colour, and the average line was 14 from one
-   of the blues. Categories occupy most of the wheel, but nothing uses violet or
-   chartreuse, and nothing is near white. Measured against all 35 spend colours
-   plus the mint the income bars use: 28.6, 44.8 and 34.3 at worst, where under
-   about 20 reads as a match. */
-/* Read from the stylesheet rather than written here, so a theme can change
-   them. The near-white seasonal line is the reason: on a light background it
-   would be invisible rather than merely quiet. */
-const bv2Line = (method) =>
-  getComputedStyle(document.documentElement).getPropertyValue('--line-' + method).trim() || 'currentColor';
-
-function bv2Short(ym) {
-  return MONTH_NAMES[Number(ym.split('-')[1]) - 1];
-}
-
-function bv2Options(selected, inherited, isParent, kind) {
-  // Seasonal reads its answer out of the spending projection, which knows
-  // nothing about earnings, so income is not offered it.
-  const methods = !bv2Data ? []
-    : kind === 'income' ? (bv2Data.incomeMethods || bv2Data.methods)
-    : bv2Data.methods;
-  let html = '';
-  if (!isParent) {
-    html += '<option value="inherit"' + (inherited ? ' selected' : '') + '>Follow the parent</option>';
-  }
-  for (const m of methods) {
-    html += '<option value="' + m + '"' + (!inherited && m === selected ? ' selected' : '') + '>' +
-      escapeHtml(METHOD_LABEL[m] || m) + '</option>';
-  }
-  return html;
-}
-
-/**
- * One parent's year.
- *
- * Drawn in equal bands with no padding either side, because the grid column
- * under band i is this category's figure for month i and the two have to line
- * up. That rules out a y axis in the usual place, so the scale is written
- * inside the plot against the gridlines.
- */
-function bv2Chart(parent, kids, focus) {
-  const months = bv2Data.months;
-  const first = bv2Data.firstProjected;
-  const n = months.length;
-  if (!n) return '<p class="empty">Nothing to plan.</p>';
-
-  const BAND = 100, W = BAND * n, H = 196, PT = 22, PB = 4;
-  const plotH = H - PT - PB;
-  // Focused on one subcategory, the stack is just that one. Otherwise it is
-  // every child, or the parent alone where it has none.
-  const stack = focus ? kids.filter(k => k.slug === focus)
-    : (kids.length ? kids : [parent]);
-  const lineSource = focus ? kids.find(k => k.slug === focus) : parent;
-
-  const totals = months.map(m => stack.reduce((s, k) => s + (k.series[m] || 0), 0));
-  const lines = BV2_COMPARE.filter(m => m !== (lineSource ? lineSource.method : parent.method));
-
-  let peak = Math.max.apply(null, totals.concat([0]));
-  for (const method of lines) {
-    const src = (lineSource && lineSource.alternates[method]) || {};
-    for (const m of months) if (typeof src[m] === 'number' && src[m] > peak) peak = src[m];
-  }
-  if (peak <= 0) peak = 1;
-
-  const mag = Math.pow(10, Math.floor(Math.log10(peak / 3)));
-  const step = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].filter(x => x * mag >= peak / 3)[0] || 10;
-  const yMax = step * mag * 3;
-  const y = v => PT + plotH - (v / yMax) * plotH;
-  const cx = i => i * BAND + BAND / 2;
-  const barW = BAND * 0.5;
-
-  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" ' +
-    'role="img" aria-label="' + escapeHtml(parent.label) + ', this year">';
-
-  // The projected half, shaded. Drawn first so everything else sits on it.
-  const firstIdx = months.indexOf(first);
-  if (firstIdx > -1) {
-    svg += '<rect x="' + (firstIdx * BAND) + '" y="0" width="' + ((n - firstIdx) * BAND) +
-      '" height="' + H + '" fill="var(--mint)" opacity=".05"/>' +
-      '<line x1="' + (firstIdx * BAND) + '" x2="' + (firstIdx * BAND) + '" y1="0" y2="' + H +
-      '" stroke="var(--mint)" stroke-width="1" opacity=".35" stroke-dasharray="3 3" ' +
-      'vector-effect="non-scaling-stroke"/>';
-  }
-
-  for (let k = 0; k <= 3; k++) {
-    const v = (yMax / 3) * k, yy = y(v);
-    svg += '<line x1="0" x2="' + W + '" y1="' + yy.toFixed(1) + '" y2="' + yy.toFixed(1) +
-      '" stroke="var(--grid)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
-    if (k) {
-      svg += '<text x="4" y="' + (yy - 3).toFixed(1) + '" ' +
-        'font-size="9" fill="var(--muted)" opacity=".75">' + money0(v) + '</text>';
-    }
-  }
-
-  months.forEach((m, i) => {
-    let acc = 0;
-    for (const k of stack) {
-      const v = k.series[m] || 0;
-      if (!(v > 0)) continue;
-      /* Rounded here rather than on the way out, so a segment's top is the
-         same number as the one below it and the two meet exactly. Rounding
-         y and height separately left a tenth of a unit between them — nothing
-         at this scale, but it is a seam waiting for a zoom level. */
-      const top = +y(acc + v).toFixed(1), bot = +y(acc).toFixed(1);
-      const on = focus === k.slug;
-      const dim = focus && !on;
-      svg += '<rect class="seg' + (on ? ' sel' : '') + (dim ? ' dim' : '') + '"' +
-        ' data-bv2-pick="' + escapeHtml(k.slug) + '" data-parent="' + escapeHtml(parent.slug) + '"' +
-        ' tabindex="0" role="button"' +
-        ' x="' + (cx(i) - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
-        '" width="' + barW.toFixed(1) + '" height="' + Math.max(0.5, bot - top).toFixed(1) +
-        '" fill="' + themed(k.slug, k.colour) + '" style="color:' + themed(k.slug, k.colour) + '">' +
-        '<title>' + escapeHtml(k.label) + ' · ' + escapeHtml(monthLabel(m)) + ': ' + money(v) +
-        (m >= first ? ' (planned)' : '') + '</title></rect>';
-      acc += v;
-    }
-
-    if (totals[i] > 0) {
-      svg += '<text x="' + cx(i).toFixed(1) + '" y="' + (y(totals[i]) - 7).toFixed(1) +
-        '" text-anchor="middle" font-size="13" ' +
-        'fill="var(--ink)">' + money0(totals[i]) + '</text>';
-    }
-  });
-
-  // The alternatives, across the months still to come.
-  for (const method of lines) {
-    const src = (lineSource && lineSource.alternates[method]) || {};
-    const pts = months.map((m, i) => {
-      const v = src[m];
-      return typeof v === 'number' ? cx(i).toFixed(1) + ',' + y(v).toFixed(1) : null;
-    }).filter(Boolean);
-    if (pts.length < 2) continue;
-    const colour = bv2Line(method);
-    svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + colour +
-      '" stroke-width="2" stroke-dasharray="5 4" opacity=".9" ' +
-      'vector-effect="non-scaling-stroke"/>';
-
-    // A dot per month, so a line can be asked what it actually says. Drawn as a
-    // pair: the ring you see, and a transparent disc wide enough to hit — the
-    // bands are narrow and a three-pixel target is a game rather than a control.
-    months.forEach((m, i) => {
-      const v = src[m];
-      if (typeof v !== 'number') return;
-      svg += '<g class="bv2-dot">' +
-        '<circle cx="' + cx(i).toFixed(1) + '" cy="' + y(v).toFixed(1) + '" r="16" fill="transparent"/>' +
-        '<circle cx="' + cx(i).toFixed(1) + '" cy="' + y(v).toFixed(1) + '" r="4" ' +
-        'fill="var(--bg-panel)" stroke="' + colour + '" stroke-width="2"/>' +
-        '<title>' + escapeHtml(METHOD_LABEL[method] || method) + ' · ' +
-        escapeHtml(monthLabel(m)) + ': ' + money(v) + '</title></g>';
-    });
-  }
-
-  return svg + '</svg>';
-}
-
-/* Above the chart and across the full width, so it reads as a caption for what
-   is drawn rather than as a column competing with it — and so the chart can
-   start where the legend used to. */
-function bv2Legend(parent, kids, focus) {
-  const lineSource = focus ? kids.find(k => k.slug === focus) : parent;
-  const lines = BV2_COMPARE.filter(m => m !== (lineSource ? lineSource.method : parent.method));
-  const who = focus && lineSource ? lineSource.label : parent.label;
-  let html = '<span class="bv2-lt">' + escapeHtml(who) + ' if instead you picked:</span>' +
-    lines.map(m => '<span class="bv2-key"><i style="border-top-color:' + bv2Line(m) + '"></i>' +
-      escapeHtml(METHOD_LABEL[m] || m) + '</span>').join('');
-  if (focus) {
-    html += '<button type="button" class="bv2-clear" data-bv2-clear="' +
-      escapeHtml(parent.slug) + '">Show all of ' + escapeHtml(parent.label) + '</button>';
-  }
-  return html;
-}
-
-/**
- * A month cell.
- *
- * Behind the current month it shows what was spent and cannot be edited — a
- * budget for a month that has already happened is a wish. Ahead of it, and
- * where the figure is yours to set, it is a box.
- */
-function bv2MonthCell(row, month, editable) {
-  const past = month < bv2Data.firstProjected;
-  const v = row.series[month];
-  if (past || !editable) {
-    return '<div class="bv2-cell' + (past ? ' past' : '') + (v ? '' : ' nil') + '">' +
-      (typeof v === 'number' && v ? money0(v) : '—') + '</div>';
-  }
-  const named = row.manualByMonth[month];
-  const amount = typeof named === 'number' ? named : row.manualAmount;
-  return '<input class="bv2-in" type="text" inputmode="decimal" data-slug="' +
-    escapeHtml(row.slug) + '" data-month="' + escapeHtml(month) + '" value="' +
-    (amount ? (amount / 100).toFixed(2) : '') + '" placeholder="0.00" aria-label="' +
-    escapeHtml(row.label) + ', ' + escapeHtml(monthLabel(month)) + '">';
-}
-
-function bv2Card(parent, kids) {
-  const months = bv2Data.months;
-  const open = bv2Open.has(parent.slug);
-  const focus = bv2Focus[parent.slug] || null;
-  const ahead = months.filter(m => m >= bv2Data.firstProjected);
-  const planned = ahead.reduce((s, m) => s + (parent.series[m] || 0), 0);
-  const ownsManual = parent.method === 'manual' && !parent.inherited;
-
-  let html = '<div class="bv2-card" data-parent="' + escapeHtml(parent.slug) + '">' +
-    '<div class="bv2-head">' +
-      '<button class="ctog" type="button" data-bv2-open="' + escapeHtml(parent.slug) + '" ' +
-        'aria-expanded="' + open + '">' + (open ? '−' : '+') + '</button>' +
-      '<span class="swatch" style="background:' + themed(parent.slug, parent.colour) + '"></span>' +
-      // The menu sits under the name it belongs to rather than beside it, which
-      // is what frees the column the chart has taken.
-      '<span class="bv2-titled"><b>' + escapeHtml(parent.label) + '</b>' +
-        '<select class="ctl bv2-select" data-slug="' + escapeHtml(parent.slug) +
-          '" aria-label="Method for ' + escapeHtml(parent.label) + '">' +
-          bv2Options(parent.method, parent.inherited, true, parent.kind) + '</select></span>' +
-      '<span class="bv2-total">rest of the year<b>' + money(planned) + '</b></span>' +
-    '</div>';
-
-  if (!open) return html + '</div>';
-
-  if (parent.kind === 'income' && !kids.length) {
-    // Not an omission: spending is filed by category month by month, earnings
-    // are only totalled, so there is nothing underneath this to show.
-    html += '<p class="fc-method" style="margin:10px 0 0">Earnings are kept as a ' +
-      'monthly total rather than split by source, so this one has no breakdown ' +
-      'beneath it.</p>';
-  }
-
-  html += '<div class="bv2-grid" style="--cols:' + months.length + '">' +
-    '<div class="bv2-legend">' + bv2Legend(parent, kids, focus) + '</div>' +
-    '<div class="bv2-chart">' + bv2Chart(parent, kids, focus) + '</div>' +
-    '<div></div>' +
-    months.map(m => '<div class="bv2-mh' + (m >= bv2Data.firstProjected ? ' ahead' : '') + '">' +
-      bv2Short(m) + '</div>').join('') +
-    '<div class="bv2-sep"></div>';
-
-  // A parent set to manual is typed once and shared across its children by what
-  // they actually cost, so the boxes belong on the parent's own row.
-  if (ownsManual) {
-    html += '<div class="bv2-name"><span class="t">Whole category</span></div>' +
-      months.map(m => bv2MonthCell(parent, m, true)).join('');
-  }
-
-  for (const kid of kids) {
-    const editable = kid.method === 'manual' && !kid.inherited;
-    const on = focus === kid.slug;
-    // The name and its menu share one cell: a select cannot live inside the
-    // button, so they are stacked in a wrapper instead of taking a column each.
-    html += '<div class="bv2-rowhead">' +
-        '<button type="button" class="bv2-name sub' + (on ? ' on' : '') +
-          '" data-bv2-pick="' + escapeHtml(kid.slug) + '" data-parent="' + escapeHtml(parent.slug) +
-          '" aria-pressed="' + on + '">' +
-          '<span class="swatch" style="background:' + themed(kid.slug, kid.colour) + '"></span>' +
-          '<span class="t">' + escapeHtml(kid.label) + '</span>' +
-        '</button>' +
-        '<select class="ctl bv2-select" data-slug="' + escapeHtml(kid.slug) +
-          '" aria-label="Method for ' + escapeHtml(kid.label) + '">' +
-          bv2Options(kid.method, kid.inherited, false, kid.kind) + '</select>' +
-      '</div>' +
-      months.map(m => bv2MonthCell(kid, m, editable)).join('');
-  }
-
-  return html + '</div></div>';
-}
-
-/* Fetch, then draw — and they are separate because most of what happens on
- * this tab does not change the figures.
- *
- * Opening a card, closing one, or picking a subcategory to look at are all
- * view state: the same numbers, arranged differently. They were each calling
- * this whole function, so every one of them re-ran /api/budget-v2 — which
- * aggregates two to four years of transactions and rebuilds a year of
- * projections — to toggle a hidden attribute. On a small ledger that is a
- * pause; on a real one it is a second or more, and two clicks in that window
- * race each other, so the second redraw lands on the first one's state and the
- * card appears not to open at all.
- *
- * Only a method or a manual amount actually changes the numbers. Everything
- * else redraws from what is already in hand. */
-async function renderBudgetingV2() {
-  bv2Data = await authed('/api/budget-v2');
-  drawBudgetingV2();
-}
-
-function drawBudgetingV2() {
-  if (!bv2Data) return;
-  fillMethodDefs();
-  const host = $('bv2-list');
-  const months = bv2Data.months;
-  const parents = bv2Data.categories.filter(c => !c.parentSlug);
-
-  if (!parents.length || !months.length) {
-    host.innerHTML = '<p class="empty">No spending categories yet.</p>';
-    return;
-  }
-
-  /* Opened on the biggest plan rather than on nothing: the point of this tab is
-   * the chart, and a column of shut cards shows none of it.
-   *
-   * Once, though. This ran on every redraw, and closing the last open card is
-   * exactly what empties the set — so the redraw that followed put the biggest
-   * one straight back, and the card could not be closed at all. It was there
-   * before the redraw got fast, hidden behind a second of waiting; making the
-   * toggle instant is what turned it from a card that seemed not to respond
-   * into one that visibly refuses. */
-  if (!bv2Seeded) {
-    bv2Seeded = true;
-    if (!bv2Open.size) {
-      const ahead = months.filter(m => m >= bv2Data.firstProjected);
-      const spend = p => ahead.reduce((s, m) => s + (p.series[m] || 0), 0);
-      const biggest = parents.slice().sort((a, b) => spend(b) - spend(a))[0];
-      if (biggest && spend(biggest) > 0) bv2Open.add(biggest.slug);
-    }
-  }
-
-  host.innerHTML = parents.map(p =>
-    bv2Card(p, bv2Data.categories.filter(c => c.parentSlug === p.slug))).join('');
-
-  const from = monthLabel(bv2Data.firstProjected);
-  $('bv2-note').textContent = 'Bars are what was actually spent up to ' + from +
-    ', and what the chosen method plans from ' + from + ' on — the shaded half. Worked from ' +
-    bv2Data.monthsOfHistory + ' complete month' + (bv2Data.monthsOfHistory === 1 ? '' : 's') +
-    ' of history.' +
-    (bv2Data.basis === 'seasonal-growth' && bv2Data.growthPct !== null
-      ? ' Seasonal is using last year scaled by ' +
-        (bv2Data.growthPct >= 0 ? '+' : '') + bv2Data.growthPct + '%.'
-      : bv2Data.basis === 'recent-average'
-        ? ' There is not yet a full year behind you, so Seasonal falls back to a recent average.'
-        : '');
-}
-
-/* Saves in flight, held to one redraw between them — the same reason as the
-   Budgeting tab: a rebuild mid-edit takes the control out from under you. */
-let bv2Saving = 0;
-
-async function bv2Save(body) {
-  const msg = $('bv2-msg');
-  bv2Saving++;
-  say(msg, 'Saving…');
-  let failed = null;
-  try {
-    await authed('/api/budget-v2', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-  } catch (err) {
-    failed = err;
-  } finally {
-    bv2Saving--;
-  }
-  if (failed) { say(msg, failed.message, 'bad'); return; }
-  say(msg, 'Saved.', 'good');
-  if (bv2Saving > 0) return;
-  await renderBudgetingV2();
-}
-
-$('bv2-list').addEventListener('click', (e) => {
-  const open = e.target.closest('[data-bv2-open]');
-  if (open) {
-    const slug = open.dataset.bv2Open;
-    if (bv2Open.has(slug)) bv2Open.delete(slug); else bv2Open.add(slug);
-    drawBudgetingV2();
-    return;
-  }
-
-  const clear = e.target.closest('[data-bv2-clear]');
-  if (clear) { bv2Focus[clear.dataset.bv2Clear] = null; drawBudgetingV2(); return; }
-
-  // A segment and its row are the same control: both say "look at this one".
-  const pick = e.target.closest('[data-bv2-pick]');
-  if (pick) {
-    const parent = pick.dataset.parent, slug = pick.dataset.bv2Pick;
-    bv2Focus[parent] = bv2Focus[parent] === slug ? null : slug;
-    drawBudgetingV2();
-  }
-});
-
-$('bv2-list').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    const input = e.target.closest('.bv2-in');
-    if (input) { e.preventDefault(); input.blur(); return; }
-  }
-  // Segments are focusable, so they answer the keyboard like the buttons they are.
-  const seg = e.target.closest('rect[data-bv2-pick]');
-  if (seg && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); seg.dispatchEvent(new MouseEvent('click', { bubbles: true })); }
-});
-
-$('bv2-list').addEventListener('change', (e) => {
-  const sel = e.target.closest('.bv2-select');
-  if (sel) { bv2Save({ slug: sel.dataset.slug, method: sel.value }); return; }
-
-  const input = e.target.closest('.bv2-in');
-  if (!input) return;
-  const raw = input.value.trim().replace(/[$,\s]/g, '');
-  const n = Number(raw);
-  if (!raw || !isFinite(n) || n < 0) {
-    say($('bv2-msg'), 'That needs to be a number, zero or more.', 'bad');
-    return;
-  }
-  bv2Save({ slug: input.dataset.slug, month: input.dataset.month, monthAmount: Math.round(n * 100) });
-});
-
-boot();
 </script>
 </body>
 </html>

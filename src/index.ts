@@ -15,7 +15,6 @@ import categoryRoutes from "./category-routes";
 import forecastRoutes from "./forecast-routes";
 import accountRoutes from "./account-routes";
 import budgetPlanRoutes from "./budget-plan-routes";
-import budgetV2Routes from "./budget-v2-routes";
 import assetRoutes from "./asset-routes";
 import metalRoutes from "./metal-routes";
 import budgetRoutes from "./budget-routes";
@@ -131,7 +130,6 @@ app.route("/api", forecastRoutes);
 app.route("/api", accountRoutes);
 app.route("/api", budgetPlanRoutes);
 // Siloed. Nothing else reads what this writes — see budget-v2-routes.
-app.route("/api", budgetV2Routes);
 app.route("/api", assetRoutes);
 app.route("/api", metalRoutes);
 app.route("/api", budgetRoutes);
