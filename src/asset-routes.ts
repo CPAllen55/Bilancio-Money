@@ -434,10 +434,18 @@ assets.get("/assets", async (c) => {
       series,
       byClass,
       byInstitution,
-      // Accounts, not holdings: the table is a list of things a bank can be
-      // asked about, and a row for gold with no mask and no institution reads
-      // as a broken account rather than as bullion.
-      accounts: banked.sort((a, b) => Math.abs(b.current) - Math.abs(a.current)),
+      /* Metal sits in this list alongside the banks, because it is a balance
+       * and this is the list of balances. It is absent rather than zero when
+       * none is held — a holding row only exists once ounces have been entered
+       * on the Banks tab — so nobody who owns no bullion ever sees a line
+       * telling them so. The institution column stays empty for it: there is no
+       * counterparty, and inventing one was the thing that made it read as a
+       * broken account last time.
+       *
+       * byInstitution above is still banks only, for the same reason. */
+      accounts: detail
+        .filter((a) => a.klass !== "metal" || a.current > 0)
+        .sort((a, b) => Math.abs(b.current) - Math.abs(a.current)),
       metals: {
         value: detail.reduce((s, a) => s + (a.klass === "metal" ? a.current : 0), 0),
         unavailable: metalsUnavailable,

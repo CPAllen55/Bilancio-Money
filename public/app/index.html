@@ -449,6 +449,10 @@
      — they are the same kind of statement and should not look like a footnote. */
   .tiles{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr));
           grid-auto-rows:1fr; gap:16px; margin-top:16px; }
+  /* Nine tiles in a four-column grid leaves one stranded on a row of its own,
+     which reads as a mistake rather than as a figure. Three across divides
+     evenly and only applies when the ninth exists. */
+  .tiles.of-nine{ grid-template-columns:repeat(3, minmax(0,1fr)); }
   .tile{ background:var(--surface); border:1px solid var(--hair); border-radius:6px; padding:16px 18px; }
   .tile.t-pos{ background:var(--tile-pos); }
   .tile.t-neg{ background:var(--tile-neg); }
@@ -2341,6 +2345,12 @@ async function renderAssets() {
   const perMonth = a.series.length > 1
     ? (tot.netWorth - o.netWorth) / (a.series.length - 1) : 0;
 
+  /* Metal earns a tile only when there is some. A row reading "$0.00" is not a
+     fact about somebody's finances, it is a prompt to go and buy gold, and this
+     page is not for that. */
+  const metalValue = (a.metals && a.metals.value) || 0;
+  $('as-tiles').className = 'tiles' + (metalValue > 0 ? ' of-nine' : '');
+
   if (a.metals && a.metals.unavailable) {
     $('as-note').textContent += ' Precious metals could not be read, so they are not in these figures.';
   } else if (a.metals && a.metals.value) {
@@ -2378,7 +2388,15 @@ async function renderAssets() {
       (perMonth >= 0 ? '+' : '') + money(perMonth),
       'what net worth has moved per month across the window',
       toneFor('signed', perMonth)),
-  ].join('');
+  ].concat(metalValue > 0
+    ? [statTile('Precious metals', money(metalValue),
+        // Its share of what is owned, which is the question somebody holding
+        // bullion is actually asking — not what an ounce costs today.
+        tot.assets > 0
+          ? ((metalValue / tot.assets) * 100).toFixed(1) + '% of everything you own'
+          : 'entered on the Banks tab',
+        't-pos')]
+    : []).join('');
 
   /* ---- the two breakdowns ---- */
   const widest = Math.max.apply(null, a.byClass.map(r => Math.abs(r.net)).concat([1]));
@@ -2399,13 +2417,19 @@ async function renderAssets() {
     '<th style="text-align:right">Balance</th></tr></thead><tbody>' +
     a.accounts.map(x => {
       const owed = x.klass === 'credit' || x.klass === 'loan';
+      const metal = x.klass === 'metal';
       return '<tr><td><b>' + escapeHtml(x.name) + '</b>' +
         (x.mask ? ' <span class="as-sub">••' + escapeHtml(x.mask) + '</span>' : '') +
+        // What is held, rather than a masked number it does not have.
+        (metal && x.ounces
+          ? ' <span class="as-sub">' + x.ounces + ' oz</span>' : '') +
         (x.utilisation !== null
           ? '<div class="as-stat">' + (x.utilisation * 100).toFixed(0) + '% of its limit used</div>' : '') +
         (!x.exact ? '<div class="as-stat">carried at today\'s value</div>' : '') +
         '</td>' +
-        '<td>' + escapeHtml(x.institution || 'Unknown') + '</td>' +
+        // No counterparty for metal, and a dash says that better than a name
+        // invented to fill the column.
+        '<td>' + (metal ? '—' : escapeHtml(x.institution || 'Unknown')) + '</td>' +
         '<td>' + escapeHtml(x.klassLabel) + '</td>' +
         '<td class="num' + (owed ? '' : ' in') + '">' +
           (owed ? '−' : '') + money(Math.abs(x.current)) + '</td></tr>';
