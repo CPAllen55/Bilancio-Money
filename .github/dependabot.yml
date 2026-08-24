@@ -1,0 +1,36 @@
+# Dependency updates, opened as pull requests.
+#
+# The runtime surface is four packages, which is the point: every dependency is
+# a way for somebody else's mistake to become ours, and the application is
+# written to need as few as possible. Four is small enough that reviewing an
+# update is a real review rather than a rubber stamp.
+#
+# Security updates arrive regardless of the schedule below — GitHub opens those
+# as soon as an advisory lands, provided Dependabot alerts and security updates
+# are enabled for the repository under Settings → Code security.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    # One at a time. A batch of five is a batch nobody reads.
+    open-pull-requests-limit: 5
+    groups:
+      # Patch and minor bumps of the same package family arrive together, so a
+      # routine week is one PR rather than four.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"

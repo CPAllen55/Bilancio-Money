@@ -145,6 +145,41 @@ could not drop a table.
 - Deployment is automated from the `main` branch; there is no manual upload path
   and no way to ship code that is not in version control.
 
+## 7a. Vulnerability management
+
+**Dependencies are scanned continuously.** GitHub Dependabot watches the four
+runtime packages and opens a pull request when an advisory is published; a
+scheduled job additionally runs `npm audit` weekly against unchanged code,
+because a dependency does not have to change for a vulnerability in it to be
+disclosed. The same job typechecks every push, so a build that would fail on
+deploy fails earlier and more visibly.
+
+**Patching targets.** Measured from the advisory becoming known to us:
+
+| Severity | Target |
+|---|---|
+| Critical | 7 days |
+| High | 30 days |
+| Moderate and below | Next routine update |
+
+These are achievable for four dependencies and one person, which is why they
+are the numbers chosen. A target that cannot be met is not a control.
+
+**Production assets** are serverless and managed. There are no server instances
+to scan or patch: Cloudflare Workers are ephemeral per request with no
+persistent host, and Neon patches the database platform. Host-level
+vulnerability management is therefore the providers’, and is covered by their
+own published programmes.
+
+**Endpoint scanning** is not performed. There is one machine, belonging to the
+sole Member, kept current with operating-system updates and platform
+antimalware. A managed endpoint programme is not proportionate to a
+single-person company and is recorded here rather than claimed.
+
+**End-of-life software.** The dependency surface is four packages and a managed
+runtime, all currently supported. Versions are reviewed alongside the quarterly
+access review.
+
 ## 8. Third parties
 
 | Provider | Purpose | Handles |
@@ -222,6 +257,7 @@ Stated plainly, because a reviewer will ask and discovering it later is worse:
 - **No SOC 2, ISO 27001 or equivalent certification.** Not proportionate at
   current scale.
 - **No third-party penetration test** has been performed to date.
+- **No endpoint vulnerability scanning** on the single developer machine (§7a).
 - **No formal security awareness training programme** — with one person and no
   employees, there is nobody to train.
 - **No separation of duties**, for the same reason.

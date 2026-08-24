@@ -1,0 +1,49 @@
+# The checks that were only ever run by hand.
+#
+# Deployment happens through Cloudflare Workers Builds, not here — this does not
+# ship anything. It exists so that a type error or a known vulnerability in a
+# dependency is caught on the commit that introduced it rather than whenever
+# somebody next happens to look.
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Dependencies do not have to change for an advisory about them to be
+  # published, so the audit also runs on a schedule against unchanged code.
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # The build already fails on a type error; this makes that visible before
+      # a deploy rather than during one.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # Runtime dependencies only. A vulnerability in a build tool is worth
+      # knowing about and is not the same risk as one in code that serves
+      # requests, and conflating them is how audit output starts being ignored.
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+
+      # Dev dependencies reported without failing the run, so the signal above
+      # stays meaningful.
+      - name: Audit dev dependencies (advisory)
+        run: npm audit --audit-level=high || true
