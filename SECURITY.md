@@ -8,7 +8,10 @@ planned rather than in place it says so — a policy that describes intentions a
 though they were controls is worse than no policy, because it cannot be relied
 on by anybody, including us.
 
-Reviewed at least annually, and whenever the architecture changes materially.
+**Version 1.0 — 24 August 2026.** Reviewed at least annually, and whenever the
+architecture changes materially. This file is version-controlled: its commit
+history is the review record, so the claim that the policy is maintained is
+checkable rather than asserted.
 
 ---
 
