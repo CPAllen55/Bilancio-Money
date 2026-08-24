@@ -19,9 +19,7 @@ import { Hono } from "hono";
 import { getDb } from "./db/client";
 import { requireUser } from "./auth";
 import { loadCategories, monthlyBuckets, ownedAccountIds, rollUp } from "./summary-routes";
-import { buildPlan } from "./projection";
-import type { HistoryLookup } from "./budget-plan";
-import { computeBudgets, loadPlanRows } from "./budget-plan";
+import { buildShapedPlan, learnWindow, loadOverrides } from "./plan";
 
 const forecast = new Hono<{ Bindings: Env }>();
 
@@ -49,13 +47,15 @@ forecast.get("/forecast", async (c) => {
     const thisYearKeys: string[] = [];
     for (let m = 0; m < 12; m++) thisYearKeys.push(ym(year, m));
 
-    // The plan loads the surrounding years itself; the actuals are read again
-    // here because the past months of the chart are what happened, not what was
-    // expected to happen.
-    const [plan, buckets, planRows] = await Promise.all([
-      buildPlan(db, auth.user.id, ids, ctx, thisYearKeys, today),
-      monthlyBuckets(db, auth.user.id, ids, ctx, thisYearKeys),
-      loadPlanRows(db, auth.user.id),
+    /* One read covering both what the shape learns from and what the chart
+       draws behind it, because the two windows overlap and scanning twice for
+       the same rows is the thing that made this page slow. */
+    const { learn } = learnWindow(today);
+    const span = [...new Set([...learn, ...thisYearKeys])].sort();
+
+    const [buckets, overrides] = await Promise.all([
+      monthlyBuckets(db, auth.user.id, ids, ctx, span),
+      loadOverrides(db, auth.user.id),
     ]);
     const at = (key: string) =>
       buckets.get(key) ?? { income: 0, expense: 0, total: 0, byCategory: {} };
@@ -64,20 +64,18 @@ forecast.get("/forecast", async (c) => {
     // projection. Two different numbers for "what will next month cost" is one
     // too many, and the budget is the one somebody chose — the forecast was
     // only ever guessing at what the budget now states.
-    const history: HistoryLookup = (() => {
-      const hb = plan.buckets;
-      const hAt = (slug: string, month: string) => hb.get(month)?.byCategory[slug] ?? 0;
-      const completed = [...hb.keys()].sort()
-        .filter((k) => k < currentKey && (hb.get(k)?.expense ?? 0) > 0);
-      return {
-        at: hAt, completed,
-        lastComplete: completed.length ? completed[completed.length - 1] : null,
-        before: (month) => completed.filter((k) => k < month),
-      };
-    })();
-
     const monthsAhead = thisYearKeys.filter((k) => k >= currentKey);
-    const budgets = computeBudgets(ctx.list, monthsAhead, planRows, history, plan, ctx);
+    const planned = buildShapedPlan(ctx.list, buckets, learn, monthsAhead, overrides);
+
+    // slug -> cents, for one month of the plan.
+    const plannedAt = (key: string) => {
+      const row: Record<string, number> = {};
+      for (const [slug, perMonth] of Object.entries(planned.byCategory)) {
+        const v = perMonth[key] ?? 0;
+        if (v > 0) row[slug] = v;
+      }
+      return row;
+    };
 
     const months = thisYearKeys.map((key) => {
       const actual = at(key);
@@ -93,16 +91,17 @@ forecast.get("/forecast", async (c) => {
         };
       }
 
-      const planned = budgets.byMonth.get(key) ?? {};
-      const plannedExpense = Object.values(planned).reduce((s, v) => s + v, 0);
+      const row = plannedAt(key);
+      const plannedExpense = Object.values(row).reduce((s, v) => s + v, 0);
 
       // The current month already has spending in it. Showing less than has
       // demonstrably happened would be nonsense, so what happened is a floor —
       // and going past the budget is exactly the thing worth seeing.
       const isCurrent = key === currentKey;
       const expense = Math.max(plannedExpense, isCurrent ? actual.expense : 0);
-      // Income has no budget of its own, so it stays on the projection.
-      const income = Math.max(plan.for(key).income, isCurrent ? actual.income : 0);
+      // Income is budgeted too now, by the same method, so the line ahead is
+      // the plan rather than a second opinion about it.
+      const income = Math.max(planned.income[key] ?? 0, isCurrent ? actual.income : 0);
 
       return {
         month: key, projected: true,
@@ -110,7 +109,7 @@ forecast.get("/forecast", async (c) => {
         net: income - expense,
         byParent: isCurrent && actual.expense > plannedExpense
           ? actualByParent
-          : rollUp(planned, ctx),
+          : rollUp(row, ctx),
         actualSoFar: isCurrent ? { income: actual.income, expense: actual.expense } : null,
       };
     });
@@ -123,17 +122,19 @@ forecast.get("/forecast", async (c) => {
     return c.json({
       ok: true,
       year,
-      method: plan.method,
-      growthPct: plan.growthPct,
+      method: "shaped" as const,
+      growthPct: null,
       basis: {
-        comparableMonths: plan.comparableMonths,
-        monthsOfHistory: plan.monthsOfHistory,
-        usesPriorYear: plan.method === "seasonal-growth",
+        comparableMonths: planned.monthsOfHistory,
+        monthsOfHistory: planned.monthsOfHistory,
+        usesPriorYear: false,
       },
       // Categories with no budget behind them, so the chart can say the bars
       // ahead are short because nothing is planned rather than because nothing
       // is expected to be spent.
-      unplanned: budgets.unplanned,
+      // With one method nothing is undecided: a category with no history plans
+      // zero and says so through its own shape.
+      unplanned: [] as string[],
       firstProjectedMonth: ahead.length ? ahead[0].month : null,
       months,
       categories: ctx.list,

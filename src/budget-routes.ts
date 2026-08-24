@@ -26,14 +26,12 @@
  *   method         -> vestigial. There is one method now. Left in place because
  *                     dropping a column is a migration and this costs nothing.
  *
- * ── What this does NOT yet drive ──────────────────────────────────────────
+ * ── What reads this ───────────────────────────────────────────────────────
  *
- * The Overview tiles, the Tracker and the Trend budget line still derive their
- * figures the old way, through budgetFor in summary-routes. Switching them is
- * the obvious next step and is deliberately not bundled here: it changes four
- * dashboards at once, and doing that in the same commit that introduces a new
- * forecasting engine would make any disagreement impossible to attribute.
- * Until then the two will differ, and the Budgeting tab says so.
+ * Everything. The Overview tiles, the Tracker bars and the Trend forecast all
+ * go through buildShapedPlan in plan.ts, which is the same call this endpoint
+ * makes — not a second implementation kept in step by hand. Moving a baseline
+ * here moves every one of them.
  */
 
 import { Hono } from "hono";
@@ -42,7 +40,8 @@ import { getDb } from "./db/client";
 import { budgetPlansV2 } from "./db/schema";
 import { requireUser } from "./auth";
 import { loadCategories, monthlyBuckets, ownedAccountIds } from "./summary-routes";
-import { shapeBudget, type Shape } from "./budget-shape";
+import { applyOverride, loadOverrides, learnWindow, type Override } from "./plan";
+import { shapeBudget } from "./budget-shape";
 
 const budget = new Hono<{ Bindings: Env }>();
 
@@ -65,56 +64,6 @@ function windows(today: Date) {
   // complete one; the current month is planned, not learned from.
   const currentKey = ym(year, today.getUTCMonth());
   return { plan, learn: learn.filter((k) => k < currentKey), currentKey };
-}
-
-export interface Override { baseline: number; byMonth: Record<string, number> }
-
-async function loadOverrides(
-  db: ReturnType<typeof getDb>["db"],
-  userId: string,
-): Promise<Map<string, Override>> {
-  const rows = await db
-    .select({
-      categoryId: budgetPlansV2.categoryId,
-      manualAmount: budgetPlansV2.manualAmount,
-      manualByMonth: budgetPlansV2.manualByMonth,
-    })
-    .from(budgetPlansV2)
-    .where(eq(budgetPlansV2.userId, userId));
-
-  const out = new Map<string, Override>();
-  for (const r of rows) {
-    out.set(r.categoryId, {
-      baseline: Number(r.manualAmount) || 0,
-      byMonth: (r.manualByMonth ?? {}) as Record<string, number>,
-    });
-  }
-  return out;
-}
-
-/**
- * The shape, with the reader's own hand applied over it.
- *
- * A baseline override SCALES rather than replaces, so the year keeps the shape
- * history gave it. Somebody who takes groceries from £480 to £430 has not said
- * every month is £430 — they have said "about a tenth less", and December
- * should still be December. Replacing the figure flat would quietly delete the
- * seasonality they never asked to lose.
- *
- * A month override is absolute, because that is what naming one month means.
- */
-export function applyOverride(shape: Shape, months: string[], over: Override | undefined) {
-  const plan: Record<string, number> = {};
-  const scale = over && over.baseline > 0 && shape.baseline > 0
-    ? over.baseline / shape.baseline : 1;
-
-  for (const m of months) {
-    const pinned = over?.byMonth?.[m];
-    plan[m] = pinned !== undefined && pinned !== null
-      ? Math.max(0, Math.round(pinned))
-      : Math.max(0, Math.round((shape.plan[m] ?? 0) * scale));
-  }
-  return plan;
 }
 
 budget.get("/budget", async (c) => {
@@ -216,7 +165,7 @@ budget.get("/budget", async (c) => {
       savings: { annual, monthly: Math.round(annual / 12) },
       // Named so the front end can say it rather than implying agreement that
       // does not exist yet.
-      drivesOtherTabs: false,
+      drivesOtherTabs: true,
     });
   } finally {
     c.executionCtx.waitUntil(close());

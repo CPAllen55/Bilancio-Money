@@ -1764,22 +1764,18 @@ function budgetTiles(t, b) {
 
 /* Says where the number came from. A budget nobody can explain is one nobody
    argues with, and this one is worth arguing with — it is derived, not chosen. */
+/* One sentence, because there is one method now and it is the same one the
+   Budgeting tab draws. What used to be explained here — which of five
+   methods a category was on, what growth rate scaled it — mattered only
+   because the answer varied per category. */
 function budgetNote(b) {
   const span = b.months === 1 ? 'this month' : 'these ' + b.months + ' months';
-  if (b.method === 'seasonal-growth') {
-    return 'Budget · what ' + span + ' cost you a year ago, scaled by how this year is running against last — ' +
-      (b.growthPct >= 0 ? 'up ' : 'down ') + Math.abs(b.growthPct) + '% across ' +
-      b.comparableMonths + ' comparable month' + (b.comparableMonths === 1 ? '' : 's') +
-      '. Nothing to fill in; it moves as your history does.';
+  if (!b.available) {
+    return 'Budget · not yet. A month of complete history is enough to start.';
   }
-  if (b.method === 'recent-average') {
-    return 'Budget · the average of your last ' + Math.min(3, b.monthsOfHistory) +
-      ' complete month' + (Math.min(3, b.monthsOfHistory) === 1 ? '' : 's') +
-      '. Once there is a year behind you it will use last year\u2019s shape instead, ' +
-      'which keeps the December spike and the summer holiday where they belong.';
-  }
-  return 'Budget · not yet. One complete month of history is enough to start; ' +
-    'a full year makes it seasonal rather than a flat average.';
+  return 'Budget · what ' + span + ' should cost, from ' + b.monthsOfHistory +
+    ' months of history: a normal month for each category, one-off costs left out, ' +
+    'and months that run heavy every year kept heavy. Change any of it on Budgeting.';
 }
 
 /* Said plainly rather than left as three dashes to puzzle over. */
@@ -3629,7 +3625,7 @@ function drawBudgeting() {
       ? 'You have moved ' + moved + ' baseline' + (moved === 1 ? '' : 's') +
         (withPins ? ' and pinned months in ' + withPins + ' categor' + (withPins === 1 ? 'y' : 'ies') : '') + '. '
       : '') +
-    'This plan does not drive the Overview or Tracker yet.';
+    'This is the plan the Overview, the Tracker and the Trend forecast all read.';
 }
 
 /** One leaf: what it costs a month, and the twelve months behind that. */
@@ -4508,14 +4504,13 @@ async function renderForecast() {
   const t = f.totals;
   const yearEnd = t.projectedYearEndNet;
 
-  const method = f.method === 'seasonal-growth'
-    ? 'Each remaining month is last year&rsquo;s same month, scaled by how ' + f.year +
-      ' is running against ' + (f.year - 1) + ' — currently ' +
-      (f.growthPct >= 0 ? '+' : '') + f.growthPct + '%. ' +
-      'Based on ' + f.basis.comparableMonths + ' month' + (f.basis.comparableMonths === 1 ? '' : 's') +
-      ' where both years have data.'
-    : 'No prior year to compare against, so each remaining month is the average of your last three. ' +
-      'That carries no seasonality — a December projected from summer months will be too low.';
+  /* The months ahead are the budget, not a second opinion about it. Whatever
+     is set on Budgeting is what this draws, which is why there is nothing
+     here about which method produced it. */
+  const method = 'The months ahead are your plan from the Budgeting tab, worked from ' +
+    f.basis.monthsOfHistory + ' months of history — a normal month for each category, ' +
+    'one-off costs kept out, and months that run heavy every year kept heavy. ' +
+    'Change the plan and this moves with it.';
 
   box.innerHTML =
     '<div class="fc-head"><div>' +

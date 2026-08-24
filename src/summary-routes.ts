@@ -21,9 +21,7 @@ import {
 } from "./db/schema";
 import { requireUser } from "./auth";
 import { classify, merchantKey } from "./categories";
-import { buildPlan } from "./projection";
-import type { HistoryLookup } from "./budget-plan";
-import { computeBudgets, loadPlanRows } from "./budget-plan";
+import { buildShapedPlan, learnWindow, loadOverrides } from "./plan";
 
 const summary = new Hono<{ Bindings: Env }>();
 
@@ -474,53 +472,53 @@ async function budgetFor(
   today: Date,
 ) {
   const months = monthsIn(current.start, current.end);
+  const { learn } = learnWindow(today);
 
-  // buildPlan reads the surrounding years for its seasonal basis, and those are
-  // the same months "average" and "previous" want. One scan, read twice.
-  const [plan, planRows] = await Promise.all([
-    buildPlan(db, userId, ids, ctx, months, today),
-    loadPlanRows(db, userId),
+  /* The same plan the Budgeting tab draws, from the same function.
+   *
+   * This used to run its own machinery — buildPlan, a per-category method, a
+   * seasonal growth rate — and the result was that Budgeting and the Overview
+   * could show different budgets for the same month and both be behaving
+   * correctly. Four dashboards agreeing is not something that can be
+   * maintained by keeping four implementations in step; they have to be one
+   * implementation. */
+  const [buckets, overrides] = await Promise.all([
+    monthlyBuckets(db, userId, ids, ctx, [...new Set([...learn, ...months])].sort()),
+    loadOverrides(db, userId),
   ]);
-  const buckets = plan.buckets;
+  const planned = buildShapedPlan(ctx.list, buckets, learn, months, overrides);
 
-  const currentKey = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}`;
-  const at = (slug: string, month: string) => buckets.get(month)?.byCategory[slug] ?? 0;
-  const completed = [...buckets.keys()].sort()
-    .filter((k) => k < currentKey && (buckets.get(k)?.expense ?? 0) > 0);
-  const history: HistoryLookup = {
-    at,
-    completed,
-    lastComplete: completed.length ? completed[completed.length - 1] : null,
-    before: (month) => completed.filter((k) => k < month),
-  };
-
-  const { byMonth, unplanned } = computeBudgets(ctx.list, months, planRows, history, plan, ctx);
-
-  // Summed for the window this call is about; the per-month shape is what the
-  // trend chart wants and is computed by the same function.
+  // Summed across the window. The per-month shape is what the charts want and
+  // is computed by the same call.
   const byCategory: Record<string, number> = {};
-  for (const row of byMonth.values()) {
-    for (const [slug, v] of Object.entries(row)) byCategory[slug] = (byCategory[slug] ?? 0) + v;
+  for (const [slug, perMonth] of Object.entries(planned.byCategory)) {
+    const total = months.reduce((s, m) => s + (perMonth[m] ?? 0), 0);
+    if (total > 0) byCategory[slug] = total;
   }
 
-  const available = plan.method !== "insufficient-data" || planRows.size > 0;
-  const income = months.map((m) => plan.for(m)).reduce((s, p) => s + p.income, 0);
+  const income = months.reduce((s, m) => s + (planned.income[m] ?? 0), 0);
   const expense = Object.values(byCategory).reduce((s, v) => s + v, 0);
 
+  /* With one method there is nothing that cannot produce a figure — a category
+     with no history plans zero and says so through its own shape rather than
+     by being listed as undecided. The field stays so the callers that read it
+     keep working; it is simply always empty now. */
+  const unplanned: string[] = [];
+
   return {
-    available,
-    method: plan.method,
-    growthPct: plan.growthPct,
-    monthsOfHistory: plan.monthsOfHistory,
-    comparableMonths: plan.comparableMonths,
+    // A plan needs history to be worth anything. Below six complete months the
+    // shape has nothing to fit and every figure is really just a recent median.
+    available: planned.monthsOfHistory > 0 && (expense > 0 || income > 0),
+    method: "shaped" as const,
+    growthPct: null,
+    monthsOfHistory: planned.monthsOfHistory,
+    comparableMonths: planned.monthsOfHistory,
     months: months.length,
     income, expense,
     net: income - expense,
     savingsRate: income > 0 ? ((income - expense) / income) * 100 : null,
     byCategory,
     byParent: rollUp(byCategory, ctx),
-    // Categories whose method could not produce a figure, so the UI can say
-    // which ones need a decision rather than showing them as zero.
     unplanned,
   };
 }
