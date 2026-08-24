@@ -99,9 +99,19 @@ development compromise cannot decrypt production data.
 
 ## 6. Access control
 
-**End users** authenticate through Clerk. The production instance requires
-multi-factor authentication and sign-up is **invitation-only**; there is no open
-registration.
+**End users** authenticate through Clerk. The production instance has **Require
+multi-factor authentication enabled**, so a second factor is enforced after sign-in
+and sign-up rather than offered. The available factors are an authenticator
+application (TOTP), SMS one-time code, and single-use backup codes.
+
+These are strong but **not phishing-resistant**: a convincing fake sign-in page can
+capture a TOTP or SMS code and replay it within its validity window. Only
+WebAuthn, passkeys or hardware keys bind a credential to the domain, and none is
+in use today. This is recorded rather than glossed, and passkeys are the intended
+next step.
+
+Sign-up is **invitation-only** — Clerk access mode is set to invite-only, so there
+is no open registration.
 
 **Application access to data** is scoped per user on every query. Ownership is
 proved by joining through the account and item tables to the authenticated user

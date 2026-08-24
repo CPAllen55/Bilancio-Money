@@ -60,8 +60,13 @@ Users authenticate through **Clerk**, which is the single identity provider for
 the application. There is no separate password store and the application never
 handles a password.
 
-- **Multi-factor authentication is required** on the production tenant.
-- **Registration is invitation-only.** There is no open sign-up.
+- **Multi-factor authentication is required** on the production tenant: Clerk's
+  "Require multi-factor authentication" setting is enabled, enforcing enrolment
+  after sign-in and sign-up. Users cannot opt out.
+- **Factors available:** authenticator application (TOTP), SMS one-time code, and
+  single-use backup codes. None is phishing-resistant — see §7.
+- **Registration is invitation-only.** Clerk access mode is invite-only; there is
+  no open sign-up.
 - Sessions are issued and verified by Clerk; the API verifies the session on
   every request rather than trusting anything the client asserts.
 
@@ -121,6 +126,11 @@ Stated because a policy that hides its weaknesses cannot be relied on.
   performed and it has not been.
 - **No automated de-provisioning**, there being no employee lifecycle to
   automate.
+- **End-user MFA is not phishing-resistant.** TOTP and SMS codes can be captured
+  and replayed by a convincing fake sign-in page within their validity window.
+  Passkeys or WebAuthn would bind the credential to the domain and remove that
+  class of attack; adopting them is the intended next step, and is cheapest now
+  while the user base is small enough to re-enrol.
 
 ## 8. Access register and review
 
