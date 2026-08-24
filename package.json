@@ -16,7 +16,8 @@
     "brand": "node scripts/brand.mjs",
     "unlink": "node scripts/unlink.mjs prod",
     "unlink:dev": "node scripts/unlink.mjs dev",
-    "preview": "node scripts/serve-static.mjs"
+    "preview": "node scripts/serve-static.mjs",
+    "hyperdrive:cached": "node scripts/hyperdrive-cached.mjs"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",
