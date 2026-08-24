@@ -4797,6 +4797,9 @@ $('signout').addEventListener('click', async () => {
  */
 let bv2Data = null;
 const bv2Open = new Set();
+/* Whether the opening card has been chosen yet. Choosing it is a first-load
+   decision, not something to redo on every redraw — see drawBudgetingV2. */
+let bv2Seeded = false;
 /** parent slug -> the subcategory being looked at, if any. */
 const bv2Focus = {};
 
@@ -5100,13 +5103,23 @@ function drawBudgetingV2() {
     return;
   }
 
-  // Opened on the biggest plan rather than on nothing: the point of this tab is
-  // the chart, and a column of shut cards shows none of it.
-  if (!bv2Open.size) {
-    const ahead = months.filter(m => m >= bv2Data.firstProjected);
-    const spend = p => ahead.reduce((s, m) => s + (p.series[m] || 0), 0);
-    const biggest = parents.slice().sort((a, b) => spend(b) - spend(a))[0];
-    if (biggest && spend(biggest) > 0) bv2Open.add(biggest.slug);
+  /* Opened on the biggest plan rather than on nothing: the point of this tab is
+   * the chart, and a column of shut cards shows none of it.
+   *
+   * Once, though. This ran on every redraw, and closing the last open card is
+   * exactly what empties the set — so the redraw that followed put the biggest
+   * one straight back, and the card could not be closed at all. It was there
+   * before the redraw got fast, hidden behind a second of waiting; making the
+   * toggle instant is what turned it from a card that seemed not to respond
+   * into one that visibly refuses. */
+  if (!bv2Seeded) {
+    bv2Seeded = true;
+    if (!bv2Open.size) {
+      const ahead = months.filter(m => m >= bv2Data.firstProjected);
+      const spend = p => ahead.reduce((s, m) => s + (p.series[m] || 0), 0);
+      const biggest = parents.slice().sort((a, b) => spend(b) - spend(a))[0];
+      if (biggest && spend(biggest) > 0) bv2Open.add(biggest.slug);
+    }
   }
 
   host.innerHTML = parents.map(p =>

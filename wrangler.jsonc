@@ -51,6 +51,13 @@
   // HYPERDRIVE, which would collide with the entry above.
   //
   // Config ids are not secrets; they name a config, they do not open it.
+  //
+  // LOCAL DEVELOPMENT: every Hyperdrive binding needs its own local connection
+  // string in .env, named after the binding. Adding this second one without
+  // adding CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE_CACHED
+  // stops `wrangler dev` from starting at all — it does not fall back and it
+  // does not warn, it refuses. Both point at the same dev branch: locally there
+  // is no edge and nothing to cache, so the two only have to resolve.
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
