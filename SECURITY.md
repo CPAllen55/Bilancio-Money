@@ -206,6 +206,10 @@ by string concatenation from user input.
 
 ## 10. Data retention and deletion
 
+Expanded in [docs/data-retention-and-disposal-policy.md](docs/data-retention-and-disposal-policy.md),
+which covers disposal on managed infrastructure and the point-in-time recovery
+window. Summarised here.
+
 ### Retention
 
 Data is kept for as long as it is being used for the purpose it was collected
