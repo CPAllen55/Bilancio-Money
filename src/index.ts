@@ -18,6 +18,7 @@ import budgetPlanRoutes from "./budget-plan-routes";
 import budgetV2Routes from "./budget-v2-routes";
 import assetRoutes from "./asset-routes";
 import metalRoutes from "./metal-routes";
+import budgetRoutes from "./budget-routes";
 
 // Deliberately loose. The only thing worth rejecting here is input that cannot
 // be an address at all - anything stricter starts refusing real people.
@@ -133,6 +134,7 @@ app.route("/api", budgetPlanRoutes);
 app.route("/api", budgetV2Routes);
 app.route("/api", assetRoutes);
 app.route("/api", metalRoutes);
+app.route("/api", budgetRoutes);
 
 // JSON, not an HTML error page — the front end is always expecting JSON here.
 app.all("/api/*", (c) =>
