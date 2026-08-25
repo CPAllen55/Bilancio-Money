@@ -35,7 +35,7 @@
  */
 
 import { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getDb } from "./db/client";
 import { budgetPlansV2 } from "./db/schema";
 import { requireUser } from "./auth";
@@ -172,13 +172,62 @@ budget.get("/budget", async (c) => {
   }
 });
 
+const MAX_CENTS = 1_000_000_00;
+
+/** One edit, as it arrives. Validated before anything is written. */
+type Edit = {
+  slug: string;
+  baseline?: number | null;
+  month?: string;
+  amount?: number | null;
+};
+
+function readEdit(raw: any): Edit | { error: string } {
+  if (typeof raw?.slug !== "string") return { error: "Expected a category." };
+  const out: Edit = { slug: raw.slug };
+
+  if ("baseline" in raw) {
+    if (raw.baseline === null) out.baseline = null;
+    else {
+      const n = Number(raw.baseline);
+      if (!Number.isFinite(n) || n < 0 || n > MAX_CENTS) {
+        return { error: "That amount is out of range." };
+      }
+      out.baseline = Math.round(n);
+    }
+  }
+
+  if ("month" in raw) {
+    if (!/^\d{4}-\d{2}$/.test(String(raw.month))) return { error: "That is not a month." };
+    out.month = String(raw.month);
+    if (raw.amount === null) out.amount = null;
+    else {
+      const n = Number(raw.amount);
+      if (!Number.isFinite(n) || n < 0 || n > MAX_CENTS) {
+        return { error: "That amount is out of range." };
+      }
+      out.amount = Math.round(n);
+    }
+  }
+
+  return out;
+}
+
 /**
- * PUT /api/budget — one edit at a time.
+ * PUT /api/budget — one edit, or a batch of them.
  *
  *   { slug, baseline: 43000 }            move a whole category
  *   { slug, baseline: null }             back to what history says
  *   { slug, month: "2026-05", amount }   pin one month
  *   { slug, month: "2026-05", amount: null }   unpin it
+ *   { edits: [ ... ] }                   any number of the above, at once
+ *
+ * The batch exists because of one gesture. Setting a savings target for a
+ * month re-pins every category in that month, and forty categories cannot be
+ * forty round trips — each of which reads a row, amends it and writes it back,
+ * so two touching the same category would lose one of them. Batched, each
+ * category is read once, amended however many times the batch asks, and
+ * written once.
  */
 budget.put("/budget", async (c) => {
   const { db, ready, close } = getDb(c.env);
@@ -191,61 +240,76 @@ budget.put("/budget", async (c) => {
     try { body = await c.req.json(); }
     catch { return c.json({ error: "bad_request", message: "Body must be JSON." }, 400); }
 
-    if (typeof body?.slug !== "string") {
-      return c.json({ error: "bad_request", message: "Expected a category." }, 400);
+    const incoming: any[] = Array.isArray(body?.edits) ? body.edits : [body];
+    if (!incoming.length) return c.json({ error: "bad_request", message: "Nothing to do." }, 400);
+    if (incoming.length > 500) {
+      return c.json({ error: "bad_request", message: "Too many edits at once." }, 400);
+    }
+
+    const edits: Edit[] = [];
+    for (const raw of incoming) {
+      const parsed = readEdit(raw);
+      if ("error" in parsed) return c.json({ error: "bad_request", message: parsed.error }, 400);
+      edits.push(parsed);
     }
 
     const ctx = await loadCategories(db, auth.user.id);
-    const cat = ctx.list.find((x) => x.slug === body.slug);
-    if (!cat) return c.json({ error: "not_found", message: "No such category." }, 404);
 
-    const [existing] = await db
+    // Grouped by category first, so a category named twice in one batch is
+    // still read once and written once.
+    const byCategory = new Map<string, Edit[]>();
+    for (const e of edits) {
+      const cat = ctx.list.find((x) => x.slug === e.slug);
+      if (!cat) return c.json({ error: "not_found", message: "No such category." }, 404);
+      const list = byCategory.get(cat.id);
+      if (list) list.push(e); else byCategory.set(cat.id, [e]);
+    }
+
+    const existing = await db
       .select()
       .from(budgetPlansV2)
-      .where(and(eq(budgetPlansV2.userId, auth.user.id), eq(budgetPlansV2.categoryId, cat.id)));
+      .where(eq(budgetPlansV2.userId, auth.user.id));
+    const rows = new Map(existing.map((r) => [r.categoryId, r]));
 
-    let baseline = existing ? Number(existing.manualAmount) || 0 : 0;
-    const byMonth: Record<string, number> =
-      (existing?.manualByMonth as Record<string, number>) ?? {};
+    const results: { slug: string; baseline: number | null; byMonth: Record<string, number> }[] = [];
 
-    if ("baseline" in body) {
-      if (body.baseline === null) baseline = 0;
-      else {
-        const n = Number(body.baseline);
-        if (!Number.isFinite(n) || n < 0 || n > 1_000_000_00) {
-          return c.json({ error: "bad_request", message: "That amount is out of range." }, 400);
+    for (const [categoryId, list] of byCategory) {
+      const row = rows.get(categoryId);
+      let baseline = row ? Number(row.manualAmount) || 0 : 0;
+      const byMonth: Record<string, number> =
+        { ...((row?.manualByMonth as Record<string, number>) ?? {}) };
+
+      for (const e of list) {
+        if ("baseline" in e) baseline = e.baseline === null ? 0 : (e.baseline as number);
+        if (e.month !== undefined) {
+          if (e.amount === null || e.amount === undefined) delete byMonth[e.month];
+          else byMonth[e.month] = e.amount;
         }
-        baseline = Math.round(n);
       }
-    }
 
-    if ("month" in body) {
-      if (!/^\d{4}-\d{2}$/.test(String(body.month))) {
-        return c.json({ error: "bad_request", message: "That is not a month." }, 400);
-      }
-      if (body.amount === null) delete byMonth[body.month];
-      else {
-        const n = Number(body.amount);
-        if (!Number.isFinite(n) || n < 0 || n > 1_000_000_00) {
-          return c.json({ error: "bad_request", message: "That amount is out of range." }, 400);
-        }
-        byMonth[body.month] = Math.round(n);
-      }
-    }
+      await db
+        .insert(budgetPlansV2)
+        .values({
+          userId: auth.user.id, categoryId,
+          method: "shaped", manualAmount: baseline, manualByMonth: byMonth,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [budgetPlansV2.userId, budgetPlansV2.categoryId],
+          set: { manualAmount: baseline, manualByMonth: byMonth, updatedAt: new Date() },
+        });
 
-    await db
-      .insert(budgetPlansV2)
-      .values({
-        userId: auth.user.id, categoryId: cat.id,
-        method: "shaped", manualAmount: baseline, manualByMonth: byMonth,
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [budgetPlansV2.userId, budgetPlansV2.categoryId],
-        set: { manualAmount: baseline, manualByMonth: byMonth, updatedAt: new Date() },
+      results.push({
+        slug: list[0].slug, baseline: baseline || null, byMonth,
       });
+    }
 
-    return c.json({ ok: true, slug: cat.slug, baseline: baseline || null, byMonth });
+    // A single edit answers exactly as it always did, so nothing that already
+    // calls this has to know the batch form exists.
+    if (!Array.isArray(body?.edits)) {
+      return c.json({ ok: true, ...results[0] });
+    }
+    return c.json({ ok: true, updated: results.length, categories: results });
   } finally {
     c.executionCtx.waitUntil(close());
   }

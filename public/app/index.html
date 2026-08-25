@@ -712,6 +712,30 @@
   .bg-big.up{ color:var(--mint); } .bg-big.down{ color:var(--coral); }
   .bg-sub{ font-size:13px; color:var(--ink-soft); margin-top:4px; }
   .bg-side{ display:flex; gap:34px; margin-left:auto; }
+
+  /* The savings year. Full width of the hero, under the figures. */
+  .bg-save{ flex:1 0 100%; margin-top:14px; padding-top:14px;
+            border-top:1px solid var(--hair); }
+  .bg-save-head{ display:flex; align-items:baseline; gap:10px; margin-bottom:2px; }
+  .bg-save-head h3{ font-size:12px; letter-spacing:.09em; text-transform:uppercase;
+                    color:var(--muted); font-weight:600; margin:0; }
+  .bg-save-hint{ font-family:var(--font-num); font-size:11.5px; color:var(--muted);
+                 margin-left:auto; }
+  .bg-svg-save{ display:block; touch-action:none; margin-top:4px; }
+  .sv-bar{ cursor:default; }
+  .sv-bar.plan{ cursor:ns-resize; }
+  .sv-bar.plan:hover{ filter:drop-shadow(0 0 6px var(--seg)); }
+  .sv-bar.on{ filter:drop-shadow(0 0 5px var(--seg)) drop-shadow(0 0 14px var(--seg)); }
+  .sv-zero{ stroke:var(--hair-strong); stroke-width:1; }
+  .sv-split{ stroke:var(--hair-strong); stroke-width:1; stroke-dasharray:3 3; }
+  .sv-mlab{ font-family:var(--font-num); font-size:10px; fill:var(--muted);
+            letter-spacing:.04em; }
+  .sv-val{ font-family:var(--font-num); font-size:9.5px; font-weight:600;
+           pointer-events:none; }
+  .sv-era{ font-family:var(--font-num); font-size:9px; fill:var(--muted);
+           letter-spacing:.08em; text-transform:uppercase; }
+  .sv-grab{ font-size:13px; font-weight:700; pointer-events:none; paint-order:stroke;
+            stroke-width:2.5px; stroke-linejoin:round; }
   .bg-fig{ font-family:var(--font-num); font-size:19px; }
   .bg-fig.out{ color:var(--coral); }
 
@@ -807,6 +831,11 @@
   .bg-delta{ font-family:var(--font-num); font-size:12px; margin-top:5px; }
   .bg-delta.up{ color:var(--coral); }
   .bg-delta.down{ color:var(--mint); }
+  /* Spending and saving move in opposite directions for the same news, so the
+     savings readout picks its colour by whether the change is welcome rather
+     than by which way the bar went. */
+  .bg-delta.good{ color:var(--mint); }
+  .bg-delta.bad{ color:var(--coral); }
   .bg-from{ font-size:11.5px; color:var(--muted); margin-top:2px; }
 
   .charttip{ position:fixed; z-index:9; pointer-events:none;
@@ -3600,6 +3629,7 @@ const bgCardOpen = new Set(); // categories showing their chart
 let bgCardSeeded = false;     // whether the first one has been opened for them
 let bgSaveTimer = null;
 let bgDrag = null;            // the segment under the pointer, mid-gesture
+let bgSvDrag = null;          // the savings month under the pointer, mid-gesture
 
 async function renderBudgeting() {
   bgData = await authed('/api/budget');
@@ -3655,7 +3685,8 @@ function drawBudgeting() {
         '<div class="bg-fig">' + money(t.incomeYear) + '</div></div>' +
       '<div><div class="t-label">Spending planned</div>' +
         '<div class="bg-fig out">' + money(t.spendYear) + '</div></div>' +
-    '</div>';
+    '</div>' +
+    bgSaveChart();
 
   const parents = categoryList.filter(c => !c.parentSlug && c.kind === 'spend');
   const host = $('bg-list');
@@ -4004,6 +4035,203 @@ function bgInkOn(hex) {
 /* A block has to be this tall before its figure will fit inside it. */
 const BG_AMT_MIN = 13;
 
+/* ---------------------------------------------------------- savings, by month --
+ *
+ * The annual figure is the reason to bother and the monthly one is what anybody
+ * actually feels, which is why both were already on the page. Neither of them
+ * is a thing you can take hold of, and a plan nobody touches is a plan nobody
+ * follows.
+ *
+ * So: twelve months of net, drawn. The ones already gone are what really
+ * happened — income received less what was actually spent — and the rest are
+ * what this plan implies. A planned month can be dragged, and the categories
+ * underneath move to meet it.
+ */
+const SV_W = 720, SV_H = 176, SV_PL = 2, SV_PT = 20, SV_PB = 22;
+const SV_PLOT = SV_H - SV_PT - SV_PB;
+
+function bgSavingsSeries() {
+  const t = bgTotals();
+  const nowIdx = bgData.months.indexOf(bgData.currentMonth);
+  const spentOf = (m) => bgData.categories.reduce((s, r) => s + (r.spent[m] || 0), 0);
+
+  return bgData.months.map((m, i) => {
+    /* A month counts as history only if there is income recorded against it.
+       The current month is half-lived and half-spent, so it is planned, not
+       reported — the same rule the budget engine learns by. */
+    const earned = bgData.income.spent ? bgData.income.spent[m] : undefined;
+    const past = nowIdx >= 0 && i < nowIdx && earned !== undefined;
+    return {
+      month: m, i, past,
+      value: past ? earned - spentOf(m) : t.savings[m],
+      income: past ? earned : bgPlanOf(bgData.income)[m],
+    };
+  });
+}
+
+function bgSaveScale(series) {
+  let hi = 0, lo = 0;
+  for (const s of series) { if (s.value > hi) hi = s.value; if (s.value < lo) lo = s.value; }
+  if (hi === 0 && lo === 0) hi = 1;
+  return { hi: hi * 1.18, lo: lo * 1.18 };     // headroom to drag into, both ways
+}
+
+const svY = (v, sc) => SV_PT + ((sc.hi - v) / ((sc.hi - sc.lo) || 1)) * SV_PLOT;
+
+function bgSaveChart() {
+  const series = bgSavingsSeries();
+  const sc = bgSaveScale(series);
+  const band = (SV_W - SV_PL * 2) / series.length;
+  const barW = Math.min(38, band * 0.56);
+  const zero = svY(0, sc);
+  const firstPlan = series.findIndex(s => !s.past);
+
+  let svg = '<svg class="bg-svg-save" viewBox="0 0 ' + SV_W + ' ' + SV_H + '" width="100%" ' +
+    'height="' + SV_H + '" preserveAspectRatio="none" data-hi="' + sc.hi.toFixed(2) +
+    '" data-lo="' + sc.lo.toFixed(2) + '">';
+
+  svg += '<line class="sv-zero" x1="0" x2="' + SV_W + '" y1="' + zero.toFixed(1) +
+    '" y2="' + zero.toFixed(1) + '"/>';
+
+  if (firstPlan > 0) {
+    const x = SV_PL + band * firstPlan;
+    svg += '<line class="sv-split" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) +
+      '" y1="' + SV_PT + '" y2="' + (SV_PT + SV_PLOT) + '"/>' +
+      '<text class="sv-era" x="' + (x - 6).toFixed(1) + '" y="' + (SV_PT - 8) +
+      '" text-anchor="end">actual</text>' +
+      '<text class="sv-era" x="' + (x + 6).toFixed(1) + '" y="' + (SV_PT - 8) +
+      '">planned</text>';
+  }
+
+  series.forEach((s) => {
+    const x = SV_PL + band * s.i + (band - barW) / 2;
+    const yv = svY(s.value, sc);
+    const top = Math.min(yv, zero), h = Math.max(1.5, Math.abs(yv - zero));
+    const good = s.value >= 0;
+    const fill = good ? 'var(--mint)' : 'var(--coral)';
+
+    svg += '<rect class="sv-bar ' + (s.past ? 'past' : 'plan') + '" data-sv="' + s.month + '" ' +
+      'x="' + x.toFixed(1) + '" y="' + top.toFixed(1) + '" width="' + barW.toFixed(1) +
+      '" height="' + h.toFixed(1) + '" rx="2" fill="' + fill + '" ' +
+      'style="--seg:' + (good ? '#00F0A8' : '#FF6B6B') + '" ' +
+      'opacity="' + (s.past ? '.95' : '.55') + '" ' +
+      (s.past ? '' : 'tabindex="' + (s.i === firstPlan ? '0' : '-1') + '" role="slider" ' +
+        'aria-valuemin="0" aria-valuenow="' + Math.round(s.value / 100) + '" ') +
+      'aria-label="' + escapeHtml(bgData.labels[s.i]) + ' ' +
+      (s.past ? 'actual' : 'planned') + ' net"></rect>' +
+      '<text class="sv-val" data-svval="' + s.month + '" x="' + (x + barW / 2).toFixed(1) +
+      '" y="' + (good ? top - 4 : top + h + 9).toFixed(1) + '" text-anchor="middle" fill="' +
+      (good ? 'var(--mint)' : 'var(--coral)') + '">' + escapeHtml(money0(s.value)) + '</text>' +
+      '<text class="sv-mlab" x="' + (SV_PL + band * s.i + band / 2).toFixed(1) +
+      '" y="' + (SV_H - 6) + '" text-anchor="middle">' +
+      escapeHtml(bgData.labels[s.i].slice(0, 3)) + '</text>';
+  });
+
+  svg += '<text class="sv-grab" text-anchor="middle" style="display:none">⇕</text>';
+  return '<div class="bg-save">' +
+    '<div class="bg-save-head"><h3>Kept, month by month</h3>' +
+    '<span class="bg-save-hint">Drag a planned month — the categories move to meet it.</span>' +
+    '</div>' + svg + '</svg></div>';
+}
+
+/* Geometry only, so a drag is not fighting a rebuild. */
+function bgSaveFit(svg) {
+  const series = bgSavingsSeries();
+  const frozen = !!(bgSvDrag && bgSvDrag.svg === svg);
+  const sc = frozen
+    ? { hi: Number(svg.dataset.hi), lo: Number(svg.dataset.lo) }
+    : bgSaveScale(series);
+  if (!frozen) { svg.dataset.hi = sc.hi.toFixed(2); svg.dataset.lo = sc.lo.toFixed(2); }
+
+  const band = (SV_W - SV_PL * 2) / series.length;
+  const barW = Math.min(38, band * 0.56);
+  const zero = svY(0, sc);
+  const zl = svg.querySelector('.sv-zero');
+  if (zl) { zl.setAttribute('y1', zero.toFixed(1)); zl.setAttribute('y2', zero.toFixed(1)); }
+
+  let held = null;
+  series.forEach((s) => {
+    const bar = svg.querySelector('rect[data-sv="' + s.month + '"]');
+    const lab = svg.querySelector('text[data-svval="' + s.month + '"]');
+    if (!bar) return;
+    const yv = svY(s.value, sc);
+    const top = Math.min(yv, zero), h = Math.max(1.5, Math.abs(yv - zero));
+    const good = s.value >= 0;
+    bar.setAttribute('y', top.toFixed(1));
+    bar.setAttribute('height', h.toFixed(1));
+    bar.setAttribute('fill', good ? 'var(--mint)' : 'var(--coral)');
+    bar.style.setProperty('--seg', good ? '#00F0A8' : '#FF6B6B');
+    if (!s.past) bar.setAttribute('aria-valuenow', Math.round(s.value / 100));
+    if (lab) {
+      lab.textContent = money0(s.value);
+      lab.setAttribute('y', (good ? top - 4 : top + h + 9).toFixed(1));
+      lab.setAttribute('fill', good ? 'var(--mint)' : 'var(--coral)');
+    }
+    if (bgSvDrag && bgSvDrag.month === s.month) {
+      held = { x: SV_PL + band * s.i + band / 2, y: good ? top + 13 : top + h - 4,
+               fill: good ? '#00F0A8' : '#FF6B6B', room: h >= 22 };
+    }
+  });
+
+  const grab = svg.querySelector('.sv-grab');
+  if (grab) {
+    if (held && held.room) {
+      grab.setAttribute('x', held.x.toFixed(1));
+      grab.setAttribute('y', held.y.toFixed(1));
+      grab.setAttribute('fill', '#0B0F14');
+      grab.setAttribute('stroke', held.fill);
+      grab.style.display = 'inline';
+    } else grab.style.display = 'none';
+  }
+}
+
+/**
+ * Move a month's categories until that month keeps what was asked of it.
+ *
+ * Everything scales by the same factor rather than one category taking the
+ * whole hit, because the reader has said what the month should come to and
+ * not which part of it should give. The exception is a category already
+ * pinned in that month: that is an explicit decision and it is left alone,
+ * with the rest flexing around it. If every category is pinned there is
+ * nothing to protect and they all move.
+ *
+ * The rounding residue goes onto the largest category in the pool, so the
+ * month lands exactly on the figure asked for instead of a few dollars short
+ * of it forty times over.
+ */
+function bgAbsorb(month, target) {
+  const income = bgPlanOf(bgData.income)[month];
+  const want = Math.max(0, income - Math.max(0, Math.min(target, income)));
+
+  const all = bgData.categories;
+  const free = all.filter(r => r.pinned[month] === undefined);
+  const pool = free.length ? free : all;
+  const poolNow = pool.reduce((s, r) => s + bgPlanOf(r)[month], 0);
+  const fixed = all.reduce((s, r) => s + bgPlanOf(r)[month], 0) - poolNow;
+  if (poolNow <= 0) return [];
+
+  const wantPool = Math.max(0, want - fixed);
+  const f = wantPool / poolNow;
+
+  let running = 0;
+  const scaled = pool.map(r => {
+    const v = Math.max(0, Math.round(bgPlanOf(r)[month] * f / 100) * 100);
+    running += v;
+    return { row: r, v: v };
+  });
+
+  if (scaled.length) {
+    const biggest = scaled.reduce((a, b) => (b.v > a.v ? b : a));
+    biggest.v = Math.max(0, biggest.v + (wantPool - running));
+    biggest.v = Math.round(biggest.v / 100) * 100;
+  }
+
+  return scaled.map(s => {
+    s.row.pinned[month] = s.v;
+    return { slug: s.row.slug, month: month, amount: s.v };
+  });
+}
+
 /* The readout that follows the block being moved.
  *
  * It borrows the chart tooltip's styling so it reads as the same object as the
@@ -4027,6 +4255,14 @@ function bgTip() {
 /* start is where the block was when it was picked up, or null when nothing is
    being dragged — the difference decides whether this is a reading or a
    running commentary. */
+/** Put arbitrary contents in the readout and place it. */
+function bgTipSet(html, x, y) {
+  const el = bgTip();
+  el.innerHTML = html;
+  el.hidden = false;
+  bgTipAt(x, y);
+}
+
 function bgTipShow(row, month, start, x, y) {
   const el = bgTip();
   const i = bgData.months.indexOf(month);
@@ -4092,14 +4328,14 @@ async function bgFlush() {
   bgPending.clear();
   if (!queued.length) return;
   try {
-    /* One at a time. The endpoint reads the row, amends it and writes it back,
-       so two overlapping writes to the same category would lose one of them. */
-    for (const body of queued) {
-      await authed('/api/budget', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-    }
+    /* One request either way. The endpoint reads each category once, applies
+       however many edits the batch has for it and writes it once, which is
+       what makes a savings drag — forty categories in one gesture — a single
+       round trip rather than forty that would overwrite each other. */
+    await authed('/api/budget', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(queued.length === 1 ? queued[0] : { edits: queued }),
+    });
     say($('bg-msg'), queued.length > 1 ? 'Saved ' + queued.length + ' changes.' : 'Saved.');
   } catch (err) { say($('bg-msg'), err.message, 'bad'); }
 }
@@ -4162,6 +4398,9 @@ function bgLive() {
      work nobody sees. */
   const charts = bgDrag ? [bgDrag.svg] : $('bg-list').querySelectorAll('.bg-svg');
   for (const svg of charts) bgFit(svg);
+
+  const sv = $('bg-hero').querySelector('.bg-svg-save');
+  if (sv) bgSaveFit(sv);
 
   // Each parent's annual figure, read off the card rather than off its chart,
   // because a shut card has no chart and still has a figure.
@@ -4324,6 +4563,138 @@ function bgDragEnd(e) {
 }
 $('bg-list').addEventListener('pointerup', bgDragEnd);
 $('bg-list').addEventListener('pointercancel', bgDragEnd);
+
+/* ------------------------------------------------- dragging a savings month -- */
+
+const svBar = (e) => (e.target && e.target.closest)
+  ? e.target.closest('.sv-bar.plan') : null;
+
+function bgSvTip(x, y) {
+  const d = bgSvDrag;
+  if (!d) return;
+  const s = bgSavingsSeries()[bgData.months.indexOf(d.month)];
+  const moved = s.value - d.origin;
+  const rate = s.income > 0 ? (s.value / s.income) * 100 : 0;
+  bgTipSet(
+    '<div class="ct-head">Kept in ' + escapeHtml(bgData.labels[s.i]) +
+      '<span class="ct-month">planned</span></div>' +
+    '<div class="ct-amount">' + money(s.value) + '</div>' +
+    '<div class="ct-share">' + rate.toFixed(1) + '% of that month’s income</div>' +
+    (moved
+      ? '<div class="bg-delta ' + (moved > 0 ? 'good' : 'bad') + '">' +
+          (moved > 0 ? '▲ +' : '▼ −') + money(Math.abs(moved)) + '</div>' +
+        '<div class="bg-from">was ' + money(d.origin) + '</div>'
+      : ''),
+    x, y);
+}
+
+/* Reads the month's target off the pointer, then makes it true. */
+function bgSvApply(target) {
+  const d = bgSvDrag;
+  const capped = Math.max(0, Math.min(target, d.income));
+  const edits = bgAbsorb(d.month, capped);
+  if (edits.length) { d.moved = true; d.edits = edits; }
+  bgLive();
+}
+
+$('bg-hero').addEventListener('pointerdown', (e) => {
+  if (e.button > 0) return;
+  const bar = svBar(e);
+  if (!bar || !bgData) return;
+  const svg = bar.ownerSVGElement;
+  if (!svg) return;
+  e.preventDefault();
+
+  const month = bar.dataset.sv;
+  const s = bgSavingsSeries()[bgData.months.indexOf(month)];
+  const box = svg.getBoundingClientRect();
+  const hi = Number(svg.dataset.hi), lo = Number(svg.dataset.lo);
+
+  bgSvDrag = {
+    bar: bar, svg: svg, month: month,
+    pointerY: e.clientY,
+    anchor: s.value, origin: s.value, income: s.income,
+    perUnit: (box.height || SV_H) / SV_H,
+    centsPerUnit: ((hi - lo) || 1) / SV_PLOT,
+    fine: false, moved: false, edits: [],
+  };
+  try { bar.setPointerCapture(e.pointerId); } catch (err) { /* older engines */ }
+  bar.classList.add('on');
+  bgSaveFit(svg);
+  bgSvTip(e.clientX, e.clientY);
+});
+
+$('bg-hero').addEventListener('pointermove', (e) => {
+  if (!bgSvDrag) return;
+  const d = bgSvDrag;
+
+  const fine = e.altKey;
+  if (fine !== d.fine) {
+    d.anchor = bgSavingsSeries()[bgData.months.indexOf(d.month)].value;
+    d.pointerY = e.clientY;
+    d.fine = fine;
+  }
+  const up = (d.pointerY - e.clientY) / d.perUnit;
+  const raw = d.anchor + up * (fine ? 100 : d.centsPerUnit);
+  const unit = fine ? 100 : bgStepUnit(raw);
+  bgSvApply(Math.round(raw / unit) * unit);
+  bgSvTip(e.clientX, e.clientY);
+});
+
+function bgSvEnd(e) {
+  if (!bgSvDrag) return;
+  const d = bgSvDrag;
+  bgSvDrag = null;
+  d.bar.classList.remove('on');
+  try { d.bar.releasePointerCapture(e.pointerId); } catch (err) { /* already gone */ }
+  bgTipHide();
+  if (!d.moved) { bgSaveFit(d.svg); return; }
+  /* Every category the month touched, queued together — bgFlush sends them as
+     one batch, which is the whole reason the endpoint learned to take one. */
+  for (const ed of d.edits) bgSave(ed);
+  drawBudgeting();
+}
+$('bg-hero').addEventListener('pointerup', bgSvEnd);
+$('bg-hero').addEventListener('pointercancel', bgSvEnd);
+
+/* The same move from the keyboard. Left and right walk the planned months;
+   up and down move what that month keeps. */
+$('bg-hero').addEventListener('keydown', (e) => {
+  const bar = svBar(e);
+  if (!bar || !bgData) return;
+  const svg = bar.ownerSVGElement;
+  const month = bar.dataset.sv;
+  const idx = bgData.months.indexOf(month);
+  const series = bgSavingsSeries();
+
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    const step = e.key === 'ArrowRight' ? 1 : -1;
+    const next = series[idx + step];
+    if (!next || next.past) return;
+    e.preventDefault();
+    const el = svg.querySelector('rect[data-sv="' + next.month + '"]');
+    if (!el) return;
+    svg.querySelectorAll('.sv-bar.plan').forEach(b => b.setAttribute('tabindex', '-1'));
+    el.setAttribute('tabindex', '0');
+    el.focus();
+    return;
+  }
+
+  let dir = 0;
+  if (e.key === 'ArrowUp') dir = 1;
+  if (e.key === 'ArrowDown') dir = -1;
+  if (!dir) return;
+  e.preventDefault();
+
+  const cur = series[idx];
+  bgSvDrag = { month: month, income: cur.income, origin: cur.value, moved: false, edits: [] };
+  bgSvApply(bgNudge(cur.value, dir, e.shiftKey));
+  const edits = bgSvDrag.edits;
+  const at = bar.getBoundingClientRect();
+  bgSvTip(at.left + at.width / 2, at.top);
+  bgSvDrag = null;
+  for (const ed of edits) bgSave(ed);
+});
 
 $('bg-list').addEventListener('pointerover', (e) => {
   const seg = bgDrag ? null : bgSeg(e);
