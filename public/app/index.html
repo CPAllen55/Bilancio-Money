@@ -844,6 +844,11 @@
   .bg-avg{ font-family:var(--font-num); font-size:12px; color:var(--muted);
            flex:none; }
   .bg-card.shut{ padding-top:12px; padding-bottom:12px; }
+  /* The only card on this page whose figure is money arriving. Its own colour
+     down the edge, because a reader scanning a column of cards should not have
+     to read the label to know that this one is not spending. */
+  .bg-card.income{ border-left:3px solid var(--mint-dim); }
+  .bg-card.income .bg-annual{ color:var(--mint); }
   .bg-card.shut .bg-annual{ margin-left:auto; }
   .bg-annual{ margin-left:auto; font-family:var(--font-num); font-size:13.5px; }
   .bg-kids{ margin-top:12px; padding-top:10px; border-top:1px solid var(--hair); }
@@ -4036,7 +4041,31 @@ let bgDrag = null;            // the segment under the pointer, mid-gesture
 
 async function renderBudgeting() {
   bgData = await authed('/api/budget');
+
+  /* The endpoint sends income as its own object, because at the grain a budget
+     works at it is one line rather than a breakdown — the question is what
+     comes in, not which of two employers it came from. But everything that
+     draws and edits a category expects a row, so it is given the fields it is
+     missing and then goes through exactly the same code as the rest. Its slug
+     names a real category, so saving it needs nothing new either. */
+  const inc = bgData.income;
+  inc.slug = 'income';
+  inc.label = 'Income';
+  inc.parentSlug = null;
+  inc.colour = (categoryList.find(c => c.slug === 'income') || {}).colour || '#00F0A8';
+  inc.irregularPerMonth = inc.irregularPerMonth || 0;
+  inc.outliers = inc.outliers || [];
+
   drawBudgeting();
+}
+
+/* Every row this tab can edit, by slug. Income is not in the categories list —
+   it never was — and a lookup that only knows about that list does nothing at
+   all when income is the thing being dragged, silently. */
+function bgRow(slug) {
+  if (!bgData) return undefined;
+  if (slug === 'income') return bgData.income;
+  return bgData.categories.find((r) => r.slug === slug);
 }
 
 /** A leaf's planned year, with whatever the reader has done to it. */
@@ -4103,12 +4132,60 @@ function drawBudgeting() {
     .map(o => ({ p: o.p, kids: o.kids, year: bgYearOf(o.kids) }))
     .filter(o => o.kids.length && o.year > 0);
 
-  if (!bgCardSeeded && withYear.length) {
+  /* Income opens on the first draw rather than the largest spending category.
+     It is the top of the arithmetic — everything below it is subtracted from
+     this — and a page that opened with the fourth thing on it and left the
+     first shut would be describing the wrong shape. */
+  if (!bgCardSeeded) {
     bgCardSeeded = true;
-    bgCardOpen.add(withYear.slice().sort((a, b) => b.year - a.year)[0].p.slug);
+    bgCardOpen.add('income');
   }
 
-  host.innerHTML = withYear.map(o => {
+  /**
+   * Income, drawn as a card like the rest.
+   *
+   * One line, not a breakdown: at the grain a budget works at the question is
+   * what comes in, and splitting a salary from a second salary changes nothing
+   * anybody would then do. So it is a single band rather than a stack — the
+   * same chart with one child in it, which is why it needs no special drawing
+   * code and picks up the drag, the keyboard and the month boxes for free.
+   */
+  function incomeCard() {
+    const inc = bgData.income;
+    if (!inc) return '';
+    const year = bgYearOf([inc]);
+    /* An account with nothing in it should say so, not show an Income card
+       reading zero and swallow the message that explains why. Income at zero
+       is still drawn where there is spending to budget against — somebody has
+       to be able to put a figure in. */
+    if (year <= 0 && !withYear.length) return '';
+    const open = bgCardOpen.has('income');
+    const perMonth = bgData.months.map(m => bgPlanOf(inc)[m]);
+    const colour = themed('income', inc.colour);
+
+    return '<div class="bg-card income' + (open ? '' : ' shut') + '" data-parent="income">' +
+      '<button class="bg-head" type="button" data-bg-card="income" ' +
+        'aria-expanded="' + open + '">' +
+        '<span class="bg-chev" aria-hidden="true">' + (open ? '▾' : '▸') + '</span>' +
+        '<span class="swatch" style="background:' + colour + '"></span>' +
+        '<b>Income</b>' +
+        (open || !perMonth.some(v => v > 0) ? ''
+          : '<span class="bg-mini">' + sparkline(perMonth, colour) + '</span>') +
+        '<span class="bg-annual">' + money(year) + ' a year</span>' +
+        (open ? '' : '<span class="bg-avg">' + money0(year / 12) + ' a month</span>') +
+      '</button>' +
+      (open
+        ? (year > 0
+            ? bgChart([inc], 'income') +
+              '<div class="bg-cap">Drag any block up or down to change that month' +
+              ' — hold Alt for dollar-by-dollar. Arrow keys work too.</div>'
+            : '') +
+          '<div class="bg-kids">' + bgLeaf(inc) + '</div>'
+        : '') +
+    '</div>';
+  }
+
+  host.innerHTML = incomeCard() + withYear.map(o => {
     const p = o.p, kids = o.kids, year = o.year;
     const open = bgCardOpen.has(p.slug);
     const shown = bgShownKids(p.slug);
@@ -4320,7 +4397,7 @@ function bgFit(svg) {
   const held = (bgDrag && bgDrag.svg === svg)
     ? { slug: bgDrag.row.slug, month: bgDrag.month } : null;
   const slugs = (svg.dataset.kids || '').split(',').filter(Boolean);
-  const rows = slugs.map(s => bgData.categories.find(r => r.slug === s)).filter(Boolean);
+  const rows = slugs.map(s => bgRow(s)).filter(Boolean);
   /* Frozen only for the chart being dragged. Every other chart re-fits, so a
      figure typed into a month box still rescales its own year. */
   const frozen = !!(bgDrag && bgDrag.svg === svg);
@@ -4685,7 +4762,7 @@ async function bgFlush() {
 $('bg-list').addEventListener('input', (e) => {
   const base = e.target.closest('[data-baseline]');
   if (base) {
-    const row = bgData.categories.find(r => r.slug === base.dataset.baseline);
+    const row = bgRow(base.dataset.baseline);
     if (!row) return;
     const raw = base.value.trim();
     const cents = raw === '' ? null : Math.round(Number(raw) * 100);
@@ -4698,7 +4775,7 @@ $('bg-list').addEventListener('input', (e) => {
 
   const pin = e.target.closest('[data-pin]');
   if (pin) {
-    const row = bgData.categories.find(r => r.slug === pin.dataset.pin);
+    const row = bgRow(pin.dataset.pin);
     if (!row) return;
     const raw = pin.value.trim();
     const month = pin.dataset.month;
@@ -4727,8 +4804,11 @@ function bgLive() {
   if (figs[0]) figs[0].textContent = money(t.incomeYear);
   if (figs[1]) figs[1].textContent = money(t.spendYear);
 
-  // Each leaf's annual figure, without touching the inputs.
-  for (const row of bgData.categories) {
+  // Each leaf's annual figure, without touching the inputs. Income is a leaf
+  // here like any other — it has a row in the list and a figure at the end of
+  // it, and leaving it out was the difference between a page that adds up and
+  // one that appears to have a stale number in it.
+  for (const row of bgData.categories.concat(bgData.income ? [bgData.income] : [])) {
     const plan = bgPlanOf(row);
     const year = bgData.months.reduce((s, m) => s + plan[m], 0);
     const el = $('bg-list').querySelector('.bg-leaf[data-slug="' + CSS.escape(row.slug) + '"] .bg-year');
@@ -4749,7 +4829,11 @@ function bgLive() {
   for (const card of $('bg-list').querySelectorAll('.bg-card')) {
     const el = card.querySelector('.bg-annual');
     if (!el || !card.dataset.parent) continue;
-    const rows = bgData.categories.filter(r => r.parentSlug === card.dataset.parent);
+    // Income is its own card and has no children; every other card is the sum
+    // of the leaves filed under it.
+    const rows = card.dataset.parent === 'income'
+      ? (bgData.income ? [bgData.income] : [])
+      : bgData.categories.filter(r => r.parentSlug === card.dataset.parent);
     const year = bgYearOf(rows);
     el.textContent = money(year) + ' a year';
     const avg = card.querySelector('.bg-avg');
@@ -4761,7 +4845,7 @@ function bgLive() {
      except in the box being typed into, which would fight the caret. */
   for (const inp of $('bg-list').querySelectorAll('input[data-pin]')) {
     if (inp === document.activeElement) continue;
-    const row = bgData.categories.find(r => r.slug === inp.dataset.pin);
+    const row = bgRow(inp.dataset.pin);
     if (!row) continue;
     inp.value = (bgPlanOf(row)[inp.dataset.month] / 100).toFixed(0);
     inp.classList.toggle('pin', row.pinned[inp.dataset.month] !== undefined);
@@ -4800,7 +4884,7 @@ $('bg-list').addEventListener('pointerdown', (e) => {
   const seg = bgSeg(e);
   if (!seg) return;
   const svg = seg.ownerSVGElement;
-  const row = bgData && bgData.categories.find(r => r.slug === seg.dataset.seg);
+  const row = bgData && bgRow(seg.dataset.seg);
   if (!svg || !row) return;
 
   e.preventDefault();
@@ -4808,7 +4892,7 @@ $('bg-list').addEventListener('pointerdown', (e) => {
   const box = svg.getBoundingClientRect();
   const start = bgPlanOf(row)[month];
   const column = (svg.dataset.kids || '').split(',').filter(Boolean).reduce((s, sl) => {
-    const r = bgData.categories.find(x => x.slug === sl);
+    const r = bgRow(sl);
     return s + (r ? bgPlanOf(r)[month] : 0);
   }, 0);
 
@@ -4910,7 +4994,7 @@ $('bg-list').addEventListener('pointercancel', bgDragEnd);
 $('bg-list').addEventListener('pointerover', (e) => {
   const seg = bgDrag ? null : bgSeg(e);
   if (!seg) return;
-  const row = bgData && bgData.categories.find(r => r.slug === seg.dataset.seg);
+  const row = bgData && bgRow(seg.dataset.seg);
   if (row) bgTipShow(row, seg.dataset.month, null, e.clientX, e.clientY);
 });
 
@@ -4945,7 +5029,7 @@ $('bg-list').addEventListener('keydown', (e) => {
   const seg = bgSeg(e);
   if (!seg) return;
   const svg = seg.ownerSVGElement;
-  const row = bgData && bgData.categories.find(r => r.slug === seg.dataset.seg);
+  const row = bgData && bgRow(seg.dataset.seg);
   if (!svg || !row) return;
   const month = seg.dataset.month;
 
@@ -4961,7 +5045,7 @@ $('bg-list').addEventListener('keydown', (e) => {
   if (to) {
     e.preventDefault();
     const moved = bgFocusSeg(svg, to[0], to[1]);
-    const r2 = bgData.categories.find(r => r.slug === to[0]);
+    const r2 = bgRow(to[0]);
     if (moved && r2) {
       const at = moved.getBoundingClientRect();
       bgTipShow(r2, to[1], null, at.left + at.width / 2, at.top);
