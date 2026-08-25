@@ -759,7 +759,7 @@
   .bg-seg.past{ opacity:.42; }
   .bg-seg.empty{ opacity:.16; }
   .bg-seg:hover{ stroke:var(--ink); stroke-width:1.2;
-                 filter:drop-shadow(0 0 4px var(--seg)); }
+                 filter:drop-shadow(0 0 5px var(--seg)) drop-shadow(0 0 11px var(--seg)); }
   .bg-seg:focus{ outline:none; stroke:var(--ink); stroke-width:1.8;
                  filter:drop-shadow(0 0 5px var(--seg)); }
   .bg-svg.dragging .bg-seg:not(.on){ opacity:.28; filter:none; }
@@ -3892,22 +3892,31 @@ function bgTip() {
 function bgTipShow(row, month, start, x, y) {
   const el = bgTip();
   const i = bgData.months.indexOf(month);
+  const label = bgData.labels[i] || month;
   const v = bgPlanOf(row)[month];
   const moved = (start === null || start === undefined) ? 0 : v - start;
 
+  /* What this block is of the column it sits in. The figure alone does not say
+     whether $180 on restaurants is most of the month's food or a corner of it,
+     and that is usually the question being asked of a stacked bar. It is
+     recomputed on every call, so it moves with the block. */
+  const column = bgShownKids(row.parentSlug)
+    .reduce((s, r) => s + bgPlanOf(r)[month], 0);
+  const share = column > 0 ? (v / column) * 100 : 0;
+
   el.innerHTML =
     '<div class="ct-head">' + escapeHtml(row.label) +
-      '<span class="ct-month">' + escapeHtml(bgData.labels[i] || month) + '</span></div>' +
+      '<span class="ct-month">' + escapeHtml(label) + '</span></div>' +
     '<div class="ct-amount">' + money(v) + '</div>' +
+    '<div class="ct-share">' + share.toFixed(1) + '% of ' + escapeHtml(label) +
+      ' · ' + money0(column) + (row.pinned[month] !== undefined ? ' · pinned' : '') + '</div>' +
     (moved
       // Up is more spending, so up is the unwelcome direction and takes the
       // colour that means so everywhere else on the page.
       ? '<div class="bg-delta ' + (moved > 0 ? 'up' : 'down') + '">' +
           (moved > 0 ? '▲ +' : '▼ −') + money(Math.abs(moved)) + '</div>' +
         '<div class="bg-from">was ' + money(start) + '</div>'
-      : '<div class="ct-share">' +
-          (row.pinned[month] !== undefined ? 'Pinned · drag to change'
-                                           : 'Drag to change this month') + '</div>');
+      : '');
   el.hidden = false;
   bgTipAt(x, y);
 }
