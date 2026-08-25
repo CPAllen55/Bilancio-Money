@@ -680,6 +680,10 @@ summary.get("/transactions", async (c) => {
         categoryPrimary: transactions.categoryPrimary,
         categoryDetailed: transactions.categoryDetailed,
         overrideCategoryId: transactionOverrides.categoryId,
+        /* Plaid puts a merchant logo URL on the transaction and the whole
+           object is kept in `raw`, so this is already here — no resync
+           needed, and only the one field is read rather than the whole blob. */
+        logoUrl: sql<string | null>`${transactions.raw}->>'logo_url'`,
       })
       .from(transactions)
       .leftJoin(
@@ -789,6 +793,10 @@ summary.get("/transactions", async (c) => {
             : ctx.ruleBySlugKey.has(key)
               ? "rule"
               : "plaid",
+          /* Only the filename travels. The client rebuilds the path against
+             our own origin, so the URL Plaid gave us never reaches a browser
+             and cannot be fetched from one. */
+          logo: logoFile(r.logoUrl),
         };
       }),
     });
@@ -796,6 +804,24 @@ summary.get("/transactions", async (c) => {
     c.executionCtx.waitUntil(close());
   }
 });
+
+/**
+ * The last path segment of a Plaid logo URL, if it looks like one of theirs.
+ *
+ * Anything else comes back null rather than being passed along: the proxy
+ * checks the name again at its end, and a value that fails here should not be
+ * given the chance to be interesting there.
+ */
+const LOGO_CDN = "https://plaid-merchant-logos.plaid.com/";
+const LOGO_FILE = /^[a-z0-9][a-z0-9_-]{0,80}\.png$/;
+
+function logoFile(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const u = url.trim();
+  if (!u.startsWith(LOGO_CDN)) return null;
+  const file = u.slice(LOGO_CDN.length);
+  return LOGO_FILE.test(file) ? file : null;
+}
 
 /* ------------------------------------------------------------------- trend -- */
 

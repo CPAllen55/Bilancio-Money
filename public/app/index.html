@@ -1193,6 +1193,24 @@
                  padding:5px 8px; max-width:190px; cursor:pointer; }
   select.catsel:hover{ border-color:var(--mint-dim); }
 
+  /* ---- the merchant mark, at the head of a description ----
+     A monogram underneath and the logo over it, rather than a logo with a
+     fallback: an <img> that fails to load paints nothing, so the letter it was
+     covering simply shows. No error handler, no flash of a broken icon, and
+     the row is the right width from the first frame either way. */
+  .ava{ position:relative; display:inline-flex; align-items:center; justify-content:center;
+        width:22px; height:22px; border-radius:5px; flex:none; overflow:hidden;
+        margin-right:10px; vertical-align:-6px;
+        font:600 10.5px/1 var(--font-num); letter-spacing:.02em; color:#fff;
+        background:var(--ava, var(--muted)); text-transform:uppercase;
+        user-select:none; }
+  /* White behind the logo because Plaid's are PNGs drawn for a light ground;
+     on the dark theme a transparent one would otherwise sit on a colour it was
+     never meant to. */
+  .ava img{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain;
+            background:#fff; }
+  .tx-name{ vertical-align:middle; }
+
   .toggle{ display:inline-flex; align-items:center; gap:8px; cursor:pointer;
            font-family:var(--font-num); font-size:12px; color:var(--ink-soft); }
   .toggle input{ accent-color:var(--mint); width:15px; height:15px; cursor:pointer; }
@@ -2305,6 +2323,35 @@ const txFilters = { period: '', merchant: '', category: '', amount: '' };
  * of one. So "venmo" finds every Venmo row without anybody knowing how the
  * bank spells them.
  */
+/* A colour for a merchant with no logo.
+ *
+ * Derived from the name, so Starbucks is the same green on every row and on
+ * every visit, and two merchants are unlikely to collide. Not the category
+ * colour: a row's category can be changed, and a mark that moved when you
+ * refiled a transaction would read as a different shop. */
+function avaColour(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  return 'hsl(' + (Math.abs(h) % 360) + ' 42% 40%)';
+}
+
+/* The first letter that is one — "1-800-FLOWERS" should read F, not 1. */
+function avaLetter(name) {
+  const m = /[A-Za-z]/.exec(name || '');
+  return escapeHtml(m ? m[0] : (name || '?').slice(0, 1));
+}
+
+function avatar(t) {
+  const name = t.name || '';
+  return '<span class="ava" style="--ava:' + avaColour(name) + '" aria-hidden="true">' +
+    avaLetter(name) +
+    (t.logo
+      ? '<img src="/api/logo/' + encodeURIComponent(t.logo) + '" alt="" loading="lazy" ' +
+        'decoding="async" width="22" height="22">'
+      : '') +
+    '</span>';
+}
+
 function txHeaderInput(id, label, value, names) {
   const listId = id + '-list';
   return '<span class="thwrap">' +
@@ -2416,7 +2463,8 @@ async function renderTransactions() {
                  : t.categorySource === 'rule' ? 'your rule' : '';
     return '<tr data-id="' + t.id + '" data-merchant="' + escapeHtml(t.name) + '">' +
       '<td class="num date">' + t.date + '</td>' +
-      '<td>' + escapeHtml(t.name) + (t.pending ? ' <span class="pill">pending</span>' : '') +
+      '<td>' + avatar(t) + '<span class="tx-name">' + escapeHtml(t.name) + '</span>' +
+        (t.pending ? ' <span class="pill">pending</span>' : '') +
         (source ? ' <span class="pill">' + source + '</span>' : '') + '</td>' +
       // Amount decides which side of the ledger this row is on. The menu holds
       // only what it is currently showing; the rest arrives when it is opened.
