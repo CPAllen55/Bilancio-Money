@@ -548,17 +548,15 @@
 
   /* Chart and key side by side. The key is a column because it is a list of
      categories, and a list reads down. */
-  /* ---- the Trend header: eyebrow, title, lede, and the figure ---- */
-  .th-row{ display:flex; align-items:flex-start; justify-content:space-between;
-           gap:24px; margin-bottom:20px; }
-  .th-row .view{ margin:0; }
-  .th-row .lede{ margin:6px 0 0; max-width:520px; }
+  /* ---- the Trend header ---- */
   .eyebrow{ font:500 10.5px/1 var(--font-num); letter-spacing:.14em;
             text-transform:uppercase; color:var(--muted); margin-bottom:9px; }
-  /* The answer before the working, and the only figure on the page that is
-     about the whole window rather than one month of it. */
-  .kpi{ flex:none; text-align:right; border:1px solid var(--hair-strong);
-        border-radius:9px; padding:12px 16px; background:var(--bg-panel); }
+  /* The answer before the working. It sat against the top right of the panel,
+     where it collided with the owl in the app header — so it moved into the
+     grid, at the head of the column it summarises. */
+  .trend-side{ flex:0 0 300px; display:flex; flex-direction:column; gap:14px; }
+  .kpi{ border:1px solid var(--hair-strong); border-radius:9px;
+        padding:12px 16px; background:var(--bg-panel); text-align:right; }
   .kpi-label{ font:500 10px/1 var(--font-num); letter-spacing:.1em;
               text-transform:uppercase; color:var(--muted); }
   .kpi-value{ font:600 24px/1.1 var(--font-num); color:var(--ink); margin-top:7px; }
@@ -568,9 +566,11 @@
   .kpi-delta.flat{ color:var(--muted); }
 
   /* ---- the control row ---- */
+  /* Inside the card now, above the plot, with the rule under it doing the
+     separating that the card edge used to. */
   .th-controls{ display:flex; align-items:center; justify-content:space-between;
-                gap:20px; flex-wrap:wrap; padding-bottom:16px;
-                border-bottom:1px solid var(--hair); margin-bottom:20px; }
+                gap:20px; flex-wrap:wrap; padding:0 0 15px;
+                border-bottom:1px solid var(--hair); margin-bottom:18px; }
   /* A tray of choices rather than a select: five options, all of them visible,
      which is what a control the reader is meant to play with should be. */
   .segtray{ display:inline-flex; gap:6px; background:var(--bg-panel); padding:3px;
@@ -588,7 +588,7 @@
   .lg-dash{ width:22px; height:0; border-top:2px dashed var(--ink); opacity:.5; flex:none; }
 
   /* ---- where it went ---- */
-  .trend-key.panel-box{ flex:0 0 300px; border:1px solid var(--hair-strong);
+  .trend-key.panel-box{ flex:1 1 auto; border:1px solid var(--hair-strong);
                         border-radius:10px; overflow:hidden; padding:0; gap:0; }
   .khead{ display:flex; align-items:baseline; justify-content:space-between;
           padding:13px 15px; background:var(--bg-panel);
@@ -613,7 +613,10 @@
   .panel-box .ktotal{ padding:13px 15px; background:var(--bg-panel);
                       border-bottom:0; margin:0; }
   .panel-box .kitem.static{ padding:9px 15px; }
-  @media (max-width:900px){ .trend-key.panel-box{ flex:none; width:100%; } }
+  @media (max-width:900px){
+    .trend-side{ flex:none; width:100%; }
+    .trend-key.panel-box{ flex:none; width:100%; }
+  }
 
   .trend-wrap{ display:flex; gap:20px; align-items:flex-start; }
   .trend-plot{ flex:1 1 auto; min-width:0; }
@@ -1405,34 +1408,31 @@
     </section>
 
     <section class="panel" id="v-trend" style="position:relative">
-      <div class="th-row">
-        <div>
-          <div class="eyebrow">Trend</div>
-          <h2 class="view">A year, against the year before</h2>
-          <p class="lede">Monthly spend stacked by category, against the same month last year.</p>
-        </div>
-        <div class="kpi" id="trend-kpi" hidden></div>
-      </div>
-      <div class="th-controls">
-        <span class="segtray" id="trend-ranges" role="group" aria-label="How many months to show">
-          <button type="button" class="segb" data-months="3" aria-pressed="false">3 months</button>
-          <button type="button" class="segb" data-months="6" aria-pressed="false">6 months</button>
-          <button type="button" class="segb on" data-months="12" aria-pressed="true">12 months</button>
-          <button type="button" class="segb" data-months="24" aria-pressed="false">24 months</button>
-          <button type="button" class="segb" data-months="36" aria-pressed="false">All</button>
-        </span>
-        <span class="th-legend">
-          <span class="lg"><i class="lg-sw" id="trend-lg-sw"></i>This year, by category</span>
-          <span class="lg"><i class="lg-dash"></i>Same month, last year</span>
-          <label class="toggle"><input type="checkbox" id="forecast-on"> Project rest of year from budget</label>
-          <span class="zoomctl" id="trend-zoom" hidden>
-            <button type="button" id="trend-zoom-out" aria-label="Show more months">−</button>
-            <span class="zoomlabel" id="trend-zoom-label" aria-live="polite"></span>
-            <button type="button" id="trend-zoom-in" aria-label="Show fewer months, larger">+</button>
+      <div class="eyebrow">Trend</div>
+      <h2 class="view">A year, against the year before</h2>
+      <p class="lede">Monthly spend stacked by category, against the same month last year.</p>
+      <div class="card">
+        <div class="th-controls">
+          <span class="segtray" id="trend-ranges" role="group" aria-label="How many months to show">
+            <button type="button" class="segb" data-months="3" aria-pressed="false">3 months</button>
+            <button type="button" class="segb" data-months="6" aria-pressed="false">6 months</button>
+            <button type="button" class="segb on" data-months="12" aria-pressed="true">12 months</button>
+            <button type="button" class="segb" data-months="24" aria-pressed="false">24 months</button>
+            <button type="button" class="segb" data-months="36" aria-pressed="false">All</button>
           </span>
-        </span>
+          <span class="th-legend">
+            <span class="lg"><i class="lg-sw" id="trend-lg-sw"></i>This year, by category</span>
+            <span class="lg"><i class="lg-dash"></i>Same month, last year</span>
+            <label class="toggle"><input type="checkbox" id="forecast-on"> Project rest of year from budget</label>
+            <span class="zoomctl" id="trend-zoom" hidden>
+              <button type="button" id="trend-zoom-out" aria-label="Show more months">−</button>
+              <span class="zoomlabel" id="trend-zoom-label" aria-live="polite"></span>
+              <button type="button" id="trend-zoom-in" aria-label="Show fewer months, larger">+</button>
+            </span>
+          </span>
+        </div>
+        <div id="trend-chart"></div>
       </div>
-      <div class="card"><div id="trend-chart"></div></div>
       <div class="pie-switch" id="pie-switch"></div>
       <div class="card" id="trend-pie"></div>
       <div class="card trend-below" id="forecast-box" hidden></div>
@@ -3114,10 +3114,12 @@ function drawTrend() {
   $('trend-zoom-in').disabled = trendVisible <= MIN_VISIBLE;
   $('trend-zoom-out').disabled = trendVisible >= n;
 
-  // PB carries the three figure rows under the axis. plotH is derived from
-  // these, so the plot keeps exactly the shape it had and all the extra height
-  // lands below the month labels.
-  const W = 880, H = 386;
+  // PB carries the three figure rows under the axis; everything above it is
+  // plot. There is room in the column for a taller one now that the controls
+  // and the figure have moved out of the space above it, and a stack of nine
+  // is the chart in this product that most needs the height — the smallest
+  // band in a short column is a line, not a quantity.
+  const W = 880, H = 470;
   const PL = 66, PR = 14, PT = 20, PB = 104;
   const plotW = W - PL - PR, plotH = H - PT - PB;
 
@@ -3384,10 +3386,39 @@ function drawTrend() {
       '" value="' + trendOffset + '" step="1" aria-label="Scroll through months">'
     : '';
 
+  /* The figure the heading promises, at the head of the column it summarises.
+   *
+   * Compared over the months that have a counterpart a year ago and no
+   * further: with the projection on, the window runs past where last year's
+   * record stops, and totalling a projected month against nothing would report
+   * a saving that is really just the end of the data. */
+  const cmp = Math.min(all.length, prior.length);
+  let nowSum = 0, wasSum = 0;
+  for (let i = 0; i < cmp; i++) {
+    nowSum += shownTotal(all[i].byParent, trendOff);
+    wasSum += shownTotal(prior[i].byParent, trendOff);
+  }
+  const kpiDelta = nowSum - wasSum;
+  const kpiHtml = !cmp ? '' :
+    '<div class="kpi">' +
+      '<div class="kpi-label">' +
+        (cmp === all.length ? 'Last ' + cmp + ' months' : cmp + ' months compared') +
+      '</div>' +
+      '<div class="kpi-value">' + money0(nowSum) + '</div>' +
+      (wasSum
+        ? '<div class="kpi-delta ' +
+          (kpiDelta > 0 ? 'over' : kpiDelta < 0 ? 'under' : 'flat') + '">' +
+          (kpiDelta > 0 ? '+' : kpiDelta < 0 ? '\u2212' : '') + money0(Math.abs(kpiDelta)) +
+          ' vs prior year</div>'
+        : '') +
+    '</div>';
+
   host.innerHTML =
     '<div class="trend-wrap">' +
       '<div class="trend-plot">' + svg + panner + '</div>' +
-      '<div class="trend-key panel-box">' + key + '</div>' +
+      '<div class="trend-side">' + kpiHtml +
+        '<div class="trend-key panel-box">' + key + '</div>' +
+      '</div>' +
     '</div>' +
     '<div class="trend-detail" id="trend-detail">' + detailHtml(all, totals) + '</div>';
 
@@ -3397,32 +3428,6 @@ function drawTrend() {
    * further: with the projection on, the window runs past where last year's
    * record stops, and totalling a projected month against nothing would report
    * a saving that is really just the end of the data. */
-  const kpi = $('trend-kpi');
-  if (kpi) {
-    const cmp = Math.min(all.length, prior.length);
-    let nowSum = 0, wasSum = 0;
-    for (let i = 0; i < cmp; i++) {
-      nowSum += shownTotal(all[i].byParent, trendOff);
-      wasSum += shownTotal(prior[i].byParent, trendOff);
-    }
-    if (!cmp) { kpi.hidden = true; }
-    else {
-      const d = nowSum - wasSum;
-      const tone = !wasSum ? 'flat' : (d > 0 ? 'over' : d < 0 ? 'under' : 'flat');
-      kpi.innerHTML =
-        '<div class="kpi-label">' +
-          (cmp === all.length ? 'Last ' + cmp + ' months' : cmp + ' months compared') +
-        '</div>' +
-        '<div class="kpi-value">' + money0(nowSum) + '</div>' +
-        (wasSum
-          ? '<div class="kpi-delta ' + tone + '">' +
-            (d > 0 ? '+' : d < 0 ? '\u2212' : '') + money0(Math.abs(d)) +
-            ' vs prior year</div>'
-          : '');
-      kpi.hidden = false;
-    }
-  }
-
   // The legend swatch takes the colour of the largest band, so it names the
   // ramp with the step the reader's eye has already landed on.
   const sw = $('trend-lg-sw');
