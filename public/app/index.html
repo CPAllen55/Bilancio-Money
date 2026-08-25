@@ -551,16 +551,38 @@
   /* ---- the Trend header ---- */
   .eyebrow{ font:500 10.5px/1 var(--font-num); letter-spacing:.14em;
             text-transform:uppercase; color:var(--muted); margin-bottom:9px; }
-  /* The answer before the working. It sat against the top right of the panel,
-     where it collided with the owl in the app header — so it moved into the
-     grid, at the head of the column it summarises. */
+  /* The owl is painted over the top right corner of the page — position:
+     absolute, 100px wide, from y=14 to about y=133. .tabs already reserves
+     116px for it and this reserves the same, which is why the figure sits just
+     inside the corner rather than in it. Flush right would put a summary
+     number on top of the brand mark, which is what it did the first time. */
+  .th-row{ display:flex; align-items:flex-start; justify-content:space-between;
+           gap:24px; padding-right:116px; margin-bottom:18px; }
+  .th-titles{ min-width:0; }
+  .th-row .view{ margin:0; }
+  .th-row .lede{ margin:6px 0 0; max-width:520px; }
+  .kpi{ flex:none; border:1px solid var(--hair-strong); border-radius:9px;
+        padding:13px 18px 14px; background:var(--bg-panel); text-align:right;
+        min-width:190px; }
   .trend-side{ flex:0 0 300px; display:flex; flex-direction:column; gap:14px; }
-  .kpi{ border:1px solid var(--hair-strong); border-radius:9px;
-        padding:12px 16px; background:var(--bg-panel); text-align:right; }
-  .kpi-label{ font:500 10px/1 var(--font-num); letter-spacing:.1em;
+  /* The chart's own name, above its controls. The panel heading says what the
+     view is about; this says what this particular drawing is. */
+  .card-title{ font-size:15.5px; font-weight:600; letter-spacing:-.01em;
+               margin:0 0 14px; color:var(--ink); }
+  @media (max-width:1040px){ .th-row{ padding-right:100px; } }
+  @media (max-width:760px){
+    .th-row{ flex-direction:column; padding-right:0; }
+    .kpi{ text-align:left; width:100%; }
+  }
+  /* Three sizes, well apart, so the order to read them in is obvious: what
+     period, how much, and how that compares. Tabular figures so the digits sit
+     in columns and the number reads as a quantity rather than as text. */
+  .kpi-label{ font:600 9.5px/1 var(--font-num); letter-spacing:.13em;
               text-transform:uppercase; color:var(--muted); }
-  .kpi-value{ font:600 24px/1.1 var(--font-num); color:var(--ink); margin-top:7px; }
-  .kpi-delta{ font:500 12px/1.3 var(--font-num); margin-top:4px; }
+  .kpi-value{ font:600 30px/1.05 var(--font-num); font-variant-numeric:tabular-nums;
+              letter-spacing:-.02em; color:var(--ink); margin-top:9px; }
+  .kpi-delta{ font:500 12.5px/1.3 var(--font-num); font-variant-numeric:tabular-nums;
+              margin-top:6px; }
   .kpi-delta.over{ color:var(--coral); }
   .kpi-delta.under{ color:var(--mint); }
   .kpi-delta.flat{ color:var(--muted); }
@@ -1175,6 +1197,23 @@
            font-family:var(--font-num); font-size:12px; color:var(--ink-soft); }
   .toggle input{ accent-color:var(--mint); width:15px; height:15px; cursor:pointer; }
 
+  /* A switch, for the one control on the page that changes what the chart is
+     showing rather than filtering it. The input keeps doing the work — it is
+     only moved out of sight, so the label, the keyboard and every listener
+     that reads .checked carry on unchanged. */
+  .switch{ display:inline-flex; align-items:center; gap:9px; cursor:pointer;
+           font-size:12px; color:var(--ink-soft); user-select:none; }
+  .switch input{ position:absolute; opacity:0; width:0; height:0; }
+  .switch .sw{ position:relative; flex:none; width:34px; height:20px; border-radius:10px;
+               background:var(--hair-strong); transition:background .18s; }
+  .switch .sw::after{ content:""; position:absolute; top:2px; left:2px;
+                      width:16px; height:16px; border-radius:8px; background:var(--bg-panel);
+                      box-shadow:0 1px 2px var(--shadow); transition:transform .18s; }
+  .switch input:checked + .sw{ background:var(--mint-dim); }
+  .switch input:checked + .sw::after{ transform:translateX(14px); }
+  .switch input:focus-visible + .sw{ outline:2px solid var(--mint-dim); outline-offset:2px; }
+  .switch:hover .sw{ filter:brightness(1.08); }
+
   /* ---------- forecast ---------- */
   #forecast-box{ margin-top:16px; }
   .fc-head{ display:flex; align-items:baseline; justify-content:space-between; gap:16px;
@@ -1408,10 +1447,16 @@
     </section>
 
     <section class="panel" id="v-trend" style="position:relative">
-      <div class="eyebrow">Trend</div>
-      <h2 class="view">A year, against the year before</h2>
-      <p class="lede">Monthly spend stacked by category, against the same month last year.</p>
+      <div class="th-row">
+        <div class="th-titles">
+          <div class="eyebrow">Trend</div>
+          <h2 class="view">A year, against the year before</h2>
+          <p class="lede">Monthly spend stacked by category, against the same month last year.</p>
+        </div>
+        <div class="kpi" id="trend-kpi" hidden></div>
+      </div>
       <div class="card">
+        <h3 class="card-title">Trend by Category</h3>
         <div class="th-controls">
           <span class="segtray" id="trend-ranges" role="group" aria-label="How many months to show">
             <button type="button" class="segb" data-months="3" aria-pressed="false">3 months</button>
@@ -1423,7 +1468,7 @@
           <span class="th-legend">
             <span class="lg"><i class="lg-sw" id="trend-lg-sw"></i>This year, by category</span>
             <span class="lg"><i class="lg-dash"></i>Same month, last year</span>
-            <label class="toggle"><input type="checkbox" id="forecast-on"> Project rest of year from budget</label>
+            <label class="switch"><input type="checkbox" id="forecast-on"><span class="sw" aria-hidden="true"></span>Project rest of year from budget</label>
             <span class="zoomctl" id="trend-zoom" hidden>
               <button type="button" id="trend-zoom-out" aria-label="Show more months">−</button>
               <span class="zoomlabel" id="trend-zoom-label" aria-live="polite"></span>
@@ -3182,8 +3227,13 @@ function drawTrend() {
     if (m.byParent[id] > 0) priorTotals[id] = (priorTotals[id] || 0) + m.byParent[id];
   }));
 
-  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
-            '" preserveAspectRatio="xMidYMid meet" role="img" ' +
+  /* No height attribute, so the drawing scales to whatever width the column
+     gives it instead of rendering at 880 and letterboxing inside a wider one.
+     That is what makes three months fill the card the way twelve do: the bars
+     are capped in viewBox units, and the whole coordinate space grows. */
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" ' +
+            'style="height:auto;display:block" ' +
+            'preserveAspectRatio="xMidYMid meet" role="img" ' +
             'aria-label="Monthly spending, with the year before and any forecast">';
 
   if (emptyWindow) {
@@ -3392,37 +3442,41 @@ function drawTrend() {
       '" value="' + trendOffset + '" step="1" aria-label="Scroll through months">'
     : '';
 
-  /* The figure the heading promises, at the head of the column it summarises.
+  /* The figure the heading promises.
    *
    * Compared over the months that have a counterpart a year ago and no
    * further: with the projection on, the window runs past where last year's
    * record stops, and totalling a projected month against nothing would report
    * a saving that is really just the end of the data. */
-  const cmp = Math.min(all.length, prior.length);
-  let nowSum = 0, wasSum = 0;
-  for (let i = 0; i < cmp; i++) {
-    nowSum += shownTotal(all[i].byParent, trendOff);
-    wasSum += shownTotal(prior[i].byParent, trendOff);
+  const kpi = $('trend-kpi');
+  if (kpi) {
+    const cmp = Math.min(all.length, prior.length);
+    let nowSum = 0, wasSum = 0;
+    for (let i = 0; i < cmp; i++) {
+      nowSum += shownTotal(all[i].byParent, trendOff);
+      wasSum += shownTotal(prior[i].byParent, trendOff);
+    }
+    if (!cmp) kpi.hidden = true;
+    else {
+      const d = nowSum - wasSum;
+      kpi.innerHTML =
+        '<div class="kpi-label">' +
+          (cmp === all.length ? 'Last ' + cmp + ' months' : cmp + ' months compared') +
+        '</div>' +
+        '<div class="kpi-value">' + money0(nowSum) + '</div>' +
+        (wasSum
+          ? '<div class="kpi-delta ' + (d > 0 ? 'over' : d < 0 ? 'under' : 'flat') + '">' +
+            (d > 0 ? '+' : d < 0 ? '\u2212' : '') + money0(Math.abs(d)) +
+            ' vs prior year</div>'
+          : '');
+      kpi.hidden = false;
+    }
   }
-  const kpiDelta = nowSum - wasSum;
-  const kpiHtml = !cmp ? '' :
-    '<div class="kpi">' +
-      '<div class="kpi-label">' +
-        (cmp === all.length ? 'Last ' + cmp + ' months' : cmp + ' months compared') +
-      '</div>' +
-      '<div class="kpi-value">' + money0(nowSum) + '</div>' +
-      (wasSum
-        ? '<div class="kpi-delta ' +
-          (kpiDelta > 0 ? 'over' : kpiDelta < 0 ? 'under' : 'flat') + '">' +
-          (kpiDelta > 0 ? '+' : kpiDelta < 0 ? '\u2212' : '') + money0(Math.abs(kpiDelta)) +
-          ' vs prior year</div>'
-        : '') +
-    '</div>';
 
   host.innerHTML =
     '<div class="trend-wrap">' +
       '<div class="trend-plot">' + svg + panner + '</div>' +
-      '<div class="trend-side">' + kpiHtml +
+      '<div class="trend-side">' +
         '<div class="trend-key panel-box">' + key + '</div>' +
       '</div>' +
     '</div>' +
