@@ -3651,7 +3651,7 @@ function drawBudgeting() {
       (shown.length
         ? bgChart(shown, p.slug) + bgLegend(shown) +
           '<div class="bg-cap">Drag any block up or down to change that month' +
-          ' — or tab to the chart and use the arrow keys.</div>'
+          ' — hold Alt for dollar-by-dollar. Arrow keys work too.</div>'
         : '') +
       '<div class="bg-kids">' + kids.map(bgLeaf).join('') + '</div>' +
     '</div>';
@@ -4085,8 +4085,14 @@ $('bg-list').addEventListener('pointerdown', (e) => {
 
   bgDrag = {
     seg: seg, svg: svg, row: row, month: month,
+    /* Two reference points, not one. anchor/pointerY are where the current
+       mapping is measured from and get rebased whenever the fine key goes
+       down or up; origin is where the block was when it was picked up and
+       never moves, because that is what "was $186.00" means. */
     pointerY: e.clientY,
-    start: start,
+    anchor: start,
+    origin: start,
+    fine: false,
     /* What the rest of the stack occupies. Holding it lets the column be kept
        inside the plot without the frozen scale having to move. */
     others: column - start,
@@ -4113,8 +4119,32 @@ $('bg-list').addEventListener('pointermove', (e) => {
     return;
   }
   const d = bgDrag;
+
+  /* How much a pixel is worth.
+   *
+   * Normally the whole column height covers the whole scale, which is what
+   * makes a big category coarse: a plot 152 pixels tall spanning $5,000 puts
+   * $33 behind every pixel, and no amount of care with the mouse reaches the
+   * dollars in between. Holding Alt switches to a fixed pixel-per-dollar
+   * mapping, which is slow across the range and exact within it.
+   *
+   * Changing key mid-gesture rebases rather than recomputing from the original
+   * press: without that, the block would leap the moment Alt went down, by the
+   * whole difference between the two mappings.
+   */
+  const fine = e.altKey;
+  if (fine !== d.fine) {
+    d.anchor = bgPlanOf(d.row)[d.month];
+    d.pointerY = e.clientY;
+    d.fine = fine;
+  }
+  const perPixel = fine ? 100 : (d.hi / BG_PLOT);
   const up = (d.pointerY - e.clientY) / d.perUnit;      // SVG units; up is more
-  let v = Math.round(d.start + up * (d.hi / BG_PLOT));
+
+  /* Whole dollars. The month boxes below have always shown and accepted
+     dollars, so a drag that left 462.05 behind put a figure in the plan that
+     its own input rendered as 462 and would overwrite on the next keystroke. */
+  let v = Math.round((d.anchor + up * perPixel) / 100) * 100;
   v = Math.max(0, Math.min(v, Math.max(0, d.hi - d.others)));
   if (v !== bgPlanOf(d.row)[d.month]) {
     d.row.pinned[d.month] = v;
@@ -4123,7 +4153,7 @@ $('bg-list').addEventListener('pointermove', (e) => {
   }
   // Outside the guard above: at the top and bottom stops the figure holds
   // still, and a box that froze with it would read as a dropped gesture.
-  bgTipShow(d.row, d.month, d.start, e.clientX, e.clientY);
+  bgTipShow(d.row, d.month, d.origin, e.clientX, e.clientY);
 });
 
 function bgDragEnd(e) {
@@ -4135,6 +4165,7 @@ function bgDragEnd(e) {
   try { d.seg.releasePointerCapture(e.pointerId); } catch (err) { /* already gone */ }
   bgTipHide();
   if (!d.moved) { bgFit(d.svg); return; }
+  d.row.pinned[d.month] = Math.round(d.row.pinned[d.month] / 100) * 100;
   bgSave({ slug: d.row.slug, month: d.month, amount: d.row.pinned[d.month] });
   /* Only now: the scale is free to change again, and the row below needs its
      pinned styling and its count. A redraw here is safe and nowhere earlier. */
@@ -4215,7 +4246,9 @@ $('bg-list').addEventListener('keydown', (e) => {
   e.preventDefault();
 
   if (unpin) delete row.pinned[month];
-  else row.pinned[month] = Math.max(0, next);
+  // Rounded for the same reason the drag is: a category whose computed figure
+  // carries cents would otherwise keep them for ever, ten dollars at a time.
+  else row.pinned[month] = Math.max(0, Math.round(next / 100) * 100);
   bgLive();
   const at = seg.getBoundingClientRect();
   bgTipShow(row, month, unpin ? null : now, at.left + at.width / 2, at.top);
