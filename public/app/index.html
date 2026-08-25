@@ -717,6 +717,14 @@
              transition:transform .12s ease, filter .12s ease, opacity .12s ease; }
   .priordot:hover{ transform:scale(1.5); opacity:1;
                    filter:drop-shadow(0 0 7px var(--ink)); }
+  /* The same treatment the year-ago markers get: it grows rather than glows,
+     because a shadow on a 3px circle is a smudge. */
+  .netdot{ cursor:default; }
+  .netdot circle:last-child{ transform-box:fill-box; transform-origin:center;
+                             transition:transform .12s ease; }
+  .netdot:hover circle:last-child{ transform:scale(1.45); }
+  .netfig{ font-family:var(--font-num); font-variant-numeric:tabular-nums;
+           pointer-events:none; }
 
   /* The subcategory dialog. Panel colours rather than the browser's, and a
      backdrop dark enough to say the page behind it is waiting. */
@@ -3806,9 +3814,14 @@ function drawNet() {
   }
 
   const total = rows[rows.length - 1].cumulative;
-  const W = 880, H = 320;
-  const PL = 74, PR = 14, PT = 24, PB = 38;
-  const plotW = W - PL - PR, plotH = H - PT - PB;
+  /* Sized the way the Trend charts are: in rendered pixels, through the
+     measured scale, so a figure is the size it says it is. */
+  const W = 880, PL = 74, PR = 14, PT = 24, plotH = 258;
+  const plotW = W - PL - PR;
+  const band = plotW / rows.length;
+  const type = chartType(host, band);
+  const PB = 30 + type.month;
+  const H = PT + plotH + PB;
 
   // The axis has to hold the monthly bars and the running total at once, and it
   // has to contain zero — a chart of a signed quantity that crops the line it
@@ -3822,13 +3835,13 @@ function drawNet() {
   const y = v => PT + plotH - ((v - yMin) / span) * plotH;
   const zero = y(0);
 
-  const band = plotW / rows.length;
   // Picking three months here does what zooming in does on Trend, so the bars
   // widen the same way rather than stranding the room it frees.
   const barW = barWidth(band, 0.5, 34);
 
-  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
-            '" preserveAspectRatio="xMidYMid meet" role="img" ' +
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" ' +
+            'style="height:auto;display:block" ' +
+            'preserveAspectRatio="xMidYMid meet" role="img" ' +
             'aria-label="Money kept each month, with a running total">';
 
   for (let v = yMin; v <= yMax + step / 2; v += step) {
@@ -3836,8 +3849,8 @@ function drawNet() {
     const isZero = Math.abs(v) < step / 1000;
     svg += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + yy.toFixed(1) + '" y2="' + yy.toFixed(1) +
            '" stroke="' + (isZero ? 'var(--hair-strong)' : 'var(--grid)') + '" stroke-width="1"/>' +
-           '<text x="' + (PL - 9) + '" y="' + (yy + 4).toFixed(1) + '" text-anchor="end" ' +
-           'font-size="10.5" fill="var(--muted)">' + money0(v) + '</text>';
+           '<text x="' + (PL - 9) + '" y="' + (yy + type.axis * 0.36).toFixed(1) + '" text-anchor="end" ' +
+           'font-size="' + type.axis + '" fill="var(--muted)">' + money0(v) + '</text>';
   }
 
   /* ---- the running total, as a wave ----
@@ -3877,6 +3890,29 @@ function drawNet() {
     '<path d="' + d + '" fill="none" stroke="var(--mint)" stroke-width="1.8" opacity=".85" clip-path="url(#netAbove)"/>' +
     '<path d="' + d + '" fill="none" stroke="var(--coral)" stroke-width="1.8" opacity=".85" clip-path="url(#netBelow)"/>';
 
+  /* ---- a marker per month on the wave ----
+     The wave carries the running total and had nothing on it to aim at. A line
+     is not a target: there was no way to know it could be asked anything, and
+     no way to hit the right month if you guessed that it could.
+
+     A dot per month, sitting on its own point, in the colour the wave is at
+     that point — above zero it is money kept and below it is money down, and
+     the marker should not say otherwise. The generous transparent circle
+     underneath is the hit area, so the pointer does not have to be accurate to
+     within three pixels on a line that moves. */
+  pts.forEach(([px, py], i) => {
+    const r = rows[i];
+    const up = r.cumulative >= 0;
+    svg += '<g class="netdot" ' +
+      tipAttrs('Running total', r.month, r.cumulative, 0,
+        (up ? 'kept ' : 'down ') + money(Math.abs(r.net)) + ' in ' + monthLabel(r.month)) + '>' +
+      '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) +
+        '" r="11" fill="transparent"></circle>' +
+      '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) +
+        '" r="3.6" fill="var(--bg-panel)" stroke="' +
+        (up ? 'var(--mint)' : 'var(--coral)') + '" stroke-width="2"></circle></g>';
+  });
+
   const every = Math.ceil(rows.length / 12);
   rows.forEach((r, i) => {
     const cx = PL + band * i + band / 2;
@@ -3894,14 +3930,27 @@ function drawNet() {
              ' fill="' + colour + '" style="color:' + colour + '">' +
              '<title>' + monthLabel(r.month) + ': ' + (up ? 'kept ' : 'down ') + money(Math.abs(r.net)) +
              ' · running total ' + money(r.cumulative) + '</title></rect>';
+
+      /* What the bar came to, above it — or below it when the bar hangs down,
+         so the figure is always on the outside of the bar and never inside it.
+         Skipped where the columns are too narrow to hold one, on the same rule
+         the Trend figures use. */
+      if (band >= 46) {
+        const fy = up ? top - type.fig * 0.45 : top + h + type.fig;
+        svg += '<text class="netfig" x="' + cx.toFixed(1) + '" y="' + fy.toFixed(1) +
+          '" text-anchor="middle" font-size="' + type.fig + '" fill="' + colour +
+          '" opacity="' + (netSel && !on ? '.3' : '.95') + '">' +
+          (up ? '' : '\u2212') + money0(Math.abs(r.net)) + '</text>';
+      }
     }
 
     if (i % every === 0 || i === rows.length - 1) {
       const parts = r.month.split('-');
       const label = MONTH_NAMES[Number(parts[1]) - 1] +
         (parts[1] === '01' || i === 0 ? " '" + parts[0].slice(2) : '');
-      svg += '<text x="' + cx.toFixed(1) + '" y="' + (H - PB + 18) + '" text-anchor="middle" ' +
-             'font-size="10.5" fill="var(--muted)">' + label + '</text>';
+      svg += '<text x="' + cx.toFixed(1) + '" y="' + (PT + plotH + type.month + 10).toFixed(1) +
+             '" text-anchor="middle" font-size="' + type.month +
+             '" fill="var(--muted)">' + label + '</text>';
     }
   });
   svg += '</svg>';
