@@ -334,6 +334,9 @@ async function syncOneItem(
   return out;
 }
 
+/** Items created by scripts/demo.mjs, which no Plaid call can ever service. */
+export const isDemoItem = (plaidItemId: string) => plaidItemId.startsWith("demo-item-");
+
 plaid.post("/sync", async (c) => {
   const { db, ready, close } = getDb(c.env);
   try {
@@ -350,6 +353,10 @@ plaid.post("/sync", async (c) => {
     const failed: { bank: string; message: string }[] = [];
 
     for (const item of mine) {
+      /* Seeded demo data has no Plaid item behind it and never will. Left in,
+         it fails on every sync and reports itself as a broken bank, which is
+         a scary thing to show somebody who is being given a tour. */
+      if (isDemoItem(item.plaidItemId)) continue;
       try {
         const r = await syncOneItem(c.env, db, item);
         added += r.added; modified += r.modified; removed += r.removed;

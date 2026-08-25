@@ -19,7 +19,9 @@
     "preview": "node scripts/serve-static.mjs",
     "hyperdrive:cached": "node scripts/hyperdrive-cached.mjs",
     "demo:seed": "node scripts/demo.mjs",
-    "demo:clear": "node scripts/demo.mjs clear"
+    "demo:clear": "node scripts/demo.mjs clear",
+    "demo:seed:prod": "node scripts/demo.mjs prod",
+    "demo:clear:prod": "node scripts/demo.mjs clear prod"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",

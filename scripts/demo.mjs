@@ -1,17 +1,24 @@
 /**
- * Fills an account on the DEV branch with two years of invented transactions,
- * so somebody can be shown the product without linking a real bank.
+ * Fills an account with two years of invented transactions, so somebody can be
+ * shown the product without linking a real bank.
  *
- *   npm run demo:seed  -- friend@example.com
- *   npm run demo:clear -- friend@example.com
+ *   npm run demo:seed       -- friend@example.com     the dev branch
+ *   npm run demo:clear      -- friend@example.com
+ *   npm run demo:seed:prod  -- friend@example.com     production
+ *   npm run demo:clear:prod -- friend@example.com
  *
- * ── Dev only, on purpose ─────────────────────────────────────────────────
+ * ── Production is a separate word, and a question ────────────────────────
  *
- * This reads DATABASE_URL_DEV and has no production path at all. Inventing
- * financial history and writing it into the database real people use is not a
- * thing that should be one mistyped flag away, and a demo is not worth that
- * risk. If it ever needs to run against production, that is a deliberate
- * change to this file made with eyes open, not an argument.
+ * Dev is the default and needs no argument. Production has to be asked for by
+ * name and then confirmed by typing the address again, because inventing
+ * financial history and writing it where real people's data lives should not
+ * be one mistyped flag away. --force skips the question, and exists so this
+ * can be scripted; typing it is the deliberate act.
+ *
+ * What protects the data is not the prompt, though. It is that this only ever
+ * touches an account that already exists, only ever adds one item it can
+ * identify as its own, refuses outright if that person has a real bank
+ * connected, and can take the whole thing away again.
  *
  * ── Why transactions and not fixtures ────────────────────────────────────
  *
@@ -44,6 +51,7 @@
  */
 import "dotenv/config";
 import { randomUUID } from "node:crypto";
+import { createInterface } from "node:readline/promises";
 import { Client } from "pg";
 
 /* ------------------------------------------------------------------ args -- */
@@ -51,6 +59,9 @@ import { Client } from "pg";
 const argv = process.argv.slice(2);
 const mode = argv.includes("clear") ? "clear" : "seed";
 const replace = argv.includes("--replace");
+const force = argv.includes("--force");
+/* Named, not positional, and dev unless production is spelled out. */
+const target = argv.includes("prod") ? "prod" : "dev";
 const email = argv.find((a) => a.includes("@"));
 
 if (!email) {
@@ -61,10 +72,27 @@ if (!email) {
   process.exit(1);
 }
 
-const url = process.env.DATABASE_URL_DEV;
+const url = target === "prod" ? process.env.DATABASE_URL_PROD : process.env.DATABASE_URL_DEV;
 if (!url) {
-  console.error("No DATABASE_URL_DEV in .env. This script only ever touches dev.");
+  console.error(`No connection string for "${target}". Check .env.`);
   process.exit(1);
+}
+
+/** Production asks once, out loud, and takes the address as the answer. */
+async function confirmProduction(what) {
+  if (target !== "prod" || force) return;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  console.log("");
+  console.log(`  ${what}`);
+  console.log("  This is PRODUCTION — the database real people use.");
+  console.log("");
+  const typed = await rl.question(`  Type the address again to go ahead: `);
+  rl.close();
+  if (typed.trim().toLowerCase() !== email.toLowerCase()) {
+    console.error("\nThat did not match. Nothing was changed.");
+    process.exit(1);
+  }
+  console.log("");
 }
 
 /* ------------------------------------------------------------------ dice -- */
@@ -256,7 +284,7 @@ try {
   );
   if (!found.length) {
     console.error(
-      `No account for ${email} on dev.\n` +
+      `No account for ${email} on ${target}.\n` +
       `They need to have signed in there at least once first — the row is created then.`,
     );
     process.exit(1);
@@ -265,13 +293,14 @@ try {
   const itemPlaidId = `demo-item-${user.id}`;
 
   if (mode === "clear") {
+    await confirmProduction(`Remove the demo bank from ${email}.`);
     const res = await client.query(
       `delete from items where user_id = $1 and plaid_item_id = $2`,
       [user.id, itemPlaidId],
     );
     console.log(res.rowCount
-      ? `Removed the demo bank for ${email}. Its accounts and transactions went with it.`
-      : `${email} had no demo data on dev.`);
+      ? `Removed the demo bank for ${email} on ${target}. Its accounts and transactions went with it.`
+      : `${email} had no demo data on ${target}.`);
     process.exit(0);
   }
 
@@ -283,12 +312,21 @@ try {
 
   if (real.length && !replace) {
     console.error(
-      `${email} already has ${real.length} real bank connection(s) on dev.\n` +
+      `${email} already has ${real.length} real bank connection(s) on ${target}.\n` +
       `Demo data would sit alongside them and muddle every total.\n` +
       `Pass --replace if that is genuinely what you want.`,
     );
     process.exit(1);
   }
+
+  /* Everything is checked before anything is asked, so the question is the
+     last thing between a correct command and the writing, rather than a gate
+     in front of a command that was going to fail anyway. */
+  await confirmProduction(
+    `Seed ${rows.length} invented transactions into ${email}` +
+    (already ? ", replacing the demo data already there." : "."),
+  );
+
   if (already) {
     await client.query(`delete from items where id = $1`, [already.id]);
     console.log("Replaced the previous demo data.");
@@ -343,7 +381,7 @@ try {
 
   const months = new Set(rows.map((r) => r.date.slice(0, 7)));
   console.log(
-    `Seeded ${rows.length} transactions across ${months.size} months for ${email} on dev.\n\n` +
+    `Seeded ${rows.length} transactions across ${months.size} months for ${email} on ${target}.\n\n` +
     `  Everyday Checking   ${money(BAL[CHECKING])}\n` +
     `  Savings             ${money(BAL[SAVINGS])}\n` +
     `  Rewards Card        ${money(BAL[CARD])} owed\n\n` +
