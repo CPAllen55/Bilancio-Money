@@ -717,8 +717,22 @@
 
   .bg-card{ background:var(--surface); border:1px solid var(--hair); border-radius:6px;
             padding:16px 18px; margin-top:14px; }
-  .bg-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  /* The head is the control. A whole card is a big target, and the alternative
+     — a chevron somebody has to aim at — is the thing people miss. */
+  .bg-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; width:100%;
+            background:none; border:0; padding:0; margin:0; color:inherit;
+            font:inherit; text-align:left; cursor:pointer; }
+  .bg-head:hover b{ color:var(--mint); }
+  .bg-head:focus-visible{ outline:2px solid var(--mint-dim); outline-offset:3px;
+                          border-radius:4px; }
   .bg-head b{ font-size:14.5px; }
+  .bg-chev{ font-size:11px; color:var(--muted); width:14px; text-align:center; flex:none; }
+  /* Shut: the year in miniature, so a card can be judged without opening it. */
+  .bg-mini{ display:inline-flex; align-items:center; margin-left:6px; opacity:.9; }
+  .bg-avg{ font-family:var(--font-num); font-size:12px; color:var(--muted);
+           flex:none; }
+  .bg-card.shut{ padding-top:12px; padding-bottom:12px; }
+  .bg-card.shut .bg-annual{ margin-left:auto; }
   .bg-annual{ margin-left:auto; font-family:var(--font-num); font-size:13.5px; }
   .bg-kids{ margin-top:12px; padding-top:10px; border-top:1px solid var(--hair); }
 
@@ -765,7 +779,16 @@
   .bg-svg.dragging .bg-seg:not(.on){ opacity:.28; filter:none; }
   .bg-svg.dragging .bg-seg.on{ opacity:1; stroke:var(--ink); stroke-width:1.4;
     filter:drop-shadow(0 0 5px var(--seg)) drop-shadow(0 0 13px var(--seg)); }
-  .bg-mlab{ font-family:var(--font-num); font-size:9px; fill:var(--muted); }
+  .bg-mlab{ font-family:var(--font-num); font-size:10px; fill:var(--muted);
+            letter-spacing:.04em; }
+  /* The figure inside the block. Drawn only where there is room for it, in
+     whichever of black or white reads on that fill. */
+  .bg-amt{ font-family:var(--font-num); font-size:9px; font-weight:600;
+           pointer-events:none; }
+  /* Shown on the block being held, so a grabbed block says so rather than
+     relying on the reader noticing a glow. */
+  .bg-grab{ font-size:13px; font-weight:700; pointer-events:none;
+            paint-order:stroke; stroke-width:2.5px; stroke-linejoin:round; }
   /* The month's total, above its column. Dimmed until something is happening
      to that column, so twelve numbers do not compete with the bars. */
   .bg-total{ font-family:var(--font-num); font-size:9.5px; fill:var(--muted); }
@@ -3573,6 +3596,8 @@ $('net-range').addEventListener('change', () => { netSel = null; refresh(); });
  */
 let bgData = null;
 const bgOpen = new Set();     // leaves showing their twelve months
+const bgCardOpen = new Set(); // categories showing their chart
+let bgCardSeeded = false;     // whether the first one has been opened for them
 let bgSaveTimer = null;
 let bgDrag = null;            // the segment under the pointer, mid-gesture
 
@@ -3635,25 +3660,47 @@ function drawBudgeting() {
   const parents = categoryList.filter(c => !c.parentSlug && c.kind === 'spend');
   const host = $('bg-list');
 
-  host.innerHTML = parents.map(p => {
-    const kids = bgData.categories.filter(r => r.parentSlug === p.slug);
-    if (!kids.length) return '';
-    const year = bgYearOf(kids);
-    if (!year) return '';
-    const shown = bgShownKids(p.slug);
+  /* Every category open at once is a dozen charts and forty rows, which is the
+     same mistake the Tracker and the Categories tab already learned not to
+     make. They start shut — but not all of them, because a page of pills does
+     not show what the page is for. The largest opens once, the first time. */
+  const withYear = parents
+    .map(p => ({ p: p, kids: bgData.categories.filter(r => r.parentSlug === p.slug) }))
+    .map(o => ({ p: o.p, kids: o.kids, year: bgYearOf(o.kids) }))
+    .filter(o => o.kids.length && o.year > 0);
 
-    return '<div class="bg-card">' +
-      '<div class="bg-head">' +
+  if (!bgCardSeeded && withYear.length) {
+    bgCardSeeded = true;
+    bgCardOpen.add(withYear.slice().sort((a, b) => b.year - a.year)[0].p.slug);
+  }
+
+  host.innerHTML = withYear.map(o => {
+    const p = o.p, kids = o.kids, year = o.year;
+    const open = bgCardOpen.has(p.slug);
+    const shown = bgShownKids(p.slug);
+    const perMonth = bgData.months.map(m =>
+      kids.reduce((s, r) => s + bgPlanOf(r)[m], 0));
+
+    return '<div class="bg-card' + (open ? '' : ' shut') + '" data-parent="' +
+        escapeHtml(p.slug) + '">' +
+      '<button class="bg-head" type="button" data-bg-card="' + escapeHtml(p.slug) + '" ' +
+        'aria-expanded="' + open + '">' +
+        '<span class="bg-chev" aria-hidden="true">' + (open ? '▾' : '▸') + '</span>' +
         '<span class="swatch" style="background:' + themed(p.slug, p.colour) + '"></span>' +
         '<b>' + escapeHtml(p.label) + '</b>' +
+        (open || !perMonth.some(v => v > 0) ? ''
+          : '<span class="bg-mini">' + sparkline(perMonth, themed(p.slug, p.colour)) + '</span>') +
         '<span class="bg-annual">' + money(year) + ' a year</span>' +
-      '</div>' +
-      (shown.length
-        ? bgChart(shown, p.slug) + bgLegend(shown) +
-          '<div class="bg-cap">Drag any block up or down to change that month' +
-          ' — hold Alt for dollar-by-dollar. Arrow keys work too.</div>'
+        (open ? '' : '<span class="bg-avg">' + money0(year / 12) + ' a month</span>') +
+      '</button>' +
+      (open
+        ? (shown.length
+            ? bgChart(shown, p.slug) + bgLegend(shown) +
+              '<div class="bg-cap">Drag any block up or down to change that month' +
+              ' — hold Alt for dollar-by-dollar. Arrow keys work too.</div>'
+            : '') +
+          '<div class="bg-kids">' + kids.map(bgLeaf).join('') + '</div>'
         : '') +
-      '<div class="bg-kids">' + kids.map(bgLeaf).join('') + '</div>' +
     '</div>';
   }).join('') || '<p class="empty">Nothing to plan yet — link a bank and sync some history.</p>';
 
@@ -3732,7 +3779,7 @@ function bgMonths(row, plan) {
  */
 /* The top padding is where the monthly totals sit; the plot keeps the height
    it had rather than losing 16 pixels to them. */
-const BG_W = 720, BG_H = 192, BG_PL = 2, BG_PT = 22, BG_PB = 18;
+const BG_W = 720, BG_H = 250, BG_PL = 2, BG_PT = 24, BG_PB = 22;
 const BG_PLOT = BG_H - BG_PT - BG_PB;
 /* A block has to be big enough to get hold of, so a small one is drawn at a
    floor rather than at its true height, and a month with nothing in it still
@@ -3770,7 +3817,7 @@ function bgScaleOf(rows) {
 function bgChart(kids, parentSlug) {
   const hi = bgScaleOf(kids);
   const band = (BG_W - BG_PL * 2) / bgData.months.length;
-  const barW = Math.min(44, band * 0.66);
+  const barW = Math.min(52, band * 0.74);
   const nowIdx = bgData.months.indexOf(bgData.currentMonth);
   const plans = kids.map(bgPlanOf);
 
@@ -3803,16 +3850,24 @@ function bgChart(kids, parentSlug) {
         'role="slider" aria-valuemin="0" ' +
         'aria-valuenow="' + Math.round(v / 100) + '" ' +
         'aria-valuetext="' + escapeHtml(money(v)) + '" ' +
-        'aria-label="' + escapeHtml(r.label) + ', ' + bgData.labels[i] + '"></rect>';
+        'aria-label="' + escapeHtml(r.label) + ', ' + bgData.labels[i] + '"></rect>' +
+        '<text class="bg-amt" data-amt="' + escapeHtml(r.slug) + '" data-month="' + m +
+        '" x="' + (x + barW / 2).toFixed(1) + '" y="' + (y + h / 2 + 3.2).toFixed(1) +
+        '" text-anchor="middle" fill="' + bgInkOn(fill) + '" style="display:' +
+        (h >= BG_AMT_MIN && v > 0 ? 'inline' : 'none') + '">' +
+        escapeHtml(money0(v)) + '</text>';
     });
     const mid = (BG_PL + band * i + band / 2).toFixed(1);
     const total = kids.reduce((s, r, k) => s + plans[k][m], 0);
     svg += '<text class="bg-total" data-total="' + m + '" x="' + mid +
       '" y="' + bgTotalY(y).toFixed(1) + '" text-anchor="middle">' +
       escapeHtml(money0(total)) + '</text>' +
-      '<text class="bg-mlab" x="' + mid + '" y="' + (BG_H - 5) +
-      '" text-anchor="middle">' + bgData.labels[i].slice(0, 1) + '</text>';
+      '<text class="bg-mlab" x="' + mid + '" y="' + (BG_H - 6) +
+      '" text-anchor="middle">' + escapeHtml(bgData.labels[i].slice(0, 3)) + '</text>';
   });
+  /* One handle for the chart, parked on whichever block is being held. Drawn
+     last so it sits over the stack, and moved rather than recreated. */
+  svg += '<text class="bg-grab" text-anchor="middle" style="display:none">⇕</text>';
   return svg + '</svg>';
 }
 
@@ -3826,6 +3881,10 @@ function bgLegend(kids) {
    replace the element the pointer has captured and end the gesture, so nothing
    is rebuilt during a drag — the same rects are moved. */
 function bgFit(svg) {
+  /* Which block, if any, is being held right now — the handle goes on it and
+     its figure steps aside to make room. */
+  const held = (bgDrag && bgDrag.svg === svg)
+    ? { slug: bgDrag.row.slug, month: bgDrag.month } : null;
   const slugs = (svg.dataset.kids || '').split(',').filter(Boolean);
   const rows = slugs.map(s => bgData.categories.find(r => r.slug === s)).filter(Boolean);
   /* Frozen only for the chart being dragged. Every other chart re-fits, so a
@@ -3851,6 +3910,23 @@ function bgFit(svg) {
       rect.setAttribute('aria-valuenow', Math.round(v / 100));
       rect.setAttribute('aria-valuetext', money(v));
       rect.classList.toggle('empty', !(v > 0));
+
+      const amt = svg.querySelector('text[data-amt="' + CSS.escape(r.slug) +
+        '"][data-month="' + m + '"]');
+      if (amt) {
+        const room = h >= BG_AMT_MIN && v > 0;
+        amt.style.display = room ? 'inline' : 'none';
+        if (room) {
+          amt.textContent = money0(v);
+          amt.setAttribute('y', (y + h / 2 + 3.2).toFixed(1));
+        }
+      }
+      if (held && held.slug === r.slug && held.month === m) {
+        held.x = Number(rect.getAttribute('x')) + Number(rect.getAttribute('width')) / 2;
+        held.y = y + h / 2 + 4.5;
+        held.fill = rect.getAttribute('fill');
+        held.room = h >= 18;
+      }
     });
     const lab = svg.querySelector('text[data-total="' + m + '"]');
     if (lab) {
@@ -3859,12 +3935,74 @@ function bgFit(svg) {
       lab.classList.toggle('on', !!(bgDrag && bgDrag.svg === svg && bgDrag.month === m));
     }
   });
+
+  const grab = svg.querySelector('.bg-grab');
+  if (grab) {
+    if (held && held.x !== undefined && held.room) {
+      grab.setAttribute('x', held.x.toFixed(1));
+      grab.setAttribute('y', held.y.toFixed(1));
+      grab.setAttribute('fill', bgInkOn(held.fill));
+      grab.setAttribute('stroke', held.fill);
+      grab.style.display = 'inline';
+      // The figure and the handle cannot share the middle of a small block.
+      const amt = svg.querySelector('text[data-amt="' + CSS.escape(held.slug) +
+        '"][data-month="' + held.month + '"]');
+      if (amt) amt.style.display = 'none';
+    } else {
+      grab.style.display = 'none';
+    }
+  }
 }
 
 /* Just clear of the column, and never off the top of the drawing. */
 function bgTotalY(columnTop) {
   return Math.max(11, columnTop - 6);
 }
+
+/* How big a move should be, at a given figure.
+ *
+ * A fixed step is wrong at both ends: ten dollars is noise on a $2,200 month
+ * and a tenth of a $100 one. One per cent is the same decision whatever the
+ * size — and rounding that percentage down to a power of ten is what keeps
+ * the figures people land on round. At $2,207 a per cent is $22, the unit is
+ * $10, and the next stop up is $2,230 rather than $2,229.07.
+ *
+ * Never finer than a dollar, because the plan is kept and shown in dollars.
+ */
+function bgStepUnit(cents) {
+  const pct = Math.abs(cents) / 100 / 100;          // one per cent, in dollars
+  if (!(pct > 0)) return 100;
+  const mag = Math.pow(10, Math.floor(Math.log10(pct)));
+  return Math.max(100, Math.round(mag * 100));      // back to cents
+}
+
+/* One step from here. Recomputed from the figure it starts at, so a category
+   dragged from $2,200 down to $100 gets $100's steps on the way back up
+   rather than keeping the ones it had when it was large. */
+function bgNudge(cents, dir, big) {
+  const unit = bgStepUnit(cents) * (big ? 10 : 1);
+  const move = Math.abs(cents) * (big ? 0.1 : 0.01);
+  let out = Math.round((cents + dir * move) / unit) * unit;
+  if (out === cents) out = cents + dir * unit;      // a step has to move
+  return Math.max(0, out);
+}
+
+/* Black or white, whichever reads on that fill: the same relative-luminance
+   maths the light palette uses, asked the other way round. */
+const bgInkCache = {};
+function bgInkOn(hex) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return '#000';
+  if (bgInkCache[hex]) return bgInkCache[hex];
+  const f = [1, 3, 5].map(i => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  const lum = 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2];
+  return (bgInkCache[hex] = lum > 0.42 ? '#0B0F14' : '#FFFFFF');
+}
+
+/* A block has to be this tall before its figure will fit inside it. */
+const BG_AMT_MIN = 13;
 
 /* The readout that follows the block being moved.
  *
@@ -4025,13 +4163,16 @@ function bgLive() {
   const charts = bgDrag ? [bgDrag.svg] : $('bg-list').querySelectorAll('.bg-svg');
   for (const svg of charts) bgFit(svg);
 
-  // Each parent's annual figure, from the children actually drawn above it.
+  // Each parent's annual figure, read off the card rather than off its chart,
+  // because a shut card has no chart and still has a figure.
   for (const card of $('bg-list').querySelectorAll('.bg-card')) {
-    const svg = card.querySelector('.bg-svg');
     const el = card.querySelector('.bg-annual');
-    if (!svg || !el) continue;
-    const rows = bgData.categories.filter(r => r.parentSlug === svg.dataset.parent);
-    el.textContent = money(bgYearOf(rows)) + ' a year';
+    if (!el || !card.dataset.parent) continue;
+    const rows = bgData.categories.filter(r => r.parentSlug === card.dataset.parent);
+    const year = bgYearOf(rows);
+    el.textContent = money(year) + ' a year';
+    const avg = card.querySelector('.bg-avg');
+    if (avg) avg.textContent = money0(year / 12) + ' a month';
   }
 
   /* The month boxes, where they are open. Dragging a block and typing in a box
@@ -4047,6 +4188,13 @@ function bgLive() {
 }
 
 $('bg-list').addEventListener('click', (e) => {
+  const card = e.target.closest('[data-bg-card]');
+  if (card) {
+    const slug = card.dataset.bgCard;
+    if (bgCardOpen.has(slug)) bgCardOpen.delete(slug); else bgCardOpen.add(slug);
+    drawBudgeting();
+    return;
+  }
   const tog = e.target.closest('[data-bg-open]');
   if (!tog) return;
   const slug = tog.dataset.bgOpen;
@@ -4141,10 +4289,13 @@ $('bg-list').addEventListener('pointermove', (e) => {
   const perPixel = fine ? 100 : (d.hi / BG_PLOT);
   const up = (d.pointerY - e.clientY) / d.perUnit;      // SVG units; up is more
 
-  /* Whole dollars. The month boxes below have always shown and accepted
-     dollars, so a drag that left 462.05 behind put a figure in the plan that
-     its own input rendered as 462 and would overwrite on the next keystroke. */
-  let v = Math.round((d.anchor + up * perPixel) / 100) * 100;
+  /* Snapped to a step proportional to the figure itself — see bgStepUnit. A
+     drag across a $2,200 month lands on $2,180, $2,190, $2,200; the same drag
+     on a $60 one lands on whole dollars. Alt overrides it to exact dollars,
+     which is the point of Alt. */
+  const raw = d.anchor + up * perPixel;
+  const unit = fine ? 100 : bgStepUnit(raw);
+  let v = Math.round(raw / unit) * unit;
   v = Math.max(0, Math.min(v, Math.max(0, d.hi - d.others)));
   if (v !== bgPlanOf(d.row)[d.month]) {
     d.row.pinned[d.month] = v;
@@ -4239,16 +4390,14 @@ $('bg-list').addEventListener('keydown', (e) => {
   // Changing.
   const now = bgPlanOf(row)[month];
   let next = null, unpin = false;
-  if (e.key === 'ArrowUp')   next = now + (e.shiftKey ? 10000 : 1000);
-  if (e.key === 'ArrowDown') next = now - (e.shiftKey ? 10000 : 1000);
+  if (e.key === 'ArrowUp')   next = bgNudge(now,  1, e.shiftKey);
+  if (e.key === 'ArrowDown') next = bgNudge(now, -1, e.shiftKey);
   if (e.key === 'Delete' || e.key === 'Backspace') unpin = true;
   if (next === null && !unpin) return;
   e.preventDefault();
 
   if (unpin) delete row.pinned[month];
-  // Rounded for the same reason the drag is: a category whose computed figure
-  // carries cents would otherwise keep them for ever, ten dollars at a time.
-  else row.pinned[month] = Math.max(0, Math.round(next / 100) * 100);
+  else row.pinned[month] = Math.max(0, next);       // bgNudge already rounded it
   bgLive();
   const at = seg.getBoundingClientRect();
   bgTipShow(row, month, unpin ? null : now, at.left + at.width / 2, at.top);
