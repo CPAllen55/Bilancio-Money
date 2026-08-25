@@ -548,6 +548,13 @@
 
   /* Chart and key side by side. The key is a column because it is a list of
      categories, and a list reads down. */
+  .trend-yoy{ font:600 12px/1 var(--font-num); color:var(--muted); }
+  .trend-yoy.over{ color:var(--coral); }
+  .trend-yoy.under{ color:var(--mint); }
+  .kdelta{ font:500 10.5px/1 var(--font-num); min-width:38px; text-align:right; }
+  .kdelta.over{ color:var(--coral); }
+  .kdelta.under{ color:var(--mint); }
+
   .trend-wrap{ display:flex; gap:20px; align-items:flex-start; }
   .trend-plot{ flex:1 1 auto; min-width:0; }
   .trend-key{ flex:0 0 176px; display:flex; flex-direction:column; gap:1px; padding-top:8px; }
@@ -1339,7 +1346,7 @@
 
     <section class="panel" id="v-trend" style="position:relative">
       <h2 class="view">A year, against the year before</h2>
-      <p class="lede">Where the money went each month, stacked by category, with a dashed line showing what that same month cost you a year earlier. Switch on the budget to carry the rest of the year at what you have planned.</p>
+      <p class="lede">Monthly spend stacked by category, against the same month last year.</p>
       <div class="bar" style="padding-top:0">
         <select class="ctl" id="trend-range">
           <option value="3">Last 3 months</option>
@@ -1348,7 +1355,8 @@
           <option value="24">Last 2 years</option>
         </select>
         <span class="bar-right">
-          <label class="toggle"><input type="checkbox" id="forecast-on"> Budget rest of year</label>
+          <span class="trend-yoy" id="trend-yoy"></span>
+          <label class="toggle"><input type="checkbox" id="forecast-on"> Project rest of year from budget</label>
           <span class="zoomctl" id="trend-zoom" hidden>
             <button type="button" id="trend-zoom-out" aria-label="Show more months">−</button>
             <span class="zoomlabel" id="trend-zoom-label" aria-live="polite"></span>
@@ -1559,6 +1567,37 @@ function readableOnWhite(hex) {
 /* The one place that decides what a category looks like. Some views know a
    category only through the API row they were handed and never populate
    CAT_COLOUR, so they pass the colour in; the mapping is the same either way. */
+/* The stacked chart, and only the stacked chart.
+ *
+ * Nine unrelated hues make a rainbow that has to be decoded against a legend;
+ * nine steps of one ramp read as one quantity divided, which is what a stack
+ * IS. Keyed to sortOrder, not to size: a ramp keyed to rank would repaint a
+ * category the month it changed places, and CAT_LIGHT is explicit that a
+ * category which changes colour is not the same category.
+ *
+ * Light steps are measured against #F7EBCA (the card, luminance 0.8346) at the
+ * 3.05 floor readableOnWhite() uses: 3.08 to 10.4 to one. Dark against
+ * #0F171F: 8.53 down to 3.06. Beyond the fifth step, light has no room left —
+ * above 3:1 the whole ramp fits between luminance 0.24 and 0.02 — so the tail
+ * takes one slate rather than four browns nobody can tell apart.
+ */
+const TREND_RAMP_LIGHT = ['#a87f2d', '#8d6a25', '#72561d', '#5a4417', '#423212', '#5F7183'];
+const TREND_RAMP_DARK = ['#d5ad4d', '#cfa031', '#c1952d', '#b58b2a', '#a98228',
+                         '#9d7925', '#927022', '#876820', '#7d601d'];
+
+let rampIndex = null;
+function rampColour(slug) {
+  if (!rampIndex) {
+    rampIndex = {};
+    categoryList
+      .filter(c => !c.parentId && c.kind === 'spend')
+      .forEach((c, i) => { rampIndex[c.slug] = i; });
+  }
+  const ramp = theme() === 'light' ? TREND_RAMP_LIGHT : TREND_RAMP_DARK;
+  const i = rampIndex[slug];
+  return ramp[Math.min(i === undefined ? ramp.length - 1 : i, ramp.length - 1)];
+}
+
 const themed = (slug, stored) =>
   theme() !== 'light' ? stored : (CAT_LIGHT[slug] || readableOnWhite(stored));
 
@@ -2804,7 +2843,10 @@ function keyList(rows, off, scope, totalLabel) {
     const inner =
       '<span class="kswatch" style="background:' + r.colour + '"></span>' +
       '<span class="klabel">' + escapeHtml(r.label) + '</span>' +
-      '<span class="kamt">' + r.amount_text + '</span>';
+      '<span class="kamt">' + r.amount_text + '</span>' +
+      (r.change === undefined || r.change === null ? ''
+        : '<span class="kdelta ' + (r.change >= 0 ? 'over' : 'under') + '">' +
+          (r.change >= 0 ? '+' : '\u2212') + Math.abs(r.change) + '%</span>');
     const body = r.pick
       ? '<button type="button" class="kpick" ' + r.pick +
         ' aria-pressed="' + (r.selected ? 'true' : 'false') + '">' + inner + '</button>'
@@ -2914,7 +2956,8 @@ async function renderTrend() {
     authed('/api/trend?months=' + months),
     wantForecast ? authed('/api/forecast').catch(() => null) : Promise.resolve(null)
   ]);
-  if (tr.categories) { categoryList = tr.categories; catOptCache = {}; rememberColours(categoryList); }
+  // rampIndex too: a new category list can change the order the ramp is keyed to.
+  if (tr.categories) { categoryList = tr.categories; catOptCache = {}; rememberColours(categoryList); rampIndex = null; }
 
   const actual = tr.series, prior = tr.priorSeries;
 
@@ -2980,8 +3023,11 @@ function drawTrend() {
   $('trend-zoom-in').disabled = trendVisible <= MIN_VISIBLE;
   $('trend-zoom-out').disabled = trendVisible >= n;
 
-  const W = 880, H = 320;
-  const PL = 66, PR = 14, PT = 20, PB = 38;
+  // PB carries the three figure rows under the axis. plotH is derived from
+  // these, so the plot keeps exactly the shape it had and all the extra height
+  // lands below the month labels.
+  const W = 880, H = 386;
+  const PL = 66, PR = 14, PT = 20, PB = 104;
   const plotW = W - PL - PR, plotH = H - PT - PB;
 
   // Scaled to what is on screen, not to the whole series. Zooming in on a quiet
@@ -3104,7 +3150,10 @@ function drawTrend() {
       const top = +y(acc + v).toFixed(1), bot = +y(acc).toFixed(1);
       const on = trendSel && trendSel.cat === id && (!trendSel.month || trendSel.month === m.month);
       const off = trendSel && !on;
-      const colour = colourOf(id);
+      // The stack only. Overview, Categories, the pie and Budgeting keep the
+      // identity palette; the ramp exists so nine segments of one column read
+      // as one quantity divided rather than as a rainbow to be decoded.
+      const colour = rampColour(id);
       svg += '<rect class="seg' + (on ? ' sel' : '') + (off ? ' dim' : '') + '"' +
              ' data-cat="' + escapeHtml(id) + '" data-month="' + escapeHtml(m.month) + '"' +
              ' ' + tipAttrs(labelOfSlug(id), m.month, v, stackSum) +
@@ -3121,11 +3170,6 @@ function drawTrend() {
              (m.projected ? ' (projected)' : '') + '</title></rect>';
       acc += v;
     });
-
-    if (stackSum > 0) {
-      svg += stackTotal(cx, y(stackSum), stackSum, band, m.month, 'Everything',
-        !!(trendSel && trendSel.month === m.month));
-    }
 
     if (i % every === 0 || i === all.length - 1) {
       const parts = m.month.split('-');
@@ -3150,6 +3194,40 @@ function drawTrend() {
         'Everything, a year earlier', p.month, p.expense, !!trendSel);
     });
   }
+  /* ---- the figures, in rows under the axis ----
+     They used to sit above the bars, where they collided with the year-ago line
+     and with each other. In aligned rows nothing overlaps, and the comparison
+     this view is named after finally has both numbers side by side.
+
+     Suppressed below a band of 46 units: at 24 months there is no width for
+     three rows of figures, and a row of overlapping numbers is worse than none. */
+  if (band >= 46) {
+    const rowTop = H - PB + 40;
+    const shown = (m) => shownTotal(m.byParent, trendOff);
+    const rows = [
+      ['THIS YR', (m, i) => money0(shown(m)), 'var(--ink)'],
+      ['LAST YR', (m, i) => (prior[i] ? money0(prior[i].expense) : ''), 'var(--muted)'],
+      ['CHANGE', (m, i) => {
+        if (!prior[i]) return '';
+        const d = shown(m) - prior[i].expense;
+        return (d >= 0 ? '+' : '\u2212') + money0(Math.abs(d));
+      }, null]
+    ];
+    rows.forEach((row, r) => {
+      const yy = rowTop + r * 16;
+      svg += '<text x="' + (PL - 9) + '" y="' + yy + '" text-anchor="end" ' +
+             'font-size="9" letter-spacing=".08em" fill="var(--muted)">' + row[0] + '</text>';
+      all.forEach((m, i) => {
+        const txt = row[1](m, i);
+        if (!txt) return;
+        const fill = row[2] || (prior[i] && shown(m) - prior[i].expense >= 0
+          ? 'var(--coral)' : 'var(--mint-dim)');
+        svg += '<text x="' + (PL + band * i + band / 2).toFixed(1) + '" y="' + yy +
+               '" text-anchor="middle" font-size="10" fill="' + fill + '">' + txt + '</text>';
+      });
+    });
+  }
+
   svg += '</svg>';
 
   /* ---- the key, down the side ----
@@ -3162,22 +3240,38 @@ function drawTrend() {
   }));
   const present = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
 
+  // The same rollup for the year-ago window, so the key can carry a change
+  // column instead of leaving the reader to compare two charts.
+  const priorTotals = {};
+  prior.forEach(m => Object.keys(m.byParent || {}).forEach(id => {
+    if (m.byParent[id] > 0) priorTotals[id] = (priorTotals[id] || 0) + m.byParent[id];
+  }));
+
   const key = keyList(present.map(id => ({
-    slug: id, label: labelOfSlug(id), colour: colourOf(id),
+    // The stack and its own key have to agree, so both take the ramp. Nothing
+    // else does — identity colours stay the source of truth everywhere else.
+    slug: id, label: labelOfSlug(id), colour: rampColour(id),
     amount: totals[id], amount_text: money0(totals[id]),
+    change: priorTotals[id]
+      ? Math.round(((totals[id] - priorTotals[id]) / priorTotals[id]) * 100)
+      : null,
     pick: 'data-cat="' + escapeHtml(id) + '"',
     selected: !!(trendSel && trendSel.cat === id),
   })), trendOff, 'trend');
+
+  /* The dashed line is read before the swatches now, not after them: it
+     explains a mark that crosses every column, so it belongs above a list of
+     things that each occupy one. */
+  const dashNote = prior.length
+    ? '<div class="kitem static"><span class="kswatch dash"></span>' +
+      '<span class="klabel">Same month, last year</span></div>'
+    : '';
 
   const hasIncome = all.some(m => m.income > 0);
   const extras =
     (hasIncome
       ? '<div class="kitem static"><span class="kswatch" style="background:var(--mint);opacity:.4"></span>' +
         '<span class="klabel">Income</span></div>'
-      : '') +
-    (prior.length
-      ? '<div class="kitem static"><span class="kswatch dash"></span>' +
-        '<span class="klabel">Same month, last year</span></div>'
       : '') +
     (all.some(m => m.projected)
       ? '<div class="kitem static"><span class="kswatch shaded"></span>' +
@@ -3193,9 +3287,25 @@ function drawTrend() {
   host.innerHTML =
     '<div class="trend-wrap">' +
       '<div class="trend-plot">' + svg + panner + '</div>' +
-      '<div class="trend-key">' + key + extras + '</div>' +
+      '<div class="trend-key">' + dashNote + key + extras + '</div>' +
     '</div>' +
     '<div class="trend-detail" id="trend-detail">' + detailHtml(all, totals) + '</div>';
+
+  /* The number the heading promises. Windowed, not whole-range: it has to
+     describe what is on screen or it contradicts the chart above it. */
+  const nowSum = all.reduce((s, m) => s + shownTotal(m.byParent, trendOff), 0);
+  const wasSum = prior.reduce((s, m) => s + m.expense, 0);
+  const yoy = $('trend-yoy');
+  if (yoy) {
+    if (!wasSum) { yoy.textContent = ''; }
+    else {
+      const d = nowSum - wasSum;
+      const pct = Math.abs(Math.round((d / wasSum) * 1000) / 10);
+      yoy.textContent = money0(nowSum) + '  ' + (d >= 0 ? '+' : '\u2212') +
+        money0(Math.abs(d)) + ' (' + pct + '%) vs the year before';
+      yoy.className = 'trend-yoy ' + (d >= 0 ? 'over' : 'under');
+    }
+  }
 
   drawPie();
 }
