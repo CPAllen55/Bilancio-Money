@@ -548,105 +548,9 @@
 
   /* Chart and key side by side. The key is a column because it is a list of
      categories, and a list reads down. */
-  /* A range you can see all of at once. A select hides four of its five
-     choices behind a click, which is the wrong trade for a control the reader
-     is meant to play with. */
-  .segbar{ display:inline-flex; border:1px solid var(--hair-strong); border-radius:7px;
-           overflow:hidden; background:var(--bg-panel); }
-  .seg{ font:inherit; font-size:12.5px; padding:6px 13px; border:0; background:none;
-        color:var(--muted); cursor:pointer; white-space:nowrap; }
-  .seg + .seg{ border-left:1px solid var(--hair); }
-  .seg:hover{ color:var(--ink); }
-  .seg.on{ background:var(--surface); color:var(--ink); font-weight:600; }
-  .seg:focus-visible{ outline:2px solid var(--mint-dim); outline-offset:-2px; }
-
-  /* What the drawing means, beside the drawing rather than under it. */
-  .legendrow{ display:inline-flex; align-items:center; gap:18px; flex-wrap:wrap; }
-  .legkey{ display:inline-flex; align-items:center; gap:7px; font-size:12px;
-           color:var(--ink-soft); }
-  .legswatch{ width:11px; height:11px; border-radius:2px; flex:none; }
-  .legdash{ width:22px; height:0; border-top:2px dashed var(--ink); opacity:.7; flex:none; }
-
-  /* The answer, before the working. Sits against the top right of the panel,
-     which is where the eye lands after the heading. */
-  .headline{ position:absolute; top:0; right:0; text-align:right;
-             border:1px solid var(--hair-strong); border-radius:8px;
-             padding:11px 15px 12px; background:var(--surface); min-width:172px; }
-  .headline .hl-label{ font-size:10.5px; letter-spacing:.09em; text-transform:uppercase;
-                       color:var(--muted); font-weight:600; }
-  .headline .hl-value{ font-family:var(--font-num); font-size:26px; letter-spacing:-.02em;
-                       color:var(--ink); margin-top:3px; }
-  .headline .hl-delta{ font-family:var(--font-num); font-size:12px; margin-top:3px; }
-  .headline .hl-delta.up{ color:var(--coral); }
-  .headline .hl-delta.down{ color:var(--mint); }
-  .headline .hl-delta.flat{ color:var(--muted); }
-  @media (max-width:900px){
-    .headline{ position:static; margin:10px 0 4px; text-align:left; }
-  }
-
-  /* ---- every category, month by month ----
-     A grid rather than a chart, because it is a table that happens to draw its
-     figures. One column per month, set inline so three months and twenty-four
-     both fill the width. */
-  .tm-head{ display:flex; align-items:flex-start; gap:14px; margin-bottom:2px; }
-  .tm-head h3{ font-size:19px; margin:0; letter-spacing:-.01em; }
-  .tm-head .segbar{ margin-left:auto; flex:none; }
-  .tm-lede{ font-size:12.5px; color:var(--ink-soft); margin:6px 0 16px; max-width:56ch; }
-  .tmgrid{ display:grid; align-items:center; column-gap:4px; row-gap:0; }
-  .tmgrid > *{ min-width:0; }
-  .tm-colhead{ font-family:var(--font-num); font-size:9.5px; color:var(--muted);
-               text-align:center; padding-bottom:7px; letter-spacing:.03em; }
-  .tm-corner{ font-size:9.5px; letter-spacing:.09em; text-transform:uppercase;
-              color:var(--muted); padding-bottom:7px; }
-  .tm-cell{ position:relative; height:34px; display:flex; align-items:flex-end;
-            justify-content:center; }
-  /* Last year sits behind this year rather than beside it: the question is
-     whether the month grew, and two adjacent bars make that a comparison of
-     positions instead of a comparison of heights. */
-  .tm-prior{ position:absolute; left:8%; right:8%; bottom:0; border-radius:2px 2px 0 0;
-             background:var(--hair-strong); opacity:.55; }
-  .tm-now{ position:relative; width:84%; border-radius:2px 2px 0 0; }
-  .tm-name{ display:flex; align-items:center; gap:8px; font-size:13px; padding:6px 10px 6px 0;
-            overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .tm-name i{ width:10px; height:10px; border-radius:2px; flex:none; }
-  .tm-amt{ font-family:var(--font-num); font-size:12.5px; text-align:right; padding-left:10px; }
-  .tm-vs{ font-family:var(--font-num); font-size:11px; text-align:right; padding-left:8px; }
-  .tm-vs.up{ color:var(--coral); } .tm-vs.down{ color:var(--mint); }
-  .tm-vs.flat{ color:var(--muted); }
-  .tmgrid .tm-rule{ grid-column:1 / -1; height:1px; background:var(--hair); }
-  .tm-total .tm-name, .tm-total .tm-amt{ font-weight:600; }
-  .tm-foot{ font-size:11.5px; color:var(--muted); grid-column:2 / -3; padding-top:10px; }
-  .tm-stack{ height:64px; }
-  .tm-seg{ width:100%; }
-  @media (max-width:760px){ .tm-lede{ display:none; } }
-
   .trend-wrap{ display:flex; gap:20px; align-items:flex-start; }
   .trend-plot{ flex:1 1 auto; min-width:0; }
   .trend-key{ flex:0 0 176px; display:flex; flex-direction:column; gap:1px; padding-top:8px; }
-  /* The richer key: a figure, a bar for its share, and how it compares with the
-     same months a year ago. Only the Trend asks for all three, so the extras
-     are opt-in and every other key is untouched. */
-  .trend-key.rich{ flex:0 0 300px; border:1px solid var(--hair); border-radius:8px;
-                   padding:12px 12px 6px; gap:0; }
-  .ktitle{ display:flex; align-items:baseline; gap:8px; font-size:10.5px;
-           letter-spacing:.09em; text-transform:uppercase; color:var(--muted);
-           font-weight:600; margin-bottom:8px; }
-  .kcount{ margin-left:auto; font-family:var(--font-num); font-size:10.5px;
-           letter-spacing:0; text-transform:none; font-weight:400; }
-  .rich .kitem{ padding:5px 0; }
-  .rich .kitem + .kitem{ border-top:1px solid var(--hair); }
-  .rich .kpick{ display:block; width:100%; text-align:left; }
-  .krow1{ display:flex; align-items:baseline; gap:8px; }
-  .krow1 .klabel{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .krow1 .kamt{ margin-left:auto; font-family:var(--font-num); }
-  .kdelta{ font-family:var(--font-num); font-size:11px; min-width:40px; text-align:right; }
-  .kdelta.up{ color:var(--coral); } .kdelta.down{ color:var(--mint); }
-  .kdelta.flat{ color:var(--muted); }
-  .kbar{ display:block; height:3px; border-radius:2px; background:var(--hair);
-         margin-top:5px; overflow:hidden; }
-  .kbar i{ display:block; height:100%; border-radius:2px; }
-  .rich .ktotal{ border-top:1px solid var(--hair-strong); margin-top:6px; padding-top:9px; }
-  @media (max-width:900px){ .trend-key.rich{ flex:none; width:100%; } }
   /* The total, above the list it adds up to. */
   .ktotal{ display:flex; align-items:center; gap:8px; width:100%;
            padding:3px 6px 7px; margin-bottom:3px;
@@ -1436,18 +1340,15 @@
     <section class="panel" id="v-trend" style="position:relative">
       <h2 class="view">A year, against the year before</h2>
       <p class="lede">Where the money went each month, stacked by category, with a dashed line showing what that same month cost you a year earlier. Switch on the budget to carry the rest of the year at what you have planned.</p>
-      <div class="headline" id="trend-headline" hidden></div>
       <div class="bar" style="padding-top:0">
-        <span class="segbar" id="trend-ranges" role="group" aria-label="How many months to show">
-          <button type="button" class="seg" data-months="3">3 months</button>
-          <button type="button" class="seg" data-months="6">6 months</button>
-          <button type="button" class="seg on" data-months="12" aria-pressed="true">12 months</button>
-          <button type="button" class="seg" data-months="24">24 months</button>
-          <button type="button" class="seg" data-months="36">All</button>
-        </span>
+        <select class="ctl" id="trend-range">
+          <option value="3">Last 3 months</option>
+          <option value="6">Last 6 months</option>
+          <option value="12" selected>Last 12 months</option>
+          <option value="24">Last 2 years</option>
+        </select>
         <span class="bar-right">
-          <span class="legendrow" id="trend-legend"></span>
-          <label class="toggle"><input type="checkbox" id="forecast-on"> Project rest of year from budget</label>
+          <label class="toggle"><input type="checkbox" id="forecast-on"> Budget rest of year</label>
           <span class="zoomctl" id="trend-zoom" hidden>
             <button type="button" id="trend-zoom-out" aria-label="Show more months">−</button>
             <span class="zoomlabel" id="trend-zoom-label" aria-live="polite"></span>
@@ -1459,7 +1360,6 @@
       <div class="pie-switch" id="pie-switch"></div>
       <div class="card" id="trend-pie"></div>
       <div class="card trend-below" id="forecast-box" hidden></div>
-      <div class="card trend-below" id="trend-months"></div>
     </section>
 
     <section class="panel" id="v-net">
@@ -2886,17 +2786,9 @@ function shownTotal(byWhat, off) {
  * set aside to see what the rest are doing. The box beside the total puts
  * everything back — quicker than hunting for the two things you switched off.
  */
-function keyList(rows, off, scope, totalLabel, opts) {
-  opts = opts || {};
+function keyList(rows, off, scope, totalLabel) {
   const total = rows.reduce((s, r) => off.has(r.slug) ? s : s + r.amount, 0);
   const anyOff = rows.some(r => off.has(r.slug));
-  const widest = rows.reduce((m, r) => Math.max(m, r.amount), 0) || 1;
-
-  const title = opts.title
-    ? '<div class="ktitle">' + escapeHtml(opts.title) +
-      (opts.count ? '<span class="kcount">' + escapeHtml(opts.count) + '</span>' : '') +
-      '</div>'
-    : '';
 
   const head =
     '<div class="ktotal">' +
@@ -2909,23 +2801,10 @@ function keyList(rows, off, scope, totalLabel, opts) {
 
   const items = rows.map(r => {
     const isOff = off.has(r.slug);
-    const plain =
+    const inner =
       '<span class="kswatch" style="background:' + r.colour + '"></span>' +
       '<span class="klabel">' + escapeHtml(r.label) + '</span>' +
       '<span class="kamt">' + r.amount_text + '</span>';
-    /* With bars on, the same three things move onto their own line so a share
-       bar can run the full width underneath them, and the change against last
-       year gets a column of its own. */
-    const inner = opts.bars
-      ? '<span class="krow1">' + plain +
-          (r.delta
-            ? '<span class="kdelta ' + r.delta.tone + '">' + escapeHtml(r.delta.text) + '</span>'
-            : '<span class="kdelta flat">—</span>') +
-        '</span>' +
-        '<span class="kbar"><i style="width:' +
-          Math.max(2, Math.round((r.amount / widest) * 100)) + '%;background:' +
-          r.colour + '"></i></span>'
-      : plain;
     const body = r.pick
       ? '<button type="button" class="kpick" ' + r.pick +
         ' aria-pressed="' + (r.selected ? 'true' : 'false') + '">' + inner + '</button>'
@@ -2939,16 +2818,8 @@ function keyList(rows, off, scope, totalLabel, opts) {
     '</div>';
   }).join('');
 
-  const notes = opts.notes || '';
-  return title + (opts.totalAtBottom ? items + notes + head : head + items + notes);
+  return head + items;
 }
-/* Which range is chosen. Held here rather than read off a control, because the
-   control is now five buttons and the value is not any one of their states. */
-let trendMonths = 12;
-/* Rows or stacked, for the panel at the foot of the Trend. Two ways of asking
-   different questions of the same numbers: rows answers "is this category
-   behaving oddly", stacked answers "is this month". */
-let trendMonthsMode = 'rows';
 let trendOffset = 0;       // index of the leftmost visible month
 let trendSel = null;       // { cat, month } | { cat } | null
 
@@ -3036,7 +2907,7 @@ function monthLabel(ym) {
 }
 
 async function renderTrend() {
-  const months = trendMonths;
+  const months = Number($('trend-range').value);
   const wantForecast = $('forecast-on').checked;
 
   const [tr, fc] = await Promise.all([
@@ -3109,16 +2980,9 @@ function drawTrend() {
   $('trend-zoom-in').disabled = trendVisible <= MIN_VISIBLE;
   $('trend-zoom-out').disabled = trendVisible >= n;
 
-  const W = 880, CH = 320;
+  const W = 880, H = 320;
   const PL = 66, PR = 14, PT = 20, PB = 38;
-  /* The per-month figures are drawn inside the SVG rather than in a table under
-     it, because an HTML table beneath a chart that scales to its container
-     drifts out of line with the bars it describes. Only where the columns are
-     wide enough to hold a figure: past about a year it becomes two dozen
-     numbers in the space of twelve. */
-  const showTable = prior.length > 0 && all.length <= 13;
-  const H = CH + (showTable ? 58 : 0);
-  const plotW = W - PL - PR, plotH = CH - PT - PB;
+  const plotW = W - PL - PR, plotH = H - PT - PB;
 
   // Scaled to what is on screen, not to the whole series. Zooming in on a quiet
   // stretch should show that stretch in detail rather than flat against a peak
@@ -3267,7 +3131,7 @@ function drawTrend() {
       const parts = m.month.split('-');
       const label = MONTH_NAMES[Number(parts[1]) - 1] +
         (parts[1] === '01' || i === 0 ? " '" + parts[0].slice(2) : '');
-      svg += '<text x="' + cx + '" y="' + (CH - PB + 18) + '" text-anchor="middle" ' +
+      svg += '<text x="' + cx + '" y="' + (H - PB + 18) + '" text-anchor="middle" ' +
              'font-size="10.5" fill="' + (m.projected ? 'var(--mint-dim)' : 'var(--muted)') + '">' + label + '</text>';
     }
   });
@@ -3286,38 +3150,6 @@ function drawTrend() {
         'Everything, a year earlier', p.month, p.expense, !!trendSel);
     });
   }
-  /* ---- this year, last year, and the difference ----
-     Under each column rather than beside the chart, because the question the
-     row answers is about that month and the answer belongs under that month. */
-  if (showTable) {
-    const rowY = [CH + 16, CH + 32, CH + 50];
-    ['THIS YR', 'LAST YR', 'CHANGE'].forEach((label, r) => {
-      svg += '<text x="' + (PL - 9) + '" y="' + rowY[r] + '" text-anchor="end" ' +
-        'font-size="9" letter-spacing=".08em" fill="var(--muted)">' + label + '</text>';
-    });
-    svg += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + (CH + 40) +
-      '" y2="' + (CH + 40) + '" stroke="var(--hair)" stroke-width="1"/>';
-
-    all.forEach((m, i) => {
-      const cx = (PL + band * i + band / 2).toFixed(1);
-      const now = shownTotal(m.byParent, trendOff);
-      const was = prior[i] ? shownTotal(prior[i].byParent, trendOff) : null;
-      svg += '<text x="' + cx + '" y="' + rowY[0] + '" text-anchor="middle" font-size="9.5" ' +
-        'fill="' + (m.projected ? 'var(--mint-dim)' : 'var(--ink)') + '">' +
-        escapeHtml(money0(now)) + '</text>';
-      if (was === null) return;
-      svg += '<text x="' + cx + '" y="' + rowY[1] + '" text-anchor="middle" font-size="9.5" ' +
-        'fill="var(--muted)">' + escapeHtml(money0(was)) + '</text>';
-      const d = now - was;
-      // Spending more than last year is the unwelcome direction, whichever way
-      // the arithmetic went.
-      const tone = d === 0 ? 'var(--muted)' : (d > 0 ? 'var(--coral)' : 'var(--mint)');
-      svg += '<text x="' + cx + '" y="' + rowY[2] + '" text-anchor="middle" font-size="9.5" ' +
-        'fill="' + tone + '">' + (d > 0 ? '+' : d < 0 ? '−' : '') +
-        escapeHtml(money0(Math.abs(d))) + '</text>';
-    });
-  }
-
   svg += '</svg>';
 
   /* ---- the key, down the side ----
@@ -3330,21 +3162,12 @@ function drawTrend() {
   }));
   const present = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
 
-  /* The same months a year earlier, by category, so each row can say whether it
-     is heavier or lighter than it was. priorSeries already carries byParent, so
-     this costs a loop rather than a request. */
-  const priorTotals = {};
-  prior.forEach(m => Object.keys(m.byParent || {}).forEach(id => {
-    if (m.byParent[id] > 0) priorTotals[id] = (priorTotals[id] || 0) + m.byParent[id];
-  }));
-
-  const changeOf = (id) => {
-    const was = priorTotals[id];
-    if (!was) return null;                       // nothing to compare against
-    const pct = Math.round(((totals[id] - was) / was) * 100);
-    return { text: (pct > 0 ? '+' : pct < 0 ? '−' : '±') + Math.abs(pct) + '%',
-             tone: pct === 0 ? 'flat' : (pct > 0 ? 'up' : 'down') };
-  };
+  const key = keyList(present.map(id => ({
+    slug: id, label: labelOfSlug(id), colour: colourOf(id),
+    amount: totals[id], amount_text: money0(totals[id]),
+    pick: 'data-cat="' + escapeHtml(id) + '"',
+    selected: !!(trendSel && trendSel.cat === id),
+  })), trendOff, 'trend');
 
   const hasIncome = all.some(m => m.income > 0);
   const extras =
@@ -3352,23 +3175,14 @@ function drawTrend() {
       ? '<div class="kitem static"><span class="kswatch" style="background:var(--mint);opacity:.4"></span>' +
         '<span class="klabel">Income</span></div>'
       : '') +
+    (prior.length
+      ? '<div class="kitem static"><span class="kswatch dash"></span>' +
+        '<span class="klabel">Same month, last year</span></div>'
+      : '') +
     (all.some(m => m.projected)
       ? '<div class="kitem static"><span class="kswatch shaded"></span>' +
         '<span class="klabel">Budget ahead</span></div>'
       : '');
-
-  const shownCount = present.filter(id => !trendOff.has(id)).length;
-  const key = keyList(present.map(id => ({
-    slug: id, label: labelOfSlug(id), colour: colourOf(id),
-    amount: totals[id], amount_text: money0(totals[id]),
-    delta: changeOf(id),
-    pick: 'data-cat="' + escapeHtml(id) + '"',
-    selected: !!(trendSel && trendSel.cat === id),
-  })), trendOff, 'trend', 'Total', {
-    bars: true, totalAtBottom: true, title: 'Where it went',
-    count: shownCount + ' of ' + present.length + ' shown',
-    notes: extras,
-  });
 
   const maxOffset = n - trendVisible;
   const panner = maxOffset > 0
@@ -3379,182 +3193,11 @@ function drawTrend() {
   host.innerHTML =
     '<div class="trend-wrap">' +
       '<div class="trend-plot">' + svg + panner + '</div>' +
-      '<div class="trend-key rich">' + key + '</div>' +
+      '<div class="trend-key">' + key + extras + '</div>' +
     '</div>' +
     '<div class="trend-detail" id="trend-detail">' + detailHtml(all, totals) + '</div>';
 
-  trendHeadline(all, prior);
-  trendLegend(present);
-  drawTrendMonths(all, prior, present, totals, priorTotals);
   drawPie();
-}
-
-/**
- * Every category, month by month — the view the stacked chart cannot give.
- *
- * A stack answers what a month came to and hides what any one category did
- * inside it: a segment four pixels tall in a column of nine is present and
- * unreadable. A row per category costs the comparison between categories and
- * buys back the comparison a category has with itself over time, which is the
- * one that says whether anything has changed.
- *
- * Each row is scaled to its own largest month, not to the largest month
- * anywhere. Scaled globally, every row but the biggest would be a flat line
- * along the axis — which is exactly the failure this view exists to fix. The
- * cost is that heights are not comparable between rows, so the figure at the
- * end of each row is doing that job instead.
- *
- * Last year sits behind this year rather than beside it, because the question
- * is whether the month grew, and two adjacent bars turn that into comparing
- * positions rather than comparing heights.
- */
-function drawTrendMonths(all, prior, present, totals, priorTotals) {
-  const host = $('trend-months');
-  if (!host) return;
-  const shown = present.filter(id => !trendOff.has(id));
-  if (!all.length || !shown.length) { host.hidden = true; return; }
-  host.hidden = false;
-
-  const rows = trendMonthsMode === 'rows';
-  const cols = all.length;
-  const label = (m) => {
-    const p = m.month.split('-');
-    return MONTH_NAMES[Number(p[1]) - 1].slice(0, 3);
-  };
-  const priorAt = (i, id) => (prior[i] && prior[i].byParent ? (prior[i].byParent[id] || 0) : 0);
-
-  const pct = (now, was) => {
-    if (!was) return { text: '—', tone: 'flat' };
-    const p = Math.round(((now - was) / was) * 100);
-    return { text: (p > 0 ? '+' : p < 0 ? '−' : '±') + Math.abs(p) + '%',
-             tone: p === 0 ? 'flat' : (p > 0 ? 'up' : 'down') };
-  };
-
-  /* Header: a corner, one cell per month, then the two summary columns. */
-  let grid = '<div class="tm-corner">Category</div>' +
-    all.map(m => '<div class="tm-colhead">' + escapeHtml(label(m)) + '</div>').join('') +
-    '<div class="tm-corner" style="text-align:right">' + cols + ' mo</div>' +
-    '<div class="tm-corner" style="text-align:right">vs prior</div>';
-
-  const cell = (h, priorH, colour, tall) =>
-    '<div class="tm-cell' + (tall ? ' tm-stack' : '') + '">' +
-      (priorH > 0 ? '<div class="tm-prior" style="height:' + priorH.toFixed(1) + '%"></div>' : '') +
-      '<div class="tm-now" style="height:' + h.toFixed(1) + '%;background:' + colour + '"></div>' +
-    '</div>';
-
-  if (rows) {
-    for (const id of shown) {
-      const vals = all.map(m => m.byParent[id] || 0);
-      const wasVals = all.map((m, i) => priorAt(i, id));
-      // Its own biggest month, this year or last, so a shrinking category does
-      // not silently rescale into looking unchanged.
-      const top = Math.max.apply(null, vals.concat(wasVals).concat([1]));
-      grid += '<div class="tm-rule"></div>' +
-        '<div class="tm-name"><i style="background:' + colourOf(id) + '"></i>' +
-        escapeHtml(labelOfSlug(id)) + '</div>' +
-        vals.map((v, i) =>
-          cell((v / top) * 100, (wasVals[i] / top) * 100, colourOf(id), false)).join('') +
-        '<div class="tm-amt">' + money0(totals[id]) + '</div>' +
-        (() => { const c = pct(totals[id], priorTotals[id] || 0);
-                 return '<div class="tm-vs ' + c.tone + '">' + c.text + '</div>'; })();
-    }
-  } else {
-    /* One row, stacked. The faint bar behind is the whole month a year ago. */
-    const monthNow = all.map(m => shownTotal(m.byParent, trendOff));
-    const monthWas = all.map((m, i) => prior[i] ? shownTotal(prior[i].byParent, trendOff) : 0);
-    const top = Math.max.apply(null, monthNow.concat(monthWas).concat([1]));
-
-    grid += '<div class="tm-rule"></div>' +
-      '<div class="tm-name"><i style="background:var(--muted)"></i>All categories</div>' +
-      all.map((m, i) => {
-        const stack = shown.map(id => {
-          const v = m.byParent[id] || 0;
-          return v > 0
-            ? '<div class="tm-seg" style="height:' + ((v / top) * 100).toFixed(2) +
-              '%;background:' + colourOf(id) + '"></div>'
-            : '';
-        }).reverse().join('');
-        return '<div class="tm-cell tm-stack">' +
-          (monthWas[i] > 0
-            ? '<div class="tm-prior" style="height:' + ((monthWas[i] / top) * 100).toFixed(1) + '%"></div>'
-            : '') +
-          '<div class="tm-now" style="height:' + ((monthNow[i] / top) * 100).toFixed(1) +
-            '%;background:none;display:flex;flex-direction:column;justify-content:flex-end">' +
-            stack + '</div></div>';
-      }).join('') +
-      '<div class="tm-amt">' + money0(monthNow.reduce((s, v) => s + v, 0)) + '</div>' +
-      (() => { const c = pct(monthNow.reduce((s, v) => s + v, 0),
-                             monthWas.reduce((s, v) => s + v, 0));
-               return '<div class="tm-vs ' + c.tone + '">' + c.text + '</div>'; })();
-  }
-
-  /* The total, and what the two shades mean, on one line at the foot. */
-  const sumNow = shown.reduce((s, id) => s + (totals[id] || 0), 0);
-  const sumWas = shown.reduce((s, id) => s + (priorTotals[id] || 0), 0);
-  const c = pct(sumNow, sumWas);
-  grid += '<div class="tm-rule"></div>' +
-    '<div class="tm-name tm-total"><b>Total</b></div>' +
-    '<div class="tm-foot">Solid is this year · faint is the same month last year</div>' +
-    '<div class="tm-amt tm-total">' + money0(sumNow) + '</div>' +
-    '<div class="tm-vs ' + c.tone + '">' + c.text + '</div>';
-
-  host.innerHTML =
-    '<div class="tm-head">' +
-      '<h3>Every category, month by month</h3>' +
-      '<span class="segbar" id="trend-months-mode" role="group" aria-label="How to show it">' +
-        '<button type="button" class="seg' + (rows ? ' on' : '') + '" data-mode="rows" ' +
-          'aria-pressed="' + rows + '">Rows</button>' +
-        '<button type="button" class="seg' + (rows ? '' : ' on') + '" data-mode="stacked" ' +
-          'aria-pressed="' + (!rows) + '">Stacked</button>' +
-      '</span>' +
-    '</div>' +
-    '<p class="tm-lede">' + (rows
-      ? 'One row per category so nothing is hidden inside a stack. Each row is drawn ' +
-        'against its own biggest month, so the small categories are readable — which ' +
-        'means heights compare within a row, not between them.'
-      : 'Every category stacked into one column a month, which is the shape of the ' +
-        'year rather than the shape of any one category.') + '</p>' +
-    '<div class="tmgrid" style="grid-template-columns:190px repeat(' + cols +
-      ',minmax(0,1fr)) 92px 62px">' + grid + '</div>';
-}
-
-/* The answer, above the working.
- *
- * Compared over the months that have a counterpart a year ago and no further:
- * with the projection switched on the window runs past where last year's data
- * stops, and totalling a projected month against nothing would report a saving
- * that is really just the end of the record. */
-function trendHeadline(all, prior) {
-  const box = $('trend-headline');
-  const cmp = Math.min(all.length, prior.length);
-  if (!cmp) { box.hidden = true; return; }
-
-  let now = 0, was = 0;
-  for (let i = 0; i < cmp; i++) {
-    now += shownTotal(all[i].byParent, trendOff);
-    was += shownTotal(prior[i].byParent, trendOff);
-  }
-  const d = now - was;
-  const tone = d === 0 ? 'flat' : (d > 0 ? 'up' : 'down');
-
-  box.innerHTML =
-    '<div class="hl-label">' + (cmp === all.length ? 'Last ' + cmp + ' months'
-                                                   : cmp + ' months compared') + '</div>' +
-    '<div class="hl-value">' + money0(now) + '</div>' +
-    '<div class="hl-delta ' + tone + '">' +
-      (d > 0 ? '+' : d < 0 ? '−' : '') + money0(Math.abs(d)) + ' vs prior year</div>';
-  box.hidden = false;
-}
-
-/* What the drawing means, said once beside it rather than inferred. */
-function trendLegend(present) {
-  const el = $('trend-legend');
-  if (!el) return;
-  const top = present.find(id => !trendOff.has(id)) || present[0];
-  el.innerHTML =
-    '<span class="legkey"><i class="legswatch" style="background:' +
-      (top ? colourOf(top) : 'var(--muted)') + '"></i>This year, by category</span>' +
-    '<span class="legkey"><i class="legdash"></i>Same month, last year</span>';
 }
 
 /* What a selection actually tells you. Without this a click just changes some
@@ -6021,30 +5664,7 @@ $('tabs').addEventListener('click', (e) => {
 
 ['ov-range', 'ov-trail'].forEach(id =>
   $(id).addEventListener('change', () => { summaryCache = null; refresh(); }));
-$('trend-months').addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-mode]');
-  if (!btn || btn.dataset.mode === trendMonthsMode) return;
-  trendMonthsMode = btn.dataset.mode;
-  drawTrend();     // everything it needs is already loaded
-});
-
-$('trend-ranges').addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-months]');
-  if (!btn) return;
-  const months = Number(btn.dataset.months);
-  if (months === trendMonths) return;
-  trendMonths = months;
-  /* A new range is a new series, so the window starts over rather than keeping
-     an offset that pointed into the old one. */
-  trendOffset = 0;
-  trendVisible = 0;
-  $('trend-ranges').querySelectorAll('.seg').forEach(b => {
-    const on = Number(b.dataset.months) === months;
-    b.classList.toggle('on', on);
-    b.setAttribute('aria-pressed', String(on));
-  });
-  refresh();
-});
+$('trend-range').addEventListener('change', refresh);
 // The chart draws the projected months too, so the toggle has to redraw the
 // chart — renderTrend ends by rendering the forecast box anyway. Wiring it
 // straight to renderForecast left the tick box on and the bars absent.
