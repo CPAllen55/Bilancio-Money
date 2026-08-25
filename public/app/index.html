@@ -551,28 +551,30 @@
   /* ---- the Trend header ---- */
   .eyebrow{ font:500 10.5px/1 var(--font-num); letter-spacing:.14em;
             text-transform:uppercase; color:var(--muted); margin-bottom:9px; }
-  /* The owl is painted over the top right corner of the page — position:
-     absolute, 100px wide, from y=14 to about y=133. .tabs already reserves
-     116px for it and this reserves the same, which is why the figure sits just
-     inside the corner rather than in it. Flush right would put a summary
-     number on top of the brand mark, which is what it did the first time. */
-  .th-row{ display:flex; align-items:flex-start; justify-content:space-between;
-           gap:24px; padding-right:116px; margin-bottom:18px; }
-  .th-titles{ min-width:0; }
-  .th-row .view{ margin:0; }
-  .th-row .lede{ margin:6px 0 0; max-width:520px; }
-  .kpi{ flex:none; border:1px solid var(--hair-strong); border-radius:9px;
-        padding:13px 18px 14px; background:var(--bg-panel); text-align:right;
-        min-width:190px; }
-  .trend-side{ flex:0 0 300px; display:flex; flex-direction:column; gap:14px; }
-  /* The chart's own name, above its controls. The panel heading says what the
-     view is about; this says what this particular drawing is. */
+  /* The figure lives inside the card, which is the whole reason it can sit
+     flush in the corner. The owl is painted on the page outside the card —
+     position:absolute, 100px wide, y=14 to about y=133 — and the card starts
+     below it, so there is nothing here to dodge. Putting the figure in the
+     header block instead, on the page rather than in the card, is what put it
+     under the owl the first time. */
+  /* Two columns: everything that drives the chart on the left, the figure it
+     comes to on the right. The rule underneath belongs to the pair of them, so
+     it runs the full width of the card rather than stopping where the controls
+     do. */
+  .card-head{ display:flex; align-items:flex-start; justify-content:space-between;
+              gap:26px; padding-bottom:16px; margin-bottom:18px;
+              border-bottom:1px solid var(--hair); }
+  .card-head-main{ flex:1 1 auto; min-width:0; }
   .card-title{ font-size:15.5px; font-weight:600; letter-spacing:-.01em;
                margin:0 0 14px; color:var(--ink); }
-  @media (max-width:1040px){ .th-row{ padding-right:100px; } }
+  .kpi{ flex:none; align-self:stretch; display:flex; flex-direction:column;
+        justify-content:center; border:1px solid var(--hair-strong);
+        border-radius:9px; padding:14px 20px; background:var(--bg-panel);
+        text-align:right; min-width:200px; }
+  .trend-side{ flex:0 0 300px; display:flex; flex-direction:column; gap:14px; }
   @media (max-width:760px){
-    .th-row{ flex-direction:column; padding-right:0; }
-    .kpi{ text-align:left; width:100%; }
+    .card-head{ flex-direction:column; }
+    .kpi{ text-align:left; width:100%; margin-top:0; }
   }
   /* Three sizes, well apart, so the order to read them in is obvious: what
      period, how much, and how that compares. Tabular figures so the digits sit
@@ -588,11 +590,9 @@
   .kpi-delta.flat{ color:var(--muted); }
 
   /* ---- the control row ---- */
-  /* Inside the card now, above the plot, with the rule under it doing the
-     separating that the card edge used to. */
-  .th-controls{ display:flex; align-items:center; justify-content:space-between;
-                gap:20px; flex-wrap:wrap; padding:0 0 15px;
-                border-bottom:1px solid var(--hair); margin-bottom:18px; }
+  /* The rule moved up to .card-head, which spans the figure too. */
+  .th-controls{ display:flex; align-items:center; justify-content:flex-start;
+                gap:14px 26px; flex-wrap:wrap; }
   /* A tray of choices rather than a select: five options, all of them visible,
      which is what a control the reader is meant to play with should be. */
   .segtray{ display:inline-flex; gap:6px; background:var(--bg-panel); padding:3px;
@@ -1447,16 +1447,13 @@
     </section>
 
     <section class="panel" id="v-trend" style="position:relative">
-      <div class="th-row">
-        <div class="th-titles">
-          <div class="eyebrow">Trend</div>
-          <h2 class="view">A year, against the year before</h2>
-          <p class="lede">Monthly spend stacked by category, against the same month last year.</p>
-        </div>
-        <div class="kpi" id="trend-kpi" hidden></div>
-      </div>
+      <div class="eyebrow">Trend</div>
+      <h2 class="view">A year, against the year before</h2>
+      <p class="lede">Monthly spend stacked by category, against the same month last year.</p>
       <div class="card">
-        <h3 class="card-title">Trend by Category</h3>
+        <div class="card-head">
+          <div class="card-head-main">
+          <h3 class="card-title">Trend by Category</h3>
         <div class="th-controls">
           <span class="segtray" id="trend-ranges" role="group" aria-label="How many months to show">
             <button type="button" class="segb" data-months="3" aria-pressed="false">3 months</button>
@@ -1475,6 +1472,9 @@
               <button type="button" id="trend-zoom-in" aria-label="Show fewer months, larger">+</button>
             </span>
           </span>
+        </div>
+          </div>
+          <div class="kpi" id="trend-kpi" hidden></div>
         </div>
         <div id="trend-chart"></div>
       </div>
