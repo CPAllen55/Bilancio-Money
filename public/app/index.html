@@ -718,12 +718,6 @@
   .priordot:hover{ transform:scale(1.5); opacity:1;
                    filter:drop-shadow(0 0 7px var(--ink)); }
 
-  /* The figure above a stack reacts like the stack does — grown and brightened
-     rather than glowing, because a drop-shadow on 10px type reads as a smudge. */
-  .stacktotal{ transform-box:fill-box; transform-origin:center; cursor:default;
-               transition:transform .12s ease, fill .12s ease; }
-  .stacktotal:hover, .stacktotal.sel{ transform:scale(1.22); fill:var(--ink); }
-
   /* The subcategory dialog. Panel colours rather than the browser's, and a
      backdrop dark enough to say the page behind it is waiting. */
   dialog.askbox{ border:1px solid var(--hair-strong); border-radius:12px; padding:0;
@@ -3091,33 +3085,6 @@ function priorDot(cx, cy, label, month, amount, dim) {
     'stroke="var(--ink)" stroke-width="2"></circle></g>';
 }
 
-/* The month's total, above its bar, and live like the bar is.
- *
- * It stands for the whole stack, so hovering it should behave the way hovering
- * a segment does — it grows, brightens, and raises the same box. Sitting inert
- * above something that reacts made it look like a caption rather than part of
- * the chart.
- *
- * Skipped where the bars are too close together for the numbers to sit apart:
- * a row of overlapping figures is worse than no figures.
- */
-function stackTotal(cx, topY, total, band, month, label, selected) {
-  /* Shown when the figure actually fits, rather than below a fixed width.
-     A flat threshold of 52 units suppressed these on the upper chart the
-     moment the budget extended the year to sixteen months — the band drops to
-     50 and every total vanished, while the chart below it kept its own because
-     it was showing fewer months. The two are meant to match.
-
-     Six characters of mono at 10.5 is about 38 units, so the test is whether
-     the label plus a little air is narrower than the band it sits in. */
-  const width = money0(total).length * 6.3 + 6;
-  if (width > band) return '';
-  return '<text class="stacktotal' + (selected ? ' sel' : '') + '" ' +
-    tipAttrs(label || 'Everything', month, total, 0) +
-    ' x="' + cx.toFixed(1) + '" y="' + (topY - 8).toFixed(1) + '" text-anchor="middle" ' +
-    'font-size="10.5" fill="var(--ink-soft)">' + money0(total) + '</text>';
-}
-
 /**
  * How wide a bar should be, given the room its month has.
  *
@@ -5281,7 +5248,27 @@ function pieWindow() {
              priorMonth: pr ? pr.month : null };
   });
 
-  return { months: scoped, perMonth, byCat, title: cat ? labelOfSlug(cat) : 'Everything', label,
+  /* The same rollup a year earlier, by category, so this key can carry the
+     change column the one above it carries. Same source, same shape. */
+  const priorByCat = {};
+  for (const m of scoped) {
+    const idx = trendData.all.findIndex(x => x.month === m.month);
+    const row = idx > -1 ? trendData.prior[idx] : null;
+    if (!row) continue;
+    if (kids) {
+      for (const slug of kids.concat([cat])) {
+        const v = (row.byCategory || {})[slug] || 0;
+        if (v > 0) priorByCat[slug] = (priorByCat[slug] || 0) + v;
+      }
+    } else {
+      for (const [slug, v] of Object.entries(row.byParent || {})) {
+        if (v > 0) priorByCat[slug] = (priorByCat[slug] || 0) + v;
+      }
+    }
+  }
+
+  return { months: scoped, perMonth, byCat, priorByCat,
+           title: cat ? labelOfSlug(cat) : 'Everything', label,
            level: cat ? 'children' : 'parents' };
 }
 
@@ -5329,13 +5316,14 @@ function arcPath(cx, cy, r, a0, a1) {
  * places means two ways to open the same list and a selection that has to mean
  * something in a view that cannot show it.
  */
-function pieBarsSvg(entries, w) {
+function pieBarsSvg(entries, w, ramp) {
   const months = w.perMonth;
   if (!months.length) return '<p class="empty">Nothing in these months.</p>';
 
-  // The top chart's dimensions, exactly.
-  const W = 880, H = 320;
-  const PL = 66, PR = 14, PT = 20, PB = 38;
+  // The top chart's dimensions, exactly — including the room under the axis
+  // for the three figure rows, which is what PB is carrying.
+  const W = 880, H = 470;
+  const PL = 66, PR = 14, PT = 20, PB = 104;
   const plotW = W - PL - PR, plotH = H - PT - PB;
 
   /* Summed over the categories this chart was handed, not over everything in
@@ -5355,8 +5343,11 @@ function pieBarsSvg(entries, w) {
   const barW = barWidth(band, 0.45, 34);
   const every = Math.ceil(months.length / 12);
 
-  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H +
-    '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="' +
+  // No height attribute, for the same reason as above: it scales to the width
+  // of its column instead of drawing at 880 and letterboxing inside a wider one.
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" ' +
+    'style="height:auto;display:block" ' +
+    'preserveAspectRatio="xMidYMid meet" role="img" aria-label="' +
     escapeHtml(w.title) + ' by month">';
 
   for (let k = 0; k <= 4; k++) {
@@ -5384,11 +5375,9 @@ function pieBarsSvg(entries, w) {
       svg += '<rect class="seg noclick" ' + tipAttrs(labelOfSlug(slug), m.month, v, monthTotal) +
         ' x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
         '" width="' + barW.toFixed(1) + '" height="' + Math.max(0.5, bot - top).toFixed(1) +
-        '" fill="' + colourOf(slug) + '" style="color:' + colourOf(slug) + '"></rect>';
+        '" fill="' + ramp[slug] + '" style="color:' + ramp[slug] + '"></rect>';
       acc += v;
     }
-
-    if (monthTotal > 0) svg += stackTotal(cx, y(monthTotal), monthTotal, band, m.month, w.title, false);
 
     if (idx % every === 0 || idx === months.length - 1) {
       const parts = m.month.split('-');
@@ -5398,6 +5387,36 @@ function pieBarsSvg(entries, w) {
         'font-size="10.5" fill="var(--muted)">' + label + '</text>';
     }
   });
+
+  /* This year, last year and the difference, in rows under the axis — the same
+     three the chart above has, drawn at the same offsets and suppressed on the
+     same rule, so the two read as one page rather than as two charts that
+     happen to be stacked. */
+  if (band >= 46) {
+    const rowTop = H - PB + 40;
+    const rows = [
+      ['THIS YR', (m, i) => money0(totals[i]), 'var(--ink)'],
+      ['LAST YR', (m) => (m.prior === null ? '' : money0(m.prior)), 'var(--muted)'],
+      ['CHANGE', (m, i) => {
+        if (m.prior === null) return '';
+        const d = totals[i] - m.prior;
+        return (d >= 0 ? '+' : '\u2212') + money0(Math.abs(d));
+      }, null]
+    ];
+    rows.forEach((row, r) => {
+      const yy = rowTop + r * 16;
+      svg += '<text x="' + (PL - 9) + '" y="' + yy + '" text-anchor="end" ' +
+        'font-size="9" letter-spacing=".08em" fill="var(--muted)">' + row[0] + '</text>';
+      months.forEach((m, i) => {
+        const txt = row[1](m, i);
+        if (!txt) return;
+        const fill = row[2] || (m.prior !== null && totals[i] - m.prior >= 0
+          ? 'var(--coral)' : 'var(--mint-dim)');
+        svg += '<text x="' + (PL + band * i + band / 2).toFixed(1) + '" y="' + yy +
+          '" text-anchor="middle" font-size="10" fill="' + fill + '">' + txt + '</text>';
+      });
+    });
+  }
 
   // The same month a year earlier, on the same axis, drawn exactly as above.
   const priorPts = months.filter(m => m.prior !== null);
@@ -5439,6 +5458,12 @@ function drawPie() {
      Keeping one list for both is what left a hidden category still drawn. */
   const shown = entries.filter(([slug]) => !pieOff.has(slug));
   const total = shown.reduce((s, e) => s + e[1], 0) || 1;
+
+  /* Keyed to rank across everything present, not across what is left showing,
+     so switching a category off does not repaint the ones below it. The same
+     rule as the chart above, and the same ramp. */
+  const ramp = {};
+  entries.forEach(([slug], i) => { ramp[slug] = rampAt(i); });
   const R = 132, CX = 150, CY = 150;
   let angle = -Math.PI / 2;
 
@@ -5448,8 +5473,8 @@ function drawPie() {
     angle = a1;
     const on = pieSel === slug;
     return '<path class="slice' + (on ? ' sel' : '') + (pieSel && !on ? ' dim' : '') + '" ' +
-      'd="' + arcPath(CX, CY, R, a0, a1) + '" fill="' + colourOf(slug) + '" ' +
-      'style="color:' + colourOf(slug) + '" data-slice="' + escapeHtml(slug) + '" ' +
+      'd="' + arcPath(CX, CY, R, a0, a1) + '" fill="' + ramp[slug] + '" ' +
+      'style="color:' + ramp[slug] + '" data-slice="' + escapeHtml(slug) + '" ' +
       'tabindex="0" role="button">' +
       '<title>' + escapeHtml(labelOfSlug(slug)) + ': ' + money(v) +
       ' (' + ((v / total) * 100).toFixed(1) + '%)</title></path>';
@@ -5457,12 +5482,27 @@ function drawPie() {
 
   // In the bar view the key is a key and nothing more: there is no selection to
   // make when the chart cannot show one.
+  const priorByCat = w.priorByCat || {};
+  const changeOf = (slug) => {
+    const was = priorByCat[slug];
+    if (!was) return null;
+    return Math.round(((w.byCat[slug] - was) / was) * 100);
+  };
+
   const legend = keyList(entries.map(([slug, v]) => ({
-    slug, label: labelOfSlug(slug), colour: colourOf(slug), amount: v,
+    slug, label: labelOfSlug(slug), colour: ramp[slug], amount: v,
     amount_text: pieView === 'bars' ? money0(v) : ((v / total) * 100).toFixed(0) + '%',
+    change: pieView === 'bars' ? changeOf(slug) : null,
     pick: pieView === 'bars' ? null : 'data-slice="' + escapeHtml(slug) + '"',
     selected: pieSel === slug,
-  })), pieOff, 'pie');
+  })), pieOff, 'pie', 'Total', pieView === 'bars'
+    ? { bars: true, totalAtBottom: true, title: 'Where it went',
+        count: entries.filter(([s]) => !pieOff.has(s)).length + ' of ' + entries.length + ' shown',
+        notes: (w.perMonth.some(m => m.prior !== null)
+          ? '<div class="kitem static"><span class="kswatch dash"></span>' +
+            '<span class="klabel">Same month, last year</span></div>'
+          : '') }
+    : undefined);
 
   const donut =
     '<svg viewBox="0 0 300 300" width="300" height="300" role="img" ' +
@@ -5495,13 +5535,9 @@ function drawPie() {
   // beside a list of transactions is the whole point of it.
   const body = pieView === 'bars'
     ? '<div class="trend-wrap">' +
-        '<div class="trend-plot">' + pieBarsSvg(shown, w) + '</div>' +
-        '<div class="trend-key">' + legend +
-          // The dashed line is drawn here too, so it is named here too.
-          (w.perMonth.some(m => m.prior !== null)
-            ? '<div class="kitem static"><span class="kswatch dash"></span>' +
-              '<span class="klabel">Same month, last year</span></div>'
-            : '') +
+        '<div class="trend-plot">' + pieBarsSvg(shown, w, ramp) + '</div>' +
+        '<div class="trend-side">' +
+          '<div class="trend-key panel-box">' + legend + '</div>' +
         '</div>' +
       '</div>'
     : '<div class="pie-wrap">' +
