@@ -65,7 +65,11 @@ forecast.get("/forecast", async (c) => {
     // too many, and the budget is the one somebody chose — the forecast was
     // only ever guessing at what the budget now states.
     const monthsAhead = thisYearKeys.filter((k) => k >= currentKey);
-    const planned = buildShapedPlan(ctx.list, buckets, learn, monthsAhead, overrides);
+    /* The plan is built across the whole year, not only the part of it that is
+       still ahead. The months behind are still drawn from what actually
+       happened — that has not changed — but the chart now wants to say what
+       each of them was budgeted at, and a plan that stops at today cannot. */
+    const planned = buildShapedPlan(ctx.list, buckets, learn, thisYearKeys, overrides);
 
     // slug -> cents, for one month of the plan.
     const plannedAt = (key: string) => {
@@ -81,18 +85,28 @@ forecast.get("/forecast", async (c) => {
       const actual = at(key);
       const actualByParent = rollUp(actual.byCategory, ctx);
 
+      const plannedRow = plannedAt(key);
+      const budget = Object.values(plannedRow).reduce((s, v) => s + v, 0);
+
       if (key < currentKey) {
         return {
           month: key, projected: false,
           income: actual.income, expense: actual.expense,
           net: actual.income - actual.expense,
           byParent: actualByParent,
+          /* What this month would be budgeted at under the plan as it stands.
+             Reported for every month, including the ones behind: what the
+             reader does with it is the reader's business, and a figure the
+             endpoint has and withholds is a figure somebody reconstructs
+             badly somewhere else. */
+          budget,
+          budgetByParent: rollUp(plannedRow, ctx),
           actualSoFar: null as { income: number; expense: number } | null,
         };
       }
 
-      const row = plannedAt(key);
-      const plannedExpense = Object.values(row).reduce((s, v) => s + v, 0);
+      const row = plannedRow;
+      const plannedExpense = budget;
 
       // The current month already has spending in it. Showing less than has
       // demonstrably happened would be nonsense, so what happened is a floor —
@@ -110,6 +124,8 @@ forecast.get("/forecast", async (c) => {
         byParent: isCurrent && actual.expense > plannedExpense
           ? actualByParent
           : rollUp(row, ctx),
+        budget,
+        budgetByParent: rollUp(row, ctx),
         actualSoFar: isCurrent ? { income: actual.income, expense: actual.expense } : null,
       };
     });

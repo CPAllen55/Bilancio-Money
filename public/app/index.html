@@ -631,7 +631,15 @@
   /* Indented past the swatch, so the bar starts under the name it belongs to. */
   .kbar{ display:block; height:4px; border-radius:2px; background:var(--hair);
          margin:7px 0 0 20px; overflow:hidden; }
+  .kbar{ position:relative; }
   .kbar i{ display:block; height:4px; border-radius:2px; }
+  /* Where the plan says this category should have got to. A hairline across
+     the bar rather than a second bar beside it: the question is whether the
+     fill has passed the mark, and two bars turn that into a comparison of
+     lengths instead of a glance. */
+  .kbar u{ position:absolute; top:-2px; bottom:-2px; width:2px; border-radius:1px;
+           background:var(--ink); opacity:.5; }
+  .kitem.over .kbar u{ background:var(--coral); opacity:.95; }
   .panel-box .ktotal{ padding:13px 15px; background:var(--bg-panel);
                       border-bottom:0; margin:0; }
   .panel-box .kitem.static{ padding:9px 15px; }
@@ -3039,13 +3047,27 @@ function keyList(rows, off, scope, totalLabel, opts) {
       ? '<span class="krow1">' + plain + '</span>' +
         '<span class="kbar"><i style="width:' +
           Math.max(2, Math.round((r.amount / widest) * 100)) + '%;background:' +
-          r.colour + '"></i></span>'
+          r.colour + '"></i>' +
+          /* Only where there is a budget to mark, and only where it lands on
+             the track — a mark past the end of it would point at nothing. */
+          (r.budget > 0 && r.budget <= widest
+            ? '<u style="left:calc(' + ((r.budget / widest) * 100).toFixed(1) +
+              '% - 1px)" title="Budget ' + escapeHtml(money0(r.budget)) + '"></u>'
+            : '') +
+        '</span>'
       : plain;
     const body = r.pick
       ? '<button type="button" class="kpick" ' + r.pick +
         ' aria-pressed="' + (r.selected ? 'true' : 'false') + '">' + inner + '</button>'
       : '<span class="kpick static">' + inner + '</span>';
-    return '<div class="kitem' + (isOff ? ' off' : '') + (r.selected ? ' sel' : '') + '">' +
+    /* Over by a whole per cent before it is called over.
+       Most of a twelve-month window is months whose budget is taken to be what
+       they cost, so the only real gap comes from the month or two that have a
+       plan. Compared strictly, every category comes out a fraction over and
+       the whole list turns red, which says nothing and reads as an alarm. */
+    const over = r.budget > 0 && r.amount > r.budget * 1.01;
+    return '<div class="kitem' + (isOff ? ' off' : '') + (r.selected ? ' sel' : '') +
+      (over ? ' over' : '') + '">' +
       body +
       '<button type="button" class="kbox' + (isOff ? '' : ' on') + '" data-key-off="' +
         escapeHtml(r.slug) + '" data-key-scope="' + escapeHtml(scope) + '"' +
@@ -3163,9 +3185,12 @@ async function renderTrend() {
   const months = trendMonths;
   const wantForecast = $('forecast-on').checked;
 
+  /* The budget is fetched either way now. The switch decides whether the
+     months ahead are drawn as bars; it does not decide whether this year has a
+     budget, and the figures under the axis want one regardless. */
   const [tr, fc] = await Promise.all([
     authed('/api/trend?months=' + months),
-    wantForecast ? authed('/api/forecast').catch(() => null) : Promise.resolve(null)
+    authed('/api/forecast').catch(() => null)
   ]);
   if (tr.categories) { categoryList = tr.categories; catOptCache = {}; rememberColours(categoryList); }
 
@@ -3174,9 +3199,21 @@ async function renderTrend() {
   // Projected months are appended only where they run past the actual data —
   // otherwise a forecast for a month already drawn would overwrite it.
   let projected = [];
-  if (fc && fc.method !== 'insufficient-data') {
+  if (wantForecast && fc && fc.method !== 'insufficient-data') {
     const lastActual = actual.length ? actual[actual.length - 1].month : '';
     projected = fc.months.filter(m => m.projected && m.month > lastActual);
+  }
+
+  /* month -> what the plan says that month should cost, and by category.
+     Keyed rather than indexed: the forecast covers one calendar year and the
+     chart can be showing two. */
+  const budgetBy = {};
+  if (fc && fc.months) {
+    for (const m of fc.months) {
+      if (typeof m.budget === 'number') {
+        budgetBy[m.month] = { total: m.budget, byParent: m.budgetByParent || {} };
+      }
+    }
   }
 
   if (!actual.some(m => m.expense > 0) && !projected.length) {
@@ -3194,7 +3231,8 @@ async function renderTrend() {
       ({ month: m.month, byParent: m.byParent || {}, byCategory: {},
          expense: m.expense, income: m.income || 0, projected: true })));
 
-  trendData = { all: all, prior: prior };
+  trendData = { all: all, prior: prior, budget: budgetBy,
+                currentMonth: fc ? fc.months.find(m => m.actualSoFar)?.month : null };
   // A new range is a new question, so the view resets to the whole of it.
   trendVisible = all.length;
   trendOffset = 0;
@@ -3247,7 +3285,8 @@ function drawTrend() {
      are too narrow to hold a figure: past about a year it becomes two dozen
      numbers in the space of twelve. */
   const showTable = prior.length > 0 && band >= 46;
-  const PB = 34 + type.month + (showTable ? type.step * 3 + 10 : 0);
+  const FIGURE_ROWS = 5;   // this year, last year, change, budget, vs budget
+  const PB = 34 + type.month + (showTable ? type.step * FIGURE_ROWS + 10 : 0);
   const H = PT + plotH + PB;
 
   // Scaled to what is on screen, not to the whole series. Zooming in on a quiet
@@ -3451,6 +3490,29 @@ function drawTrend() {
   if (showTable) {
     const rowTop = PT + plotH + type.month + 30 + type.fig;
     const shown = (m) => shownTotal(m.byParent, trendOff);
+    /* What the plan says a month should cost, and how the month did against
+       it.
+       ── The rule for months already lived ─────────────────────────────────
+       A month behind us is compared against a plan that was learned from it.
+       That is circular: the budget for last March is partly an average of last
+       March, so calling the difference an overspend would be reporting noise
+       as a verdict. Until a budget has actually been set and kept for a month,
+       a month that has happened counts as having met its budget exactly — the
+       figure shown is what was spent, and the comparison reads 100%.
+       The current month is the first one where the question means anything,
+       and every month ahead of it is the plan outright. */
+    const budgetAt = (m) => {
+      const b = trendData.budget && trendData.budget[m.month];
+      const lived = trendData.currentMonth && m.month < trendData.currentMonth;
+      if (lived) return { cents: shown(m), assumed: true };
+      if (!b) return null;
+      /* Through the same filter the bars go through, so switching a category
+         off takes its budget off with it. A total that kept counting a
+         category the chart had stopped drawing would be a comparison between
+         two different questions. */
+      return { cents: shownTotal(b.byParent, trendOff) || b.total, assumed: false };
+    };
+
     const rows = [
       ['THIS YR', (m, i) => money0(shown(m)), 'var(--ink)'],
       ['LAST YR', (m, i) => (prior[i] ? money0(prior[i].expense) : ''), 'var(--muted)'],
@@ -3458,6 +3520,16 @@ function drawTrend() {
         if (!prior[i]) return '';
         const d = shown(m) - prior[i].expense;
         return (d >= 0 ? '+' : '\u2212') + money0(Math.abs(d));
+      }, null],
+      ['BUDGET', (m) => { const b = budgetAt(m); return b ? money0(b.cents) : ''; },
+        'var(--muted)'],
+      ['VS BUDGET', (m) => {
+        const b = budgetAt(m);
+        if (!b || !b.cents) return '';
+        // Nothing has been spent in a month that has not started, so there is
+        // no proportion to report for it yet.
+        if (!b.assumed && m.projected) return '';
+        return Math.round((shown(m) / b.cents) * 100) + '%';
       }, null]
     ];
     rows.forEach((row, r) => {
@@ -3468,8 +3540,19 @@ function drawTrend() {
       all.forEach((m, i) => {
         const txt = row[1](m, i);
         if (!txt) return;
-        const fill = row[2] || (prior[i] && shown(m) - prior[i].expense >= 0
-          ? 'var(--coral)' : 'var(--mint-dim)');
+        /* CHANGE is coloured against last year; VS BUDGET against the plan,
+           and only where the plan means something — an assumed month reads
+           100% and should not be dressed as a triumph. */
+        let fill = row[2];
+        if (!fill && r === 2) {
+          fill = (prior[i] && shown(m) - prior[i].expense >= 0)
+            ? 'var(--coral)' : 'var(--mint-dim)';
+        }
+        if (!fill && r === 4) {
+          const b = budgetAt(m);
+          fill = !b || b.assumed ? 'var(--muted)'
+               : (shown(m) > b.cents ? 'var(--coral)' : 'var(--mint-dim)');
+        }
         svg += '<text x="' + (PL + band * i + band / 2).toFixed(1) + '" y="' + yy +
                '" text-anchor="middle" font-size="' + type.fig + '" fill="' + fill +
                '">' + txt + '</text>';
@@ -3498,11 +3581,29 @@ function drawTrend() {
         '<span class="klabel">Budget ahead</span></div>'
       : '');
 
+  /* What the plan says each category should come to across the window shown.
+     Months already lived count at what they actually cost, for the same reason
+     the row under the axis does: their budget was learned from them, so
+     anything else compares a figure with an average of itself. */
+  const budgetTotals = {};
+  if (trendData.budget) {
+    for (const m of all) {
+      const b = trendData.budget[m.month];
+      const lived = trendData.currentMonth && m.month < trendData.currentMonth;
+      const src = lived ? m.byParent : (b ? b.byParent : null);
+      if (!src) continue;
+      for (const [id, v] of Object.entries(src)) {
+        if (v > 0) budgetTotals[id] = (budgetTotals[id] || 0) + v;
+      }
+    }
+  }
+
   const key = keyList(present.map(id => ({
     // The stack and its own key have to agree, so both take the ramp. Nothing
     // else does — identity colours stay the source of truth everywhere else.
     slug: id, label: labelOfSlug(id), colour: rampOf[id],
     amount: totals[id], amount_text: money0(totals[id]),
+    budget: budgetTotals[id] || 0,
     change: priorTotals[id]
       ? Math.round(((totals[id] - priorTotals[id]) / priorTotals[id]) * 100)
       : null,
