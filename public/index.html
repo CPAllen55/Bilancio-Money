@@ -186,20 +186,40 @@
   .trio p{ font-size:14.5px; color:var(--body); margin:0; }
 
   /* ------------------------------------------------------------- the views */
-  .views{ background:var(--tint); padding:86px 0; }
-  .sec-head{ max-width:60ch; }
+  /* The screenshots are the argument, so they get the room. The text beside
+     them is a caption, not a column of equal weight — a narrow measure reads
+     faster anyway, and every pixel it gives up the screenshot takes. */
+  .views{ background:var(--tint); padding:86px 0; overflow-x:hidden; }
+  .sec-head{ max-width:62ch; margin:0 auto; text-align:center; }
   .sec-head h2{ font-size:40px; margin:12px 0 0; }
-  .sec-head p{ font-size:17px; color:var(--body); margin:14px 0 0; }
+  .sec-head p{ font-size:17px; color:var(--body); margin:14px auto 0; max-width:56ch; }
+  .rows{ margin-top:96px; }
   .row{
-    display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);
-    gap:56px; align-items:center; margin-top:64px;
+    display:grid; grid-template-columns:minmax(0,340px) minmax(0,1fr);
+    gap:64px; align-items:center;
   }
-  .row:nth-of-type(even) .row-text{ order:2; }
+  .row + .row{ margin-top:112px; }
+  /* Alternating, counted among the rows themselves rather than among whatever
+     else happens to be a div in this section.
+
+     The columns are swapped as well as the order. Order alone moves which
+     element goes first and not which track it lands in, so the screenshot took
+     the 340px column and the caption took the wide one — the layout mirrored
+     and the proportions did not go with it. */
+  .rows .row:nth-child(even){ grid-template-columns:minmax(0,1fr) minmax(0,340px); }
+  .rows .row:nth-child(even) .row-text{ order:2; }
   .row h3{ font-size:32px; margin:10px 0 0; }
   .row p{ font-size:16.5px; color:var(--body); margin:14px 0 0; }
   .shot{
     border:1px solid var(--hair-strong); border-radius:11px; overflow:hidden;
     box-shadow:var(--shot-shadow); background:var(--card);
+  }
+  /* And a little past the column on the side it sits on, so the page feels
+     wider than its measure. Only where there is room to give: the negative
+     margin is inside the media query, and the section clips the overflow. */
+  @media (min-width:1000px){
+    .rows .row:nth-child(odd) .shot{ margin-right:-56px; }
+    .rows .row:nth-child(even) .shot{ margin-left:-56px; }
   }
 
   /* ------------------------------------------------------------- the budget */
@@ -289,8 +309,11 @@
   /* ---------------------------------------------------------------- narrow */
   @media (max-width:960px){
     .hero h1{ font-size:44px; }
-    .row, .budget-grid, .dark-grid{ grid-template-columns:1fr; gap:32px; }
-    .row:nth-of-type(even) .row-text{ order:0; }
+    .row, .budget-grid, .dark-grid,
+    .rows .row:nth-child(even){ grid-template-columns:1fr; gap:32px; }
+    .row + .row{ margin-top:64px; }
+    .rows{ margin-top:56px; }
+    .rows .row:nth-child(even) .row-text{ order:0; }
     .trio-grid{ grid-template-columns:1fr; }
     .trio-grid > div + div{ border-left:0; border-top:1px solid var(--hair); }
     .cards{ grid-template-columns:1fr; }
@@ -389,6 +412,7 @@
         account of invented transactions. The headings are the app's own.</p>
     </div>
 
+    <div class="rows">
     <div class="row">
       <div class="row-text">
         <span class="eyebrow">Overview</span>
@@ -458,6 +482,7 @@
           anything, and make a rule from it so the next one files itself.</p>
       </div>
       <div class="shot"><img src="/shots/shot-transactions.png" alt="The Transactions dashboard" loading="lazy"></div>
+    </div>
     </div>
   </div>
 </section>
