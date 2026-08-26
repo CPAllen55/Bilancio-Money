@@ -108,6 +108,8 @@
   nav.main{ margin-left:auto; display:flex; align-items:center; gap:26px; }
   nav.main a{ font-size:14.5px; color:var(--body); }
   nav.main a:hover{ color:var(--gold-deep); }
+  nav.main .signin{ font-weight:600; color:var(--ink); }
+  nav.main .signin:hover{ color:var(--gold-deep); }
   .btn{
     display:inline-block; font:600 14.5px/1 var(--sans); padding:11px 18px;
     border-radius:8px; border:0; cursor:pointer; background:var(--gold); color:#fff;
@@ -324,7 +326,9 @@
     .trio-grid > div + div{ border-left:0; border-top:1px solid var(--hair); }
     .cards{ grid-template-columns:1fr; }
     .hero-shot{ height:300px; }
-    nav.main a:not(.btn){ display:none; }
+    /* The page navigation collapses, the way in does not: on a phone this is
+       the only route to an account that already exists. */
+    nav.main a:not(.btn):not(.signin){ display:none; }
   }
   @media (max-width:560px){
     .wrap{ padding:0 20px; }
@@ -354,7 +358,10 @@
       <a href="#views">The dashboards</a>
       <a href="#budget">How it works</a>
       <a href="#trust">Your data</a>
-      <a href="/app/">See the demo</a>
+      <!-- Somebody who already has an account is looking for this word and no
+           other. The handoff put "See the demo" here; the same destination
+           under a different name is not a way in for a reader who has one. -->
+      <a class="signin" href="/app/">Sign in</a>
       <a class="btn" href="#join">Join the waitlist</a>
     </nav>
   </div>
