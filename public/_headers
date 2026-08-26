@@ -1,0 +1,48 @@
+# Cache policy for the static assets.
+#
+# ── Why this file exists ────────────────────────────────────────────────
+#
+# Five separate times, a change was deployed, verified live by fetching it,
+# and still not visible in a browser. Every time the answer was the same:
+# CF-Cache-Status: HIT on the document, serving an older copy of the HTML
+# while the same URL with a query string returned the current one.
+#
+# The pages already sent `public, max-age=0, must-revalidate`, which asks a
+# cache to check before reusing. Something at the edge was reusing anyway.
+# Rather than keep purging by hand, the HTML says outright that it is not to
+# be stored.
+#
+# ── The trade ───────────────────────────────────────────────────────────
+#
+# HTML is the small part and the part that changes. Every request now reaches
+# the origin for it, which costs a few milliseconds and is worth more than the
+# alternative — which is shipping a change and having no way to know whether
+# anyone can see it.
+#
+# Everything with a stable name goes the other way: images and icons are
+# immutable for a year, because a screenshot that changes gets a new file name
+# rather than new bytes under the old one.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# The document itself, wherever it is served from.
+/
+  Cache-Control: no-store, must-revalidate
+/index.html
+  Cache-Control: no-store, must-revalidate
+/app/
+  Cache-Control: no-store, must-revalidate
+/app/index.html
+  Cache-Control: no-store, must-revalidate
+/privacy/
+  Cache-Control: no-store, must-revalidate
+/terms/
+  Cache-Control: no-store, must-revalidate
+
+# Named assets. These are replaced by adding a file, never by editing one.
+/brand/*
+  Cache-Control: public, max-age=31536000, immutable
+/shots/*
+  Cache-Control: public, max-age=31536000, immutable

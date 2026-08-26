@@ -195,8 +195,12 @@
   .sec-head p{ font-size:17px; color:var(--body); margin:14px auto 0; max-width:56ch; }
   .rows{ margin-top:96px; }
   .row{
-    display:grid; grid-template-columns:minmax(0,340px) minmax(0,1fr);
-    gap:64px; align-items:center;
+    display:grid;
+    /* The caption gives ground as the window narrows instead of holding 340
+       until it snaps to stacked. Side by side is the whole point of the
+       section, so it is kept as far down as it will honestly go. */
+    grid-template-columns:minmax(0,clamp(240px,26%,340px)) minmax(0,1fr);
+    gap:clamp(28px,4vw,64px); align-items:center;
   }
   .row + .row{ margin-top:112px; }
   /* Alternating, counted among the rows themselves rather than among whatever
@@ -206,7 +210,9 @@
      element goes first and not which track it lands in, so the screenshot took
      the 340px column and the caption took the wide one — the layout mirrored
      and the proportions did not go with it. */
-  .rows .row:nth-child(even){ grid-template-columns:minmax(0,1fr) minmax(0,340px); }
+  .rows .row:nth-child(even){
+    grid-template-columns:minmax(0,1fr) minmax(0,clamp(240px,26%,340px));
+  }
   .rows .row:nth-child(even) .row-text{ order:2; }
   .row h3{ font-size:32px; margin:10px 0 0; }
   .row p{ font-size:16.5px; color:var(--body); margin:14px 0 0; }
@@ -307,7 +313,7 @@
   @media (prefers-reduced-motion: reduce){ *{ animation:none !important } }
 
   /* ---------------------------------------------------------------- narrow */
-  @media (max-width:960px){
+  @media (max-width:820px){
     .hero h1{ font-size:44px; }
     .row, .budget-grid, .dark-grid,
     .rows .row:nth-child(even){ grid-template-columns:1fr; gap:32px; }
