@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bilancio Money — Balance, live.</title>
-<meta name="description" content="Every account in one live ledger. Bilancio shows what you're actually worth the instant something moves, with every transaction already sorted.">
+<title>Bilancio Money — Find out where you actually stand.</title>
+<meta name="description" content="A personal finance dashboard that answers one plain question per view: are you inside the plan, is this month worse than the same month last year, what did you keep. The budget builds itself from your own history.">
 <link rel="canonical" href="https://www.bilanciomoney.com/">
 
 <!-- Icons, all generated from public/brand/owl.png by `npm run brand`. -->
@@ -12,2447 +12,661 @@
 <link rel="icon" href="/brand/icon-16.png" sizes="16x16">
 <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
-<meta name="theme-color" content="#05080B">
+<!-- Cream now rather than near-black: the browser chrome should agree with
+     the page, and the page agrees with the app. -->
+<meta name="theme-color" content="#F9F4E4">
 
 <!-- Without these the link renders as a bare URL wherever it is shared. -->
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.bilanciomoney.com/">
-<meta property="og:title" content="Bilancio Money — Balance, live.">
-<meta property="og:description" content="Every account in one live ledger. Bilancio shows what you're actually worth the instant something moves, with every transaction already sorted.">
+<meta property="og:title" content="Bilancio Money — Find out where you actually stand.">
+<meta property="og:description" content="A personal finance dashboard that answers one plain question per view. The budget builds itself from your own history.">
 <meta property="og:image" content="https://www.bilanciomoney.com/brand/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Bilancio Money — Balance, live.">
-<meta name="twitter:description" content="Every account in one live ledger. Bilancio shows what you're actually worth the instant something moves, with every transaction already sorted.">
+<meta name="twitter:title" content="Bilancio Money — Find out where you actually stand.">
+<meta name="twitter:description" content="A personal finance dashboard that answers one plain question per view. The budget builds itself from your own history.">
 <meta name="twitter:image" content="https://www.bilanciomoney.com/brand/og-image.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
 <style>
+  /* The app's own light theme, so the page and the product agree. Arriving at
+     the dashboard from here should not feel like arriving somewhere else,
+     which is what leaving from a near-black page did. */
   :root{
-    --bg: #05080B;
-    --bg-panel: #0C1218;
-    --bg-panel-2: #111922;
-    --grid-line: rgba(231,238,243,0.05);
-    --hair: rgba(231,238,243,0.10);
-    --hair-strong: rgba(231,238,243,0.18);
-    --ink: #E7EEF3;
-    --ink-soft: #8A9BAC;
-    --mint: #00F0A8;
-    --mint-dim: #00A876;
-    --mint-glow: rgba(0,240,168,0.35);
-    --mint-bg: rgba(0,240,168,0.08);
-    --coral: #FF5C72;
-    --coral-bg: rgba(255,92,114,0.08);
-
-    /* category hues — the same validated slots the dashboard charts use,
-       so a thumbnail here reads as the same category over there */
-    --dash-surface: #0F171F;
-    --dash-grid:    #1B2630;
-    --dash-axis:    #243441;
-    --muted:        #7E90A2;
-    --good:         #00F0A8;
-    --warning:      #FAB219;
-    --critical:     #FF5C72;
-    --deemph:       #4A5C6B;
-
-    --cat-home:      #3987e5;
-    --cat-groceries: #d95926;
-    --cat-shopping:  #199e70;
-    --cat-dining:    #c98500;
-    --cat-pets:      #d55181;
-    --cat-transport: #008300;
-    --cat-bills:     #9085e9;
+    --page:#F9F4E4;
+    --tint:#F1E7CD;
+    --card:#F7EBCA;
+    --panel:#FFFFFF;
+    --ink:#12253F;
+    --body:rgba(18,37,63,.72);
+    --body-soft:rgba(18,37,63,.68);
+    --hair:rgba(18,37,63,.12);
+    --hair-strong:rgba(18,37,63,.16);
+    /* Gold at 3.52:1 on cream is fine filling a button and fails on 11px
+       tracked type, so the small stuff takes the darker one at 5.4:1.
+       Both are the brand; only one of them can be read at that size. */
+    --gold:#A07026;
+    --gold-deep:#7d601d;
+    --pos:#0B7A55;
+    --neg:#C3354B;
+    --dark:#05080B;
+    --dark-ink:#E7EEF3;
+    --dark-gold:#E7C567;
+    --shot-shadow:0 18px 44px -18px rgba(18,37,63,.3);
+    --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+    --display:'Space Grotesk',var(--sans);
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
   }
 
-  *{ box-sizing: border-box; }
-  html{ scroll-behavior: smooth; }
-
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
   body{
-    margin:0;
-    background: var(--bg);
-    color: var(--ink);
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 16px;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
+    margin:0; background:var(--page); color:var(--ink);
+    font:400 16.5px/1.6 var(--sans);
+    -webkit-font-smoothing:antialiased;
   }
-
-  .bg-base, .bg-grid{
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-  }
-  .bg-base{
-    z-index: 0;
-    background:
-      radial-gradient(ellipse 900px 500px at 50% -10%, rgba(0,240,168,0.10), transparent 60%),
-      var(--bg);
-  }
-  .bg-grid{
-    z-index: 1;
-    opacity: 0;
-  }
-  .bg-grid.silver{
-    background:
-      repeating-linear-gradient(180deg, rgba(196,206,214,0.85) 0px, rgba(196,206,214,0.85) 1px, transparent 1px, transparent 44px),
-      repeating-linear-gradient(90deg, rgba(196,206,214,0.85) 0px, rgba(196,206,214,0.85) 1px, transparent 1px, transparent 44px);
-    animation: gridSilverFade 18s ease-in-out infinite;
-  }
-
-  @keyframes gridSilverFade{
-    0%{ opacity: 0; }
-    25%{ opacity: 0.22; }
-    60%{ opacity: 0.22; }
-    90%{ opacity: 0; }
-    100%{ opacity: 0; }
-  }
-
-  .page{
-    position: relative;
-    z-index: 2;
-  }
-
-  a{ color: inherit; }
-
-  .wrap{ max-width: 1080px; margin: 0 auto; padding: 0 28px; }
-
-  .display{
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-  }
-  .mono{ font-family: 'IBM Plex Mono', monospace; }
+  img{ max-width:100%; display:block; }
+  a{ color:var(--gold); text-decoration:none; }
+  a:hover{ color:var(--gold-deep); }
+  .wrap{ max-width:1200px; margin:0 auto; padding:0 32px; }
+  h1,h2,h3{ font-family:var(--display); font-weight:700; letter-spacing:-.02em; margin:0; }
+  /* Every anchor target clears the sticky header rather than hiding under it. */
+  section[id]{ scroll-margin-top:84px; }
 
   .eyebrow{
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 12.5px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--mint);
+    font:500 11px/1 var(--mono); letter-spacing:.16em; text-transform:uppercase;
+    color:var(--gold-deep);
+  }
+  .num{ font:500 11px/1 var(--mono); color:var(--gold-deep); letter-spacing:.14em; }
+
+  /* ---------------------------------------------------------------- header */
+  header{
+    position:sticky; top:0; z-index:20;
+    background:rgba(249,244,228,.93); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--hair);
+  }
+  .head-inner{ display:flex; align-items:center; gap:26px; padding:14px 0; }
+  .lockup{ display:flex; align-items:center; gap:11px; text-decoration:none; flex:none; }
+  .lockup:hover{ color:inherit; }
+  .lockup img{ width:34px; height:auto; }
+  .mark-glide{ display:block; }
+  .mark-swoop{ display:block; transform-origin:50% 80%; }
+  .word{ font:700 21px/1 var(--display); color:var(--gold); letter-spacing:-.02em; }
+  .desc{ font:500 10.5px/1 var(--mono); letter-spacing:.2em; color:var(--body-soft);
+         text-transform:uppercase; }
+  /* The app's own mark, assembled rather than decorated: four columns of
+     2/3/4/5, which is the logo. */
+  .coins{ display:flex; align-items:flex-end; gap:2px; height:19px; }
+  .coins > span{ display:flex; flex-direction:column-reverse; gap:1px; }
+  .coins i{ display:block; width:4px; height:3px; border-radius:1px; background:var(--gold); }
+
+  nav.main{ margin-left:auto; display:flex; align-items:center; gap:26px; }
+  nav.main a{ font-size:14.5px; color:var(--body); }
+  nav.main a:hover{ color:var(--gold-deep); }
+  .btn{
+    display:inline-block; font:600 14.5px/1 var(--sans); padding:11px 18px;
+    border-radius:8px; border:0; cursor:pointer; background:var(--gold); color:#fff;
+    transition:background .15s;
+  }
+  .btn:hover{ background:var(--gold-deep); color:#fff; }
+  nav.main .btn{ padding:10px 16px; border-radius:7px; }
+  .btn-ghost{
+    display:inline-block; font:600 15.5px/1 var(--sans); padding:13px 20px;
+    border-radius:8px; border:1px solid var(--hair-strong); background:transparent;
+    color:var(--ink);
+  }
+  .btn-ghost:hover{ border-color:var(--gold); color:var(--gold-deep); }
+
+  /* ------------------------------------------------------------------ hero */
+  .hero{ padding:72px 0 0; }
+  .badge{
+    display:inline-block; font:500 11px/1 var(--mono); letter-spacing:.16em;
+    text-transform:uppercase; color:var(--gold-deep);
+    border:1px solid var(--hair-strong); border-radius:999px; padding:7px 13px;
+    background:var(--card);
+  }
+  .hero h1{ font-size:62px; line-height:1.04; margin:20px 0 0; max-width:15ch; }
+  .hero .sub{ font-size:18.5px; color:var(--body); margin:18px 0 0; max-width:52ch; }
+  .capture{ display:flex; gap:10px; flex-wrap:wrap; margin-top:26px; max-width:520px; }
+  .capture input{
+    flex:1 1 260px; min-width:0; font:400 15.5px/1 var(--sans); padding:14px 15px;
+    border:1px solid var(--hair-strong); border-radius:8px; background:var(--panel);
+    color:var(--ink);
+  }
+  .capture input:focus{ outline:none; border-color:var(--gold); }
+  .capture .btn{ padding:14px 20px; font-size:15.5px; }
+  .fine{ font-size:13px; color:var(--body-soft); margin:12px 0 0; }
+  .sign-err{ font-size:13.5px; color:var(--neg); margin:10px 0 0; }
+  .done{
+    display:none; align-items:center; gap:11px; margin-top:26px; max-width:520px;
+    background:rgba(11,122,85,.09); border:1px solid rgba(11,122,85,.28);
+    border-radius:10px; padding:16px 18px; color:var(--ink); font-size:15.5px;
+    text-align:left;
+  }
+  .done b{ font-family:var(--display); }
+  .done .tick{
+    flex:none; width:22px; height:22px; border-radius:50%; background:var(--pos);
+    color:#fff; display:grid; place-items:center; font-size:13px;
+  }
+  .hero-shot{
+    margin:48px auto 0; max-width:900px; height:460px; overflow:hidden;
+    border:1px solid var(--hair-strong); border-radius:12px; box-shadow:var(--shot-shadow);
+    background:var(--card); position:relative;
+  }
+  /* Cropped to the heading, the period menus and the first row of figures, so
+     the numbers can be read. A whole dashboard shrunk to fit is a picture of a
+     dashboard, not a demonstration of one. */
+  .hero-shot img{ position:absolute; width:105.2%; max-width:none; left:-2.6%; top:-13.6%; }
+
+  /* --------------------------------------------------------------- the trio */
+  .trio{ margin-top:76px; border-top:1px solid var(--hair); border-bottom:1px solid var(--hair); }
+  .trio-grid{ display:grid; grid-template-columns:repeat(3,1fr); }
+  .trio-grid > div{ padding:34px 30px; }
+  .trio-grid > div + div{ border-left:1px solid var(--hair); }
+  .trio h3{ font-size:17px; margin:12px 0 8px; }
+  .trio p{ font-size:14.5px; color:var(--body); margin:0; }
+
+  /* ------------------------------------------------------------- the views */
+  .views{ background:var(--tint); padding:86px 0; }
+  .sec-head{ max-width:60ch; }
+  .sec-head h2{ font-size:40px; margin:12px 0 0; }
+  .sec-head p{ font-size:17px; color:var(--body); margin:14px 0 0; }
+  .row{
+    display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);
+    gap:56px; align-items:center; margin-top:64px;
+  }
+  .row:nth-of-type(even) .row-text{ order:2; }
+  .row h3{ font-size:32px; margin:10px 0 0; }
+  .row p{ font-size:16.5px; color:var(--body); margin:14px 0 0; }
+  .shot{
+    border:1px solid var(--hair-strong); border-radius:11px; overflow:hidden;
+    box-shadow:var(--shot-shadow); background:var(--card);
   }
 
-  /* cursor blink */
-  .cursor{
-    display:inline-block;
-    width: 8px; height: 1em;
-    background: var(--mint);
-    margin-left: 2px;
-    vertical-align: -2px;
-    animation: blink 1s steps(1) infinite;
+  /* ------------------------------------------------------------- the budget */
+  .budget{ padding:86px 0; }
+  .budget h2{ font-size:40px; margin:12px 0 0; }
+  .budget .lede{ font-size:17px; color:var(--body); margin:14px 0 0; max-width:52ch; }
+  .budget-grid{ display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);
+                gap:56px; align-items:start; }
+  .steps{ margin:34px 0 0; padding:0; list-style:none; }
+  .steps li{ display:flex; gap:16px; padding:20px 0; border-top:1px solid var(--hair); }
+  .steps li:last-child{ border-bottom:1px solid var(--hair); }
+  .steps .n{ font:500 12px/1.4 var(--mono); color:var(--gold-deep); flex:none; width:22px; }
+  .steps h4{ font:600 16.5px/1.4 var(--sans); margin:0 0 4px; }
+  .steps p{ font-size:14.5px; color:var(--body); margin:0; }
+  .figures{
+    border:1px solid var(--hair-strong); border-radius:11px; background:var(--card);
+    padding:26px 28px; margin-top:34px;
   }
-  @keyframes blink{ 50%{ opacity: 0; } }
+  .fig{ display:flex; align-items:baseline; justify-content:space-between; gap:20px;
+        padding:14px 0; border-bottom:1px solid var(--hair); }
+  .fig:last-child{ border-bottom:0; }
+  .fig .k{ font-size:14.5px; color:var(--body); }
+  .fig .v{ font:500 19px/1 var(--mono); color:var(--ink); font-variant-numeric:tabular-nums; }
+  .fig .v.pos{ color:var(--pos); }
 
-  /* ---------- NAV ---------- */
-  .nav{
-    position: sticky; top: 0; z-index: 20;
-    background: rgba(5,8,11,0.78);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid var(--hair);
+  /* -------------------------------------------------------------- the trust */
+  .trust{ background:var(--tint); padding:86px 0; }
+  .cards{ display:grid; grid-template-columns:repeat(3,1fr); gap:22px; margin-top:44px; }
+  .cards article{
+    background:var(--card); border:1px solid var(--hair-strong); border-radius:11px;
+    padding:26px 26px 28px;
   }
-  .nav-inner{ display:flex; align-items:center; justify-content:space-between; padding: 18px 0; }
-  .wordmark{ display:flex; align-items: baseline; gap: 8px; }
-  .wordmark .b{
-    font-size: 23px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    background: linear-gradient(120deg, #C9A227 0%, #F5DFA0 28%, #FFF6DD 50%, #E7C567 72%, #B8892A 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    filter: drop-shadow(0 0 14px rgba(245,197,24,0.28));
-  }
-  .wordmark .m{
-    font-family:'IBM Plex Mono', monospace;
-    font-size: 11px; letter-spacing: 0.14em;
-    color: var(--ink-soft); text-transform: uppercase;
-  }
-  .nav-cta{
-    font-family:'IBM Plex Mono', monospace;
-    font-size: 13px; text-decoration: none;
-    color: var(--mint);
-    border: 1px solid var(--mint-dim);
-    padding: 8px 14px; border-radius: 3px;
-    transition: box-shadow .18s ease, background .18s ease;
-  }
-  .nav-cta:hover{ box-shadow: 0 0 18px var(--mint-glow); background: var(--mint-bg); }
-  .nav-links{ display:flex; align-items:center; gap: 18px; }
-  .nav-link{
-    font-family:'IBM Plex Mono', monospace;
-    font-size: 13px; text-decoration: none; color: var(--ink-soft);
-    transition: color .18s ease;
-  }
-  .nav-link:hover{ color: var(--ink); }
+  .cards h3{ font-size:19px; margin:12px 0 10px; }
+  .cards p{ font-size:14.5px; color:var(--body); margin:0; }
 
-  /* ---------- HERO ---------- */
-  .hero{ padding: 52px 0 28px; text-align:center; position: relative; }
-  .hero h1{
-    font-size: clamp(38px, 5.6vw, 64px);
-    line-height: 1.05;
-    margin: 18px 0 16px;
-  }
-  .hero h1 .glow{ color: var(--mint); text-shadow: 0 0 26px var(--mint-glow); }
-  .hero p.lede{
-    font-size: 18px; color: var(--ink-soft);
-    max-width: 52ch; margin: 0 auto 48px;
-  }
+  /* ------------------------------------------------------------------ dark */
+  .dark{ background:var(--dark); color:var(--dark-ink); padding:86px 0; }
+  .dark .eyebrow{ color:var(--dark-gold); }
+  .dark h2{ font-size:38px; margin:12px 0 0; }
+  .dark p{ font-size:16.5px; color:rgba(231,238,243,.72); margin:14px 0 0; }
+  .dark-grid{ display:grid; grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);
+              gap:56px; align-items:center; }
+  .dark .shot{ border-color:rgba(231,238,243,.14); background:#0F171F;
+               box-shadow:0 18px 44px -18px rgba(0,0,0,.7); }
 
-  /* ---------- the account network, behind the balance ----------
-     The four feeds converge on the number itself, which is the claim the
-     diagram is making. It is absolutely positioned and deliberately wider
-     than its parent, so it spills behind the lede and the buttons and costs
-     no vertical space of its own. */
-  .ticker-wrap{
-    position: relative; max-width: 720px; margin: 0 auto 26px;
-    min-height: 150px;
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-  }
-  .ticker-net{
-    position:absolute; top:50%; left:50%;
-    /* lifted so the convergence glow sits just above the digits rather than
-       behind them — the number reads as what the four feeds add up to */
-    transform: translate(-50%, calc(-50% - 104px));
-    width: min(1040px, 94vw); height:auto;
-    pointer-events:none; z-index:0; opacity:.62;
-  }
-  .ticker-net .flow{
-    stroke: var(--mint-dim); stroke-width: 1.4; fill: none;
-    stroke-dasharray: 3 7; animation: dash 1.6s linear infinite; opacity: .8;
-  }
-  @keyframes dash{ to{ stroke-dashoffset: -20; } }
-  .ticker-net .node-ring{ fill: var(--bg-panel); stroke: var(--hair-strong); stroke-width: 1; }
-  .ticker-net .node-label{
-    font-family:'IBM Plex Mono', monospace; font-size: 10.5px;
-    fill: var(--ink-soft); text-anchor: middle;
-  }
-  .ticker-net .center-glow{ fill: var(--mint); opacity: .18; }
-  .ticker-net .center-dot{ fill: var(--mint); }
+  /* ------------------------------------------------------------------ join */
+  .join{ padding:92px 0; text-align:center; }
+  .join h2{ font-size:44px; margin:14px 0 0; }
+  .join .lede{ font-size:17px; color:var(--body); margin:16px auto 0; max-width:50ch; }
+  .join .capture{ margin:28px auto 0; justify-content:center; }
+  .join .done{ margin:28px auto 0; }
+  .join .fine, .join .sign-err{ text-align:center; }
 
-  /* the number sits above the wiring, and carries its own dark halo so the
-     dashed lines never cut through a digit */
-  .ticker, .ticker-label{ position: relative; z-index: 1; }
-  .ticker{ text-shadow: 0 0 22px var(--bg), 0 0 8px var(--bg); }
+  /* ---------------------------------------------------------------- footer */
+  footer{ border-top:1px solid var(--hair); padding:38px 0 46px; }
+  .foot{ display:flex; align-items:center; gap:22px; flex-wrap:wrap; }
+  .foot img{ width:26px; }
+  .foot .tag{ font-size:14px; color:var(--body-soft); }
+  .foot nav{ margin-left:auto; display:flex; gap:22px; flex-wrap:wrap; }
+  .foot nav a{ font-size:14px; color:var(--body); }
+  .foot nav a:hover{ color:var(--gold-deep); }
+  .foot .copy{ font-size:13px; color:var(--body-soft); width:100%; }
 
-  /* below this the 760-unit viewBox scales the node labels into illegibility */
-  @media (max-width: 700px){
-    .ticker-net{ display:none; }
-    .ticker-wrap{ min-height: 0; }
+  /* --------------------------------------------------------------- landing */
+  /* The owl flies in and lands, then the stacks build under it. Two nested
+     elements, because one animating X and one animating Y is an arc, and a
+     single transform is a diagonal slide. */
+  @keyframes owlGlide { from { transform:translateX(58vw) } to { transform:translateX(0) } }
+  @keyframes owlSwoop {
+    0%   { transform:translateY(-180px) rotate(15deg) scale(.5); opacity:0 }
+    14%  { opacity:1 }
+    56%  { transform:translateY(14px) rotate(-8deg) scale(1.12) }
+    76%  { transform:translateY(-5px) rotate(3deg) scale(.97) }
+    100% { transform:translateY(0) rotate(0) scale(1); opacity:1 }
   }
+  @keyframes coinDrop {
+    0%   { transform:translateY(-16px); opacity:0 }
+    70%  { transform:translateY(1.5px); opacity:1 }
+    100% { transform:translateY(0); opacity:1 }
+  }
+  .mark-glide{ animation:owlGlide 1.15s cubic-bezier(.16,.62,.24,1) both; }
+  .mark-swoop{ animation:owlSwoop 1.15s cubic-bezier(.35,.15,.3,1) both; }
+  .coins i{ animation:coinDrop .42s cubic-bezier(.34,1.4,.64,1) both; }
 
-  .ticker{
-    font-family:'IBM Plex Mono', monospace;
-    font-weight: 500;
-    font-size: clamp(48px, 8vw, 84px);
-    color: var(--ink);
-    letter-spacing: -0.01em;
-  }
-  .ticker .cents{ font-size: 0.55em; color: var(--ink-soft); }
-  .ticker.flash{ animation: flash .5s ease; }
-  @keyframes flash{ 0%{ color: var(--mint); text-shadow: 0 0 30px var(--mint-glow);} 100%{ color: var(--ink); text-shadow: none; } }
-  .ticker-label{
-    font-family:'IBM Plex Mono', monospace;
-    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
-    color: var(--ink-soft); margin-top: 6px;
-  }
-  .ticker-label .dot{
-    display:inline-block; width:6px; height:6px; border-radius:50%;
-    background: var(--mint); margin-right:7px;
-    box-shadow: 0 0 8px var(--mint-glow);
-    animation: pulseDot 1.6s ease-in-out infinite;
-  }
-  @keyframes pulseDot{ 0%,100%{ opacity: 1; } 50%{ opacity: .35; } }
+  @media (prefers-reduced-motion: reduce){ *{ animation:none !important } }
 
-  .hero-actions{
-    display:flex; align-items:center; justify-content:center;
-    gap: 20px; flex-wrap: wrap; margin-top: 24px;
+  /* ---------------------------------------------------------------- narrow */
+  @media (max-width:960px){
+    .hero h1{ font-size:44px; }
+    .row, .budget-grid, .dark-grid{ grid-template-columns:1fr; gap:32px; }
+    .row:nth-of-type(even) .row-text{ order:0; }
+    .trio-grid{ grid-template-columns:1fr; }
+    .trio-grid > div + div{ border-left:0; border-top:1px solid var(--hair); }
+    .cards{ grid-template-columns:1fr; }
+    .hero-shot{ height:300px; }
+    nav.main a:not(.btn){ display:none; }
   }
-  .btn-primary{
-    font-family:'IBM Plex Mono', monospace;
-    font-size: 14px; letter-spacing: 0.02em;
-    background: var(--mint); color: #04120C;
-    border: none; padding: 15px 24px; border-radius: 3px;
-    cursor: pointer; font-weight: 600;
-    box-shadow: 0 0 0 rgba(0,240,168,0);
-    transition: box-shadow .2s ease, transform .18s ease;
-  }
-  .btn-primary:hover{ box-shadow: 0 0 30px var(--mint-glow); }
-  .btn-primary:active{ transform: translateY(1px); }
-  .btn-primary:focus-visible{ outline: 2px solid var(--mint); outline-offset: 3px; }
-  .hero-note{ font-size: 13px; color: var(--ink-soft); }
-
-  /* ---------- COMPARE ---------- */
-  .compare{ padding: 88px 0; border-top: 1px solid var(--hair); }
-  .compare-head{ max-width: 60ch; margin: 0 auto 44px; text-align:center; }
-  .compare-head h2{ font-size: clamp(28px, 3.4vw, 38px); margin: 12px 0 0; }
-  .compare-grid{ display:grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  .compare-col{
-    padding: 28px 30px; border-radius: 6px;
-    border: 1px solid var(--hair-strong);
-    background: var(--bg-panel);
-  }
-  .compare-col.debit{ box-shadow: inset 0 0 60px var(--coral-bg); }
-  .compare-col.credit{ box-shadow: inset 0 0 60px var(--mint-bg); }
-  .compare-col h3{
-    font-family:'IBM Plex Mono', monospace;
-    font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase;
-    margin: 0 0 20px;
-  }
-  .compare-col.debit h3{ color: var(--coral); }
-  .compare-col.credit h3{ color: var(--mint); }
-  .compare-col ul{ list-style: none; margin:0; padding:0; }
-  .compare-col li{
-    padding: 12px 0; border-top: 1px solid var(--hair);
-    font-size: 15px; color: var(--ink);
-  }
-  .compare-col li:first-of-type{ border-top: none; }
-
-  /* ---------- VIEWS ---------- */
-  .views{ padding: 88px 0; border-top: 1px solid var(--hair); }
-  .trend-ctl{ display:flex; align-items:center; gap: 10px; flex: none; }
-  .trend-ctl .ctl{ font-size: 12px; padding: 5px 8px; }
-
-  .views-head{ max-width: 62ch; margin: 46px auto 0; text-align:center; }
-  .views-head h2{ font-size: clamp(28px, 3.4vw, 38px); margin: 12px 0 10px; }
-  .views-head p{ color: var(--ink-soft); margin: 0; }
-
-  /* ---------- FEATURES ---------- */
-  .features{ padding: 88px 0; border-top: 1px solid var(--hair); }
-  .features-head{ max-width: 60ch; margin: 0 auto 44px; text-align:center; }
-  .features-head h2{ font-size: clamp(28px, 3.4vw, 38px); margin: 12px 0 0; }
-  .feature-grid{ display:grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
-  .feature-card{
-    padding: 28px; border-radius: 6px;
-    border: 1px solid var(--hair-strong);
-    background: var(--bg-panel);
-    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
-  }
-  .feature-card:hover{
-    border-color: var(--mint-dim);
-    box-shadow: 0 0 34px -8px var(--mint-glow);
-    transform: translateY(-2px);
-  }
-  .feature-card .num{
-    font-family:'IBM Plex Mono', monospace;
-    font-size: 12.5px; color: var(--mint);
-    display:block; margin-bottom: 14px;
-  }
-  .feature-card h4{ font-size: 19px; margin: 0 0 8px; }
-  .feature-card p{ margin:0; color: var(--ink-soft); }
-
-  /* ---------- SIGNUP ---------- */
-  .signup{ padding: 90px 0 100px; border-top: 1px solid var(--hair); }
-  .signup-card{
-    max-width: 640px; margin: 0 auto;
-    padding: 42px 40px 34px; border-radius: 6px;
-    border: 1px solid var(--hair-strong);
-    background: var(--bg-panel);
-    box-shadow: 0 0 70px -20px var(--mint-glow);
-  }
-  .signup-card h2{ font-size: clamp(24px, 3vw, 30px); margin: 10px 0 8px; }
-  .signup-card > p{ color: var(--ink-soft); margin: 0 0 28px; }
-
-  .term-line{
-    display:flex; align-items:center; gap: 10px;
-    background: var(--bg-panel-2);
-    border: 1px solid var(--hair-strong);
-    border-radius: 4px;
-    padding: 14px 16px;
-    margin-bottom: 22px;
-  }
-  .term-line .prompt{ color: var(--mint); font-family:'IBM Plex Mono', monospace; font-size: 15px; }
-  .term-line input{
-    flex:1; border: none; background: transparent;
-    font-family:'IBM Plex Mono', monospace; font-size: 15px; color: var(--ink);
-  }
-  .term-line input:focus{ outline: none; }
-  .term-line input::placeholder{ color: var(--ink-soft); opacity: 0.6; }
-
-  .signup-foot{ display:flex; align-items:center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-  .signup-foot .fine{ font-size: 12.5px; color: var(--ink-soft); }
-
-  /* Failures have to be visible now that the form actually submits somewhere. */
-  .signup-error{
-    margin: 10px 0 0; font-family:'IBM Plex Mono', monospace;
-    font-size: 12.5px; color: var(--coral);
-  }
-  .signup-error[hidden]{ display:none; }
-
-  .confirm{
-    display:none; align-items:center; gap: 12px;
-    font-family:'IBM Plex Mono', monospace; font-size: 14px; color: var(--mint);
-  }
-  .confirm .check{
-    display:inline-flex; align-items:center; justify-content:center;
-    width: 20px; height: 20px; border-radius: 50%;
-    border: 1px solid var(--mint); font-size: 12px;
-    box-shadow: 0 0 10px var(--mint-glow);
-  }
-
-  /* ---------- FOOTER ---------- */
-  footer{ border-top: 1px solid var(--hair); padding: 26px 0 44px; }
-  footer .legal a{ color: var(--ink-soft); text-decoration: none; margin-right: 16px; }
-  footer .legal a:hover{ color: var(--mint); }
-  .foot-views{
-    display:flex; flex-wrap: wrap; align-items:center; gap: 8px 18px;
-    padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--hair);
-    font-family:'IBM Plex Mono', monospace; font-size: 12.5px;
-  }
-  .foot-views .lbl{ color: var(--ink-soft); letter-spacing: 0.12em; text-transform: uppercase; font-size: 11px; }
-  .foot-views a{ color: var(--ink-soft); text-decoration: none; transition: color .18s ease; }
-  .foot-views a:hover{ color: var(--mint); }
-  .foot-inner{ display:flex; justify-content:space-between; align-items:center; flex-wrap: wrap; gap: 10px; }
-  .foot-inner .tag{ font-style: italic; color: var(--ink-soft); font-size: 14px; }
-  .foot-inner .copy{ font-family:'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-soft); }
-
-  /* ==========================================================
-     THE DASHBOARD — live demo views, inline on this page.
-     Everything below is scoped to #dash so it can't reach the
-     rest of the landing page.
-     ========================================================== */
-  .dash-section{ padding: 40px 0 88px; border-top: 1px solid var(--hair); scroll-margin-top: 74px; }
-  .dash-wrap{ max-width: 1240px; margin: 0 auto; padding: 0 28px; }
-
-  #dash .eyebrow{
-    font-family:'IBM Plex Mono', monospace;
-    font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
-    color: var(--muted); margin: 0;
-  }
-  #dash .sr-only, .dash-wrap .sr-only{
-    position:absolute; width:1px; height:1px; padding:0; margin:-1px;
-    overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
-  }
-
-  /* ---------- tab strip + filters ---------- */
-  .dash-bar{
-    display:flex; align-items:center; justify-content:space-between;
-    gap: 16px; flex-wrap: wrap; margin-bottom: 18px;
-  }
-  .dash-tabs{ display:flex; gap: 6px; flex-wrap: wrap; }
-  .dash-tab{
-    font-family:'IBM Plex Mono', monospace; font-size: 12.5px;
-    color: var(--ink-soft); background: transparent;
-    border: 1px solid var(--hair); border-radius: 4px;
-    padding: 8px 13px; cursor: pointer; white-space: nowrap;
-    transition: color .18s ease, border-color .18s ease, background .18s ease;
-  }
-  .dash-tab:hover{ color: var(--ink); border-color: var(--hair-strong); }
-  .dash-tab[aria-current="true"]{
-    color: var(--mint); border-color: var(--mint-dim); background: var(--mint-bg);
-  }
-  .dash-filters{ display:flex; align-items:center; gap: 10px; flex-wrap: wrap; }
-
-  #dash .ctl{
-    font-family:'IBM Plex Sans', sans-serif; font-size: 13.5px; color: var(--ink);
-    background: var(--bg-panel-2); border: 1px solid var(--hair-strong);
-    border-radius: 5px; padding: 7px 10px; min-height: 34px;
-  }
-  #dash select.ctl{
-    appearance: none; padding-right: 26px; cursor: pointer;
-    background-image: linear-gradient(45deg,transparent 50%,var(--ink-soft) 50%),linear-gradient(135deg,var(--ink-soft) 50%,transparent 50%);
-    background-position: calc(100% - 14px) 15px, calc(100% - 9px) 15px;
-    background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
-  }
-  #dash .linkbtn{
-    background:none; border:none; color: var(--ink-soft); font: inherit; font-size: 12.5px;
-    text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 4px;
-  }
-  #dash .linkbtn:hover{ color: var(--ink); }
-
-  /* ---------- the scroller ---------- */
-  .dash-rail{
-    display: flex; gap: 20px;
-    overflow-x: auto; overflow-y: hidden;
-    scroll-snap-type: x mandatory;
-    scroll-behavior: smooth;
-    scrollbar-width: none;
-    transition: height .28s ease;
-    border-radius: 6px;
-  }
-  .dash-rail::-webkit-scrollbar{ display: none; }
-  .dash-rail:focus-visible{ outline: 2px solid var(--mint); outline-offset: 4px; }
-  .dash-panel{
-    flex: 0 0 100%; min-width: 0;
-    scroll-snap-align: start;
-    padding: 24px 26px 26px; border-radius: 6px;
-    border: 1px solid var(--hair-strong);
-    background: var(--bg-panel);
-    align-self: flex-start;
-  }
-  .dash-panel h3{ font-family:'Space Grotesk', sans-serif; font-size: 21px; font-weight: 600; margin: 10px 0 6px; letter-spacing: -0.015em; }
-  .dash-panel .panel-lede{ margin: 0 0 22px; color: var(--ink-soft); font-size: 14.5px; max-width: 76ch; }
-
-  .dash-foot{ display:flex; align-items:center; gap: 14px; margin-top: 18px; flex-wrap: wrap; }
-  .dash-arrow{
-    width: 34px; height: 34px; flex: none;
-    display:inline-flex; align-items:center; justify-content:center;
-    font-size: 17px; line-height: 1;
-    color: var(--ink-soft); background: var(--bg-panel);
-    border: 1px solid var(--hair-strong); border-radius: 4px; cursor: pointer;
-    transition: color .18s ease, border-color .18s ease;
-  }
-  .dash-arrow:hover:not(:disabled){ color: var(--mint); border-color: var(--mint-dim); }
-  .dash-arrow:disabled{ opacity: .35; cursor: default; }
-  .dash-dots{ display:flex; gap: 7px; }
-  .dash-dots i{ width: 6px; height: 6px; border-radius: 50%; background: var(--hair-strong); transition: background .18s ease, transform .18s ease; }
-  .dash-dots i.on{ background: var(--mint); transform: scale(1.35); }
-  .dash-note{ margin-left: auto; font-family:'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--ink-soft); }
-
-  /* ---------- hero figure + stat tiles ---------- */
-  #dash .top-grid{ display:grid; grid-template-columns: minmax(0,1.05fr) minmax(0,1.35fr); gap: 16px; }
-  #dash .kpi-grid{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
-  #dash .card{
-    background: var(--dash-surface); border: 1px solid var(--hair);
-    border-radius: 6px; padding: 20px 22px;
-  }
-  #dash .card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap: 14px; margin-bottom: 6px; }
-  #dash .card-head .sub{ font-size: 12.5px; color: var(--ink-soft); margin: 4px 0 0; }
-
-  #dash .hero-fig{ font-size: 46px; line-height: 1.05; font-weight: 600; letter-spacing: -0.02em; margin: 10px 0 2px; }
-  #dash .hero-sub{ font-size: 13px; color: var(--ink-soft); margin: 0 0 18px; }
-  #dash .hero-sub b{ color: var(--ink); font-weight: 600; }
-
-  #dash .meter{ margin-top: 4px; }
-  #dash .meter-track{ position: relative; height: 10px; border-radius: 2px; }
-  #dash .meter-fill{ position: absolute; inset: 0 auto 0 0; border-radius: 2px 4px 4px 2px; }
-  #dash .meter-tick{ position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--ink); border-radius: 1px; }
-  #dash .meter-legend{ display:flex; justify-content:space-between; gap: 12px; margin-top: 9px; font-size: 12px; color: var(--muted); }
-  #dash .meter-legend .mono{ color: var(--ink-soft); }
-
-  #dash .status{ display:inline-flex; align-items:center; gap: 7px; font-size: 13px; font-weight: 600; }
-  #dash .status .ico{ font-size: 12px; line-height: 1; }
-  #dash .status.good{ color: var(--good); }
-  #dash .status.warning{ color: var(--warning); }
-  #dash .status.critical{ color: var(--critical); }
-
-  #dash .tile{
-    background: var(--dash-surface); border: 1px solid var(--hair); border-radius: 6px;
-    padding: 16px 18px; display:flex; flex-direction: column; gap: 2px;
-  }
-  #dash .tile .t-label{ font-size: 12.5px; color: var(--ink-soft); }
-  #dash .tile .t-value{ font-size: 25px; font-weight: 600; letter-spacing: -0.015em; margin-top: 2px; }
-  #dash .tile .t-foot{ display:flex; align-items:flex-end; justify-content:space-between; gap: 10px; margin-top: 8px; }
-  #dash .tile .t-delta{ font-size: 12.5px; display:flex; align-items:center; gap: 5px; }
-  #dash .tile .t-delta .dir{ font-size: 11px; }
-  #dash .tile .t-delta.up-good{ color: var(--good); }
-  #dash .tile .t-delta.down-bad{ color: var(--critical); }
-  #dash .tile .t-delta.flat{ color: var(--muted); }
-  #dash .tile .t-delta .vs{ color: var(--muted); }
-  #dash .spark{ display: block; }
-
-  /* ---------- chart chrome ---------- */
-  #dash figure{ margin: 0; }
-  #dash figcaption{ font-size: 12.5px; color: var(--muted); margin-top: 12px; }
-  #dash .scroll-x{ overflow-x: auto; }
-
-  #dash .tbl-toggle{
-    font-family:'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
-    color: var(--ink-soft); background: transparent; border: 1px solid var(--hair-strong);
-    border-radius: 4px; padding: 5px 9px; cursor: pointer; white-space: nowrap;
-  }
-  #dash .tbl-toggle:hover{ color: var(--ink); background: var(--bg-panel-2); }
-  #dash .tbl-toggle[aria-pressed="true"]{ color: var(--mint); border-color: var(--mint-dim); background: var(--mint-bg); }
-
-  #dash .legend{ display:flex; flex-wrap: wrap; gap: 6px 16px; margin: 12px 0 2px; padding: 0; list-style: none; }
-  #dash .legend li{ display:flex; align-items:center; gap: 7px; font-size: 12.5px; color: var(--ink-soft); }
-  #dash .legend .swatch{ width: 11px; height: 11px; border-radius: 2px; flex: none; }
-  #dash .legend button{ background:none; border:none; padding: 2px 0; font: inherit; color: inherit; cursor: pointer; display:flex; align-items:center; gap: 7px; }
-  #dash .legend button[aria-pressed="true"]{ color: var(--muted); }
-  #dash .legend button[aria-pressed="true"] .swatch{ opacity: .28; }
-
-  #dash .gridline{ stroke: var(--dash-grid); stroke-width: 1; shape-rendering: crispEdges; }
-  #dash .axisline{ stroke: var(--dash-axis); stroke-width: 1; shape-rendering: crispEdges; }
-  #dash .tick{ font-family:'IBM Plex Mono', monospace; font-size: 10.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
-  #dash .axlabel{ font-family:'IBM Plex Sans', sans-serif; font-size: 11.5px; fill: var(--muted); }
-  #dash .dlabel{ font-family:'IBM Plex Sans', sans-serif; font-size: 11.5px; fill: var(--ink); }
-  #dash .dlabel.soft{ fill: var(--ink-soft); }
-
-  /* ---------- year-ago comparison line ----------
-     Neutral and dashed on purpose: it is a reference mark, not a seventh
-     category competing with the stack underneath it. */
-  #dash .yoy-line{ stroke: var(--ink); stroke-width: 2; stroke-dasharray: 5 4;
-                   stroke-linecap: round; stroke-linejoin: round; opacity: .78; }
-  #dash .yoy-dot{ fill: var(--bg-panel); stroke: var(--ink); stroke-width: 2; }
-  #dash .legend .legend-static{ color: var(--muted); }
-  #dash .legend .swatch-line{
-    width: 15px; height: 0; flex: none;
-    border-top: 2px dashed var(--ink); opacity: .78;
-  }
-  #dash .hit{ fill: transparent; }
-  #dash .seg{ transition: opacity .12s ease; }
-  #dash g.mark:focus{ outline: none; }
-  #dash g.mark:focus-visible rect.hit{ stroke: var(--ink); stroke-width: 1.5; }
-  #dash .ribbon{ transition: fill-opacity .14s ease; }
-  #dash .snode{ shape-rendering: crispEdges; }
-
-  /* narrow screens: cash flow as a stacked bar + labelled rows */
-  #dash .flow-head{
-    display:flex; justify-content:space-between; align-items: baseline; gap: 12px;
-    font-family:'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
-    color: var(--muted); margin: 16px 0 8px; padding-bottom: 7px; border-bottom: 1px solid var(--hair);
-  }
-  #dash .flow-head .mono{ color: var(--ink); font-size: 12px; letter-spacing: 0; text-transform: none; }
-  #dash .flow-bar{ display:flex; gap: 2px; height: 14px; margin: 2px 0 12px; }
-  #dash .flow-bar span:first-child{ border-radius: 3px 0 0 3px; }
-  #dash .flow-bar span:last-child{ border-radius: 0 3px 3px 0; }
-  #dash .flow-row{ display:grid; grid-template-columns: 12px minmax(0,1fr) auto 58px; gap: 10px; align-items:center; padding: 7px 0; font-size: 13.5px; }
-  #dash .flow-row + .flow-row{ border-top: 1px solid var(--hair); }
-  #dash .flow-row .swatch{ width: 10px; height: 10px; border-radius: 2px; }
-  #dash .flow-row .famt{ font-size: 13px; font-variant-numeric: tabular-nums; }
-  #dash .flow-row .fshare{ font-size: 12.5px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
-
-  /* ---------- budget rows ---------- */
-  #dash .brow{ display:grid; grid-template-columns: 132px minmax(0,1fr) 124px; gap: 16px; align-items:center; padding: 9px 0; border-top: 1px solid var(--hair); }
-  #dash .brow:first-of-type{ border-top: none; }
-  #dash .brow .bname{ display:flex; align-items:center; gap: 8px; font-size: 13.5px; }
-  #dash .brow .bname .swatch{ width: 10px; height: 10px; border-radius: 2px; flex: none; }
-  #dash .brow .bname button{ background:none; border:none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
-  #dash .brow .bname button:hover{ text-decoration: underline; text-underline-offset: 3px; }
-  #dash .brow .bamt{ text-align: right; font-family:'IBM Plex Mono', monospace; font-size: 13px; font-variant-numeric: tabular-nums; }
-  #dash .brow .bamt .of{ color: var(--muted); font-size: 11.5px; }
-  #dash .btrack{ position: relative; height: 12px; border-radius: 2px; }
-  #dash .bfill{ position:absolute; left:0; top:0; bottom:0; border-radius: 2px 4px 4px 2px; }
-  #dash .blimit{ position:absolute; top:-4px; bottom:-4px; width: 2px; background: var(--ink-soft); border-radius: 1px; }
-  #dash .bstatus{ font-size: 11.5px; display:flex; align-items:center; gap: 5px; margin-top: 5px; }
-
-  /* ---------- transactions ---------- */
-  #dash .tx-tools{ display:flex; align-items:center; gap: 12px; flex-wrap: wrap; margin: 0 0 8px; min-height: 36px; }
-  #dash .tx-tools .count{ font-size: 12.5px; color: var(--ink-soft); }
-  #dash table.data{ width: 100%; border-collapse: collapse; font-size: 13.5px; }
-  #dash table.data th{
-    font-family:'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
-    color: var(--muted); text-align: left; font-weight: 500; padding: 9px 10px;
-    border-bottom: 1px solid var(--hair-strong); white-space: nowrap;
-  }
-  #dash table.data td{ padding: 9px 10px; border-bottom: 1px solid var(--hair); vertical-align: middle; }
-  #dash table.data tr:last-child td{ border-bottom: none; }
-  #dash table.data tbody tr:hover{ background: rgba(231,238,243,0.03); }
-  #dash table.data .num{ font-family:'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-  #dash table.data .num.pos{ color: var(--good); }
-  #dash table.data .date{ font-family:'IBM Plex Mono', monospace; color: var(--ink-soft); white-space: nowrap; font-variant-numeric: tabular-nums; }
-  #dash table.data .acct{ color: var(--muted); font-size: 12.5px; white-space: nowrap; }
-  #dash table.data .merchant{ font-weight: 500; }
-  #dash table.data .flag{ font-size: 11px; color: var(--muted); }
-  #dash .cat-cell{ display:flex; align-items:center; gap: 8px; }
-  #dash .cat-cell .swatch{ width: 10px; height: 10px; border-radius: 2px; flex: none; }
-  #dash select.cat-select{
-    font-family:'IBM Plex Sans', sans-serif; font-size: 13px; color: var(--ink);
-    background: transparent; border: 1px solid transparent; border-radius: 5px;
-    padding: 4px 22px 4px 7px; appearance: none; cursor: pointer; min-height: 28px;
-    background-image: linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
-    background-position: calc(100% - 12px) 12px, calc(100% - 7px) 12px;
-    background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
-  }
-  #dash select.cat-select:hover{ border-color: var(--hair-strong); background-color: var(--bg-panel-2); }
-  #dash input[type="checkbox"]{ accent-color: var(--mint); width: 15px; height: 15px; cursor: pointer; }
-  #dash .btn{
-    font-family:'IBM Plex Mono', monospace; font-size: 12.5px;
-    background: var(--bg-panel-2); color: var(--ink); border: 1px solid var(--hair-strong);
-    border-radius: 5px; padding: 8px 13px; cursor: pointer;
-  }
-  #dash .btn:hover{ background: #18242F; }
-  #dash .btn-accent{ background: var(--mint); color: #04120C; border-color: var(--mint); font-weight: 600; }
-  #dash .btn-accent:hover{ background: #3af3bf; }
-  #dash .show-more{ display: block; width: 100%; margin-top: 12px; }
-  #dash .empty{ padding: 26px 4px; color: var(--muted); font-size: 13.5px; text-align: center; }
-
-  /* ---------- tooltip + toast (rendered on <body>, outside #dash) ---------- */
-  .tip{
-    position: fixed; z-index: 60; pointer-events: none; opacity: 0; transform: translateY(2px);
-    transition: opacity .1s ease;
-    background: #0A1219; border: 1px solid var(--hair-strong); border-radius: 6px;
-    padding: 9px 11px; min-width: 132px; max-width: 260px;
-    box-shadow: 0 12px 34px rgba(0,0,0,.55);
-  }
-  .tip.on{ opacity: 1; }
-  .tip .tip-title{ font-family:'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
-  .tip .row{ display:flex; align-items: baseline; gap: 9px; justify-content: space-between; margin-top: 3px; }
-  .tip .row .key{ display:flex; align-items:center; gap: 7px; color: var(--ink-soft); font-size: 12px; }
-  .tip .row .key i{ display:block; width: 12px; height: 2px; border-radius: 1px; flex: none; }
-  .tip .row .val{ font-family:'IBM Plex Mono', monospace; font-size: 13px; color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .tip .tot{ border-top: 1px solid var(--hair); margin-top: 7px; padding-top: 6px; }
-
-  .toast{
-    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(10px);
-    z-index: 70; opacity: 0; pointer-events: none; transition: opacity .16s ease, transform .16s ease;
-    background: #0A1219; border: 1px solid var(--hair-strong); border-radius: 8px;
-    padding: 12px 14px; display:flex; align-items:center; gap: 14px; flex-wrap: wrap;
-    box-shadow: 0 16px 40px rgba(0,0,0,.6); max-width: calc(100vw - 32px);
-  }
-  .toast.on{ opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
-  .toast .msg{ font-size: 13.5px; }
-  .toast .msg b{ font-weight: 600; }
-  .toast .btn{
-    font-family:'IBM Plex Mono', monospace; font-size: 12.5px;
-    background: var(--bg-panel-2); color: var(--ink); border: 1px solid var(--hair-strong);
-    border-radius: 5px; padding: 8px 13px; cursor: pointer;
-  }
-  .toast .btn-accent{ background: var(--mint); color: #04120C; border-color: var(--mint); font-weight: 600; }
-
-  @media (max-width: 1080px){
-    #dash .top-grid{ grid-template-columns: minmax(0,1fr); }
-  }
-  @media (max-width: 720px){
-    .dash-wrap{ padding: 0 16px; }
-    .dash-panel{ padding: 18px 16px 20px; }
-    #dash .kpi-grid{ grid-template-columns: minmax(0,1fr); }
-    #dash .hero-fig{ font-size: 38px; }
-    #dash .brow{ grid-template-columns: 106px minmax(0,1fr); }
-    #dash .brow .bamt{ grid-column: 1 / -1; text-align: left; }
-    .dash-bar{ gap: 12px; }
-    .dash-note{ display: none; }
-  }
-
-  @media (max-width: 860px){
-    .compare-grid{ grid-template-columns: 1fr; }
-    .feature-grid{ grid-template-columns: 1fr; }
-    .signup-card{ padding: 30px 22px 26px; }
-    .nav-links{ gap: 12px; }
-  }
-
-  @media (prefers-reduced-motion: reduce){
-    *{ animation: none !important; transition: none !important; }
-    html{ scroll-behavior: auto; }
-    .bg-grid.silver{ opacity: 0.14; }
+  @media (max-width:560px){
+    .wrap{ padding:0 20px; }
+    .hero h1{ font-size:36px; }
+    .sec-head h2, .join h2, .budget h2, .dark h2{ font-size:30px; }
   }
 </style>
 </head>
 <body>
 
-<div class="bg-base"></div>
-<div class="bg-grid silver"></div>
-
-<div class="page">
-
-<nav class="nav">
-  <div class="wrap nav-inner">
-    <div class="wordmark">
-      <span class="b display">Bilancio</span>
-      <span class="m">Money<span class="cursor"></span></span>
-    </div>
-    <div class="nav-links">
-      <a class="nav-link" href="#dash">The dashboard</a>
-      <!-- Access is invitation-only, so the waitlist IS the sign-up path.
-           A "Sign up" button here would only lead people to a refusal. -->
-      <a class="nav-link" href="/app/">Sign in</a>
-      <a class="nav-cta" href="#signup">Reserve your line →</a>
-    </div>
-  </div>
-</nav>
-
-<header class="hero">
-  <div class="wrap">
-    <span class="eyebrow">// live ledger — early access</span>
-    <h1 class="display">Watch your balance<br><span class="glow">breathe.</span></h1>
-    <p class="lede">Every account feeds one number, updated the instant something moves. This is money, without the lag.</p>
-
-    <div class="ticker-wrap">
-      <!-- The four accounts converge on the balance itself. No centre dot:
-           the number is the point they meet at. -->
-      <svg class="ticker-net" viewBox="0 0 760 220" aria-hidden="true" focusable="false">
-        <path class="flow" d="M110,40 C 260,40 300,90 380,110"/>
-        <path class="flow" d="M650,40 C 500,40 460,90 380,110"/>
-        <path class="flow" d="M110,180 C 260,180 300,120 380,110"/>
-        <path class="flow" d="M650,180 C 500,180 460,120 380,110"/>
-
-        <circle class="center-glow" cx="380" cy="110" r="11"/>
-        <circle class="center-dot" cx="380" cy="110" r="3.2"/>
-
-        <circle class="node-ring" cx="110" cy="40" r="26"/>
-        <text class="node-label" x="110" y="44">Checking</text>
-
-        <circle class="node-ring" cx="650" cy="40" r="26"/>
-        <text class="node-label" x="650" y="44">Savings</text>
-
-        <circle class="node-ring" cx="110" cy="180" r="26"/>
-        <text class="node-label" x="110" y="184">Card</text>
-
-        <circle class="node-ring" cx="650" cy="180" r="26"/>
-        <text class="node-label" x="650" y="184">Invest</text>
-      </svg>
-
-      <div class="ticker mono" id="ticker">$0.00</div>
-      <div class="ticker-label"><span class="dot"></span>net balance · updating live</div>
-    </div>
-
-    <div class="hero-actions">
-      <button class="btn-primary" onclick="document.getElementById('signup').scrollIntoView({behavior:'smooth'})">Reserve your line</button>
-      <a class="nav-cta" href="#dash">See the dashboard →</a>
-      <span class="hero-note">No card. No spam. One email when we open the ledger.</span>
-    </div>
+<header>
+  <div class="wrap head-inner">
+    <a class="lockup" href="/" aria-label="Bilancio Money — home">
+      <span class="mark-glide"><span class="mark-swoop">
+        <img src="/brand/owl-mark-light.png" alt="" width="34">
+      </span></span>
+      <span class="word">Bilancio</span>
+      <span class="desc">Money</span>
+      <span class="coins" aria-hidden="true">
+        <span><i></i><i></i></span>
+        <span><i></i><i></i><i></i></span>
+        <span><i></i><i></i><i></i><i></i></span>
+        <span><i></i><i></i><i></i><i></i><i></i></span>
+      </span>
+    </a>
+    <nav class="main">
+      <a href="#views">The dashboards</a>
+      <a href="#budget">How it works</a>
+      <a href="#trust">Your data</a>
+      <a href="/app/">See the demo</a>
+      <a class="btn" href="#join">Join the waitlist</a>
+    </nav>
   </div>
 </header>
 
-<section class="dash-section" id="dash">
-  <div class="dash-wrap">
+<section class="hero">
+  <div class="wrap">
+    <span class="badge">Early access · waitlist open</span>
+    <h1>Find out where you actually stand.</h1>
+    <p class="sub">Your accounts in one place, sorted, with a budget that builds itself from
+      what you have actually spent — and then says plainly whether you are inside it.</p>
 
+    <form class="capture" data-signup>
+      <input type="email" placeholder="you@example.com" required aria-label="Email address">
+      <button type="submit" class="btn">Join the waitlist</button>
+    </form>
+    <p class="fine" data-fine>Invitation-only while we open it to a first group. One email, when it opens.</p>
+    <p class="sign-err" data-error role="alert" hidden></p>
 
-    <div class="dash-bar">
-      <div class="dash-tabs" id="dash-tabs">
-        <button class="dash-tab" type="button" data-view="view-overview" aria-current="true">Overview</button>
-        <button class="dash-tab" type="button" data-view="view-cashflow">Cash flow</button>
-        <button class="dash-tab" type="button" data-view="view-categories">Categories</button>
-        <button class="dash-tab" type="button" data-view="view-trend">Trend</button>
-        <button class="dash-tab" type="button" data-view="view-transactions">Transactions</button>
-      </div>
-      <div class="dash-filters">
-        <label class="sr-only" for="f-range">Date range</label>
-        <select class="ctl" id="f-range">
-          <option value="this-month">This month</option>
-          <option value="last-month">Last month</option>
-          <option value="last-3">Last 3 months</option>
-          <option value="last-6">Last 6 months</option>
-          <option value="ytd">Year to date</option>
-        </select>
-        <label class="sr-only" for="f-account">Account</label>
-        <select class="ctl" id="f-account"></select>
-        <span class="sr-only" id="rules-count">No rules yet</span>
-        <button class="linkbtn" id="reset-demo" type="button">Reset demo</button>
-      </div>
+    <div class="done" data-done>
+      <span class="tick" aria-hidden="true">✓</span>
+      <span><b>You're on the list.</b> We'll write to you when the ledger opens.</span>
     </div>
 
-    <div class="dash-rail" id="dash-rail" tabindex="0" role="group" aria-label="Dashboard views — scroll sideways, or use the buttons below">
+    <div class="hero-shot">
+      <img src="/shots/shot-overview.png"
+           alt="The Overview dashboard: this month's performance and the first row of figures">
+    </div>
+  </div>
+</section>
 
-      <!-- ---------- OVERVIEW ---------- -->
-      <article class="dash-panel" id="view-overview" aria-labelledby="h-overview">
-        <p class="eyebrow">// overview</p>
-        <h3 id="h-overview">What's actually left this month</h3>
-        <p class="panel-lede">Safe-to-spend up front, with a pace line showing whether you're ahead of the month — then money in, money out, kept, and your savings rate, each against the same days last month.</p>
-        <div class="top-grid">
-          <div class="card">
-            <p class="eyebrow" id="hero-label">Safe to spend</p>
-            <p class="hero-fig" id="hero-value">—</p>
-            <p class="hero-sub" id="hero-sub"></p>
-            <div class="meter" id="hero-meter"></div>
-          </div>
-          <div class="kpi-grid" id="kpi-row"></div>
-        </div>
-      </article>
+<div class="trio">
+  <div class="wrap trio-grid">
+    <div>
+      <span class="num">01</span>
+      <h3>The budget builds itself</h3>
+      <p>No blank form to fill in. It reads what you have spent, sets the one-off costs
+        aside, and keeps the months that are always heavy heavy.</p>
+    </div>
+    <div>
+      <span class="num">02</span>
+      <h3>Every view asks one plain question</h3>
+      <p>Are you inside the plan. Is this month worse than the same month a year ago.
+        What did you actually keep. One question, one answer, one screen.</p>
+    </div>
+    <div>
+      <span class="num">03</span>
+      <h3>Nothing is sold on</h3>
+      <p>No advertising, no analytics, no third-party tracking of any kind. Your ledger
+        is read to show it back to you, and for nothing else.</p>
+    </div>
+  </div>
+</div>
 
-      <!-- ---------- CASH FLOW ---------- -->
-      <article class="dash-panel" id="view-cashflow" aria-labelledby="h-cashflow">
-        <figure>
-          <div class="card-head">
-            <div>
-              <p class="eyebrow">// cash flow</p>
-              <h3 id="h-cashflow">Every dollar in, and where it left</h3>
-              <p class="sub" id="sankey-sub"></p>
-            </div>
-            <button class="tbl-toggle" type="button" data-table="sankey" aria-pressed="false">Table view</button>
-          </div>
-          <p class="panel-lede">Paychecks and side income on the left, the ledger in the middle, every category on the right — sized by the amount and labelled with it.</p>
-          <div class="scroll-x" id="sankey-chart"></div>
-          <div id="sankey-table" hidden></div>
-          <figcaption id="sankey-caption">Ribbon thickness is the amount. Every flow is labelled, so nothing depends on colour alone.</figcaption>
-        </figure>
-      </article>
+<section class="views" id="views">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">The dashboards</span>
+      <h2>Seven views, each with a job.</h2>
+      <p>Every screen below is the product as it stands, running on a demonstration
+        account of invented transactions. The headings are the app's own.</p>
+    </div>
 
-      <!-- ---------- CATEGORIES ---------- -->
-      <article class="dash-panel" id="view-categories" aria-labelledby="h-categories">
-        <figure>
-          <div class="card-head">
-            <div>
-              <p class="eyebrow">// categories</p>
-              <h3 id="h-categories">Shopping, Groceries, Home, Pets</h3>
-              <p class="sub" id="budget-sub"></p>
-            </div>
-            <button class="tbl-toggle" type="button" data-table="budget" aria-pressed="false">Table view</button>
-          </div>
-          <p class="panel-lede">Each bucket against its budget line, with anything you've already blown through called out in words, not just colour.</p>
-          <div id="budget-chart"></div>
-          <div id="budget-table" hidden></div>
-          <figcaption>The pale tick on each bar is the budget line. Click a category to filter the transactions view.</figcaption>
-        </figure>
-      </article>
+    <div class="row">
+      <div class="row-text">
+        <span class="eyebrow">Overview</span>
+        <h3>Where things stand</h3>
+        <p>This month against the plan and against the month before it — what came in,
+          what went out, what is left, and the rate you are keeping it at.</p>
+      </div>
+      <div class="shot"><img src="/shots/shot-overview.png" alt="The Overview dashboard" loading="lazy"></div>
+    </div>
 
-      <!-- ---------- TREND ---------- -->
-      <article class="dash-panel" id="view-trend" aria-labelledby="h-trend">
-        <figure>
-          <div class="card-head">
-            <div>
-              <p class="eyebrow">// trend</p>
-              <h3 id="h-trend">A year, against the year before</h3>
-              <p class="sub" id="trend-sub"></p>
-            </div>
-            <div class="trend-ctl">
-              <label class="sr-only" for="f-trend-range">Trend range</label>
-              <select class="ctl" id="f-trend-range">
-                <option value="3">Last 3 months</option>
-                <option value="6">Last 6 months</option>
-                <option value="9">Last 9 months</option>
-                <option value="12" selected>Last year</option>
-                <option value="24">Last 2 years</option>
-                <option value="36">Max</option>
-              </select>
-              <button class="tbl-toggle" type="button" data-table="trend" aria-pressed="false">Table view</button>
-            </div>
-          </div>
-          <p class="panel-lede">Where the money went each month, stacked by category — with a dashed line showing what that same month cost you a year earlier.</p>
-          <div class="scroll-x" id="trend-chart"></div>
-          <div id="trend-table" hidden></div>
-          <ul class="legend" id="trend-legend"></ul>
-          <figcaption>Every column is measured against the same month a year earlier, so seasonal spending reads as a pattern rather than a surprise.</figcaption>
-        </figure>
-      </article>
+    <div class="row">
+      <div class="row-text">
+        <span class="eyebrow">Tracker</span>
+        <h3>Against the plan</h3>
+        <p>How much of each budget has gone. Green is within it, red is past it, and a
+          line marks where it ran out — so the overspend is the part beyond the line.</p>
+      </div>
+      <div class="shot"><img src="/shots/shot-tracker.png" alt="The Tracker dashboard" loading="lazy"></div>
+    </div>
 
-      <!-- ---------- TRANSACTIONS ---------- -->
-      <article class="dash-panel" id="view-transactions" aria-labelledby="h-transactions">
-        <div class="card-head">
+    <div class="row">
+      <div class="row-text">
+        <span class="eyebrow">Trend</span>
+        <h3>A year, against the year before</h3>
+        <p>Monthly spend stacked by category, with a dashed line for the same month a
+          year earlier and this year, last year and the difference under every column.</p>
+      </div>
+      <div class="shot"><img src="/shots/shot-trend.png" alt="The Trend dashboard" loading="lazy"></div>
+    </div>
+
+    <div class="row">
+      <div class="row-text">
+        <span class="eyebrow">Net Activity</span>
+        <h3>What you actually kept</h3>
+        <p>Money in minus money out, month by month, with a running total across the
+          period. A bad month inside a good year is not the same thing as a bad year.</p>
+      </div>
+      <div class="shot"><img src="/shots/shot-net-activity.png" alt="The Net Activity dashboard" loading="lazy"></div>
+    </div>
+
+    <div class="row">
+      <div class="row-text">
+        <span class="eyebrow">Budgeting</span>
+        <h3>Your plan</h3>
+        <p>Every category by month, as blocks you can take hold of. Drag one and the
+          figure at the top moves with it, so the cost of a decision is visible while
+          you are still making it.</p>
+      </div>
+      <div class="shot"><img src="/shots/shot-budgeting.png" alt="The Budgeting dashboard" loading="lazy"></div>
+    </div>
+
+    <div class="row">
+      <div class="row-text">
+        <span class="eyebrow">Net Worth</span>
+        <h3>What you are worth</h3>
+        <p>What you own against what you owe, reconstructed month by month — so the line
+          behind the figure is as real as the figure.</p>
+      </div>
+      <div class="shot"><img src="/shots/shot-net-worth.png" alt="The Net Worth dashboard" loading="lazy"></div>
+    </div>
+
+    <div class="row">
+      <div class="row-text">
+        <span class="eyebrow">Transactions</span>
+        <h3>Every line</h3>
+        <p>Amounts read the way you think about them: money in is positive. Refile
+          anything, and make a rule from it so the next one files itself.</p>
+      </div>
+      <div class="shot"><img src="/shots/shot-transactions.png" alt="The Transactions dashboard" loading="lazy"></div>
+    </div>
+  </div>
+</section>
+
+<section class="budget" id="budget">
+  <div class="wrap budget-grid">
+    <div>
+      <span class="eyebrow">How it works</span>
+      <h2>How the budget is built</h2>
+      <p class="lede">One method, not a menu. It answers what is normal, where it is
+        heading and what shape the year has — all at once, from your own history.</p>
+
+      <ol class="steps">
+        <li>
+          <span class="n">01</span>
           <div>
-            <p class="eyebrow">// transactions</p>
-            <h3 id="h-transactions">Re-file anything, in one click</h3>
+            <h4>Find what is normal</h4>
+            <p>The middle month rather than the average, so one bad month cannot drag
+              the whole figure along with it.</p>
           </div>
+        </li>
+        <li>
+          <span class="n">02</span>
+          <div>
+            <h4>Set the one-offs aside</h4>
+            <p>A one-thousand-dollar vet bill is not a monthly pet budget. It comes out
+              of the monthly figure and is provided for separately.</p>
+          </div>
+        </li>
+        <li>
+          <span class="n">03</span>
+          <div>
+            <h4>Keep the shape of the year</h4>
+            <p>If May is heavy every year because that is when you travel, May stays
+              heavy. The year is not smeared flat.</p>
+          </div>
+        </li>
+        <li>
+          <span class="n">04</span>
+          <div>
+            <h4>Then you move it</h4>
+            <p>Every figure is a starting point. Drag a month, pin a holiday that is
+              already booked, and watch what it does to the year.</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+
+    <div>
+      <div class="figures">
+        <span class="eyebrow">A plan, as it comes out</span>
+        <div class="fig" style="margin-top:14px">
+          <span class="k">Left over each month</span>
+          <span class="v pos">+$5,039.77</span>
         </div>
-        <p class="panel-lede">Change a category and every view moves with it. Say “always for Chewy” once and it holds for that merchant — past and future.</p>
-        <div class="tx-tools" id="tx-tools"></div>
-        <div class="scroll-x">
-          <table class="data" id="tx-table">
-            <caption class="sr-only">Transactions for the selected range and account. Use the category menu in each row to re-file one.</caption>
-            <thead>
-              <tr>
-                <th style="width:34px"><input type="checkbox" id="select-all" aria-label="Select all visible transactions"></th>
-                <th>Date</th>
-                <th>Merchant</th>
-                <th>Account</th>
-                <th style="width:180px">Category</th>
-                <th class="num">Amount</th>
-              </tr>
-            </thead>
-            <tbody id="tx-body"></tbody>
-          </table>
+        <div class="fig">
+          <span class="k">Income planned</span>
+          <span class="v">$118,362.08</span>
         </div>
-        <button class="btn show-more" id="show-more" type="button" hidden>Show more</button>
+        <div class="fig">
+          <span class="k">Spending planned</span>
+          <span class="v">$57,884.81</span>
+        </div>
+        <div class="fig">
+          <span class="k">Worked from</span>
+          <span class="v">31 months</span>
+        </div>
+      </div>
+      <p class="fine">From a demonstration account filled with invented transactions.</p>
+    </div>
+  </div>
+</section>
+
+<section class="trust" id="trust">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Your data</span>
+      <h2>What we do, and what we will not do.</h2>
+    </div>
+    <div class="cards">
+      <article>
+        <span class="num">01</span>
+        <h3>Read-only, always</h3>
+        <p>Bilancio reads your balances and transactions. It has no ability to move
+          money, make a payment, or change anything at your bank — not switched off,
+          not built.</p>
       </article>
-
-    </div>
-
-    <div class="dash-foot">
-      <button class="dash-arrow" id="dash-prev" type="button" aria-label="Previous view">‹</button>
-      <div class="dash-dots" id="dash-dots" aria-hidden="true"></div>
-      <button class="dash-arrow" id="dash-next" type="button" aria-label="Next view">›</button>
-      <span class="dash-note">Demo data · nothing leaves your browser</span>
-    </div>
-    <div class="views-head">
-      <span class="eyebrow">// the dashboard</span>
-      <h2 class="display">Five views of the same money</h2>
-      <p>A live demo, running on made-up data right here in your browser. Scroll through the views, move a charge to another bucket, and watch every number follow.</p>
-    </div>
-
-  </div>
-</section>
-
-<section class="compare">
-  <div class="wrap">
-    <div class="compare-head">
-      <span class="eyebrow">// two columns</span>
-      <h2 class="display">Every finance app is a ledger.<br>Most just run on a delay.</h2>
-    </div>
-    <div class="compare-grid">
-      <div class="compare-col debit">
-        <h3>Debit — the old way</h3>
-        <ul>
-          <li>Five banking apps, five passwords</li>
-          <li>A spreadsheet updated once a quarter</li>
-          <li>Finding out you overspent — after the statement lands</li>
-          <li>Guessing what you're actually worth</li>
-        </ul>
-      </div>
-      <div class="compare-col credit">
-        <h3>Credit — Bilancio</h3>
-        <ul>
-          <li>One ledger, every account, live</li>
-          <li>Transactions sorted before you open the app</li>
-          <li>A budget that warns you before you're over</li>
-          <li>Your balance, updating in real time</li>
-        </ul>
-      </div>
+      <article>
+        <span class="num">02</span>
+        <h3>Credentials never touch us</h3>
+        <p>You sign in to your bank inside Plaid's own window. Your details are never
+          sent to, seen by, or stored by Bilancio. We hold a token you can revoke,
+          encrypted, and nothing else.</p>
+      </article>
+      <article>
+        <span class="num">03</span>
+        <h3>Not for sale, not to anyone</h3>
+        <p>No advertising, no analytics, no tracking. Disconnect a bank and its history
+          is deleted rather than archived — the accounts and every transaction under
+          them go with it.</p>
+      </article>
     </div>
   </div>
 </section>
 
-<section class="features">
-  <div class="wrap">
-    <div class="features-head">
-      <span class="eyebrow">// system modules</span>
-      <h2 class="display">What's running under the hood</h2>
+<section class="dark">
+  <div class="wrap dark-grid">
+    <div>
+      <span class="eyebrow">Dark mode</span>
+      <h2>The same product, after dark.</h2>
+      <p>Both themes are drawn against measured contrast rather than eyeballed, so a
+        figure is as readable at midnight as it is at noon. It follows your system,
+        and you can override it.</p>
     </div>
-    <div class="feature-grid">
-      <div class="feature-card">
-        <span class="num mono">[ 01 ]</span>
-        <h4>One ledger, every account</h4>
-        <p>Checking, savings, and cards, reconciled into a single live balance — nothing to tally by hand.</p>
-      </div>
-      <div class="feature-card">
-        <span class="num mono">[ 02 ]</span>
-        <h4>Categorized in real time</h4>
-        <p>Transactions sort themselves the moment they land. Correct one, and Bilancio remembers next time.</p>
-      </div>
-      <div class="feature-card">
-        <span class="num mono">[ 03 ]</span>
-        <h4>Budgets that hold you to them</h4>
-        <p>Set a line for each category and watch it move live — not in a statement that arrives after the damage is done.</p>
-      </div>
-      <div class="feature-card">
-        <span class="num mono">[ 04 ]</span>
-        <h4>A balance you can trust</h4>
-        <p>No more guessing what's left this month. Open the ledger — it's already added up.</p>
-      </div>
-    </div>
+    <div class="shot"><img src="/shots/shot-overview-dark.png" alt="The Overview dashboard in dark mode" loading="lazy"></div>
   </div>
 </section>
 
-<section class="signup" id="signup">
+<section class="join" id="join">
   <div class="wrap">
-    <div class="signup-card">
-      <span class="eyebrow">// open an account</span>
-      <h2 class="display">Reserve your line in the ledger</h2>
-      <p>We're opening Bilancio to a small first group. Leave your email and we'll write you in.</p>
+    <span class="eyebrow">Early access</span>
+    <h2>Reserve your line in the ledger.</h2>
+    <p class="lede">We are opening Bilancio to a small first group. Leave your email and
+      we will write you in.</p>
 
-      <form id="signup-form">
-        <div class="term-line">
-          <span class="prompt">&gt;</span>
-          <input type="email" id="email-input" placeholder="enter email_" required aria-label="Email address">
-        </div>
-        <div class="signup-foot">
-          <span class="fine">We'll email you once, when the ledger opens.</span>
-          <button type="submit" class="btn-primary">Add to the ledger</button>
-        </div>
-        <p class="signup-error" id="signup-error" role="alert" hidden></p>
-      </form>
+    <form class="capture" data-signup>
+      <input type="email" placeholder="you@example.com" required aria-label="Email address">
+      <button type="submit" class="btn">Join the waitlist</button>
+    </form>
+    <p class="fine" data-fine>We will email you once, when the ledger opens.</p>
+    <p class="sign-err" data-error role="alert" hidden></p>
 
-      <div class="confirm" id="confirm-msg">
-        <span class="check">✓</span>
-        <span>Entered. You're on the ledger — we'll be in touch.</span>
-      </div>
+    <div class="done" data-done>
+      <span class="tick" aria-hidden="true">✓</span>
+      <span><b>You're on the list.</b> We'll write to you when the ledger opens.</span>
     </div>
+
+    <p style="margin-top:26px"><a class="btn-ghost" href="/app/">See the demo</a></p>
   </div>
 </section>
 
 <footer>
-  <div class="wrap">
-    <nav class="foot-views" aria-label="Dashboard views">
-      <span class="lbl">Dashboard</span>
-      <a href="#view-overview">Overview</a>
-      <a href="#view-cashflow">Cash flow</a>
-      <a href="#view-categories">Categories</a>
-      <a href="#view-trend">Trend</a>
-      <a href="#view-transactions">Transactions</a>
-    </nav>
-  </div>
-  <div class="wrap foot-inner">
+  <div class="wrap foot">
+    <img src="/brand/owl-mark-light.png" alt="" width="26">
     <span class="tag">"il bilancio" — the balance, the equilibrium.</span>
-    <span class="legal">
+    <nav>
       <a href="/privacy/">Privacy</a>
       <a href="/terms/">Terms</a>
-    </span>
-    <span class="copy">© 2026 Bilancio Money</span>
+      <a href="mailto:security@bilanciomoney.com">Security</a>
+      <a href="mailto:support@bilanciomoney.com">Contact</a>
+    </nav>
+    <span class="copy">© 2026 Bilancio Money · Guardiano del Faro LLC</span>
   </div>
 </footer>
 
-</div>
-
-<div class="tip" id="tip" role="tooltip" aria-hidden="true"></div>
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-<script>
-  // Count-up ticker on load, then gentle live flicker
-  const ticker = document.getElementById('ticker');
-  const target = 10842.17;
-  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  function fmt(v){
-    return '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  }
-
-  if(prefersReduced){
-    ticker.textContent = fmt(target);
-    startLiveFlicker();
-  } else {
-    let start = null;
-    const duration = 1200;
-    function step(ts){
-      if(!start) start = ts;
-      const progress = Math.min((ts - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      ticker.textContent = fmt(target * eased);
-      if(progress < 1){
-        requestAnimationFrame(step);
-      } else {
-        startLiveFlicker();
-      }
-    }
-    requestAnimationFrame(step);
-  }
-
-  let current = target;
-  function startLiveFlicker(){
-    setInterval(function(){
-      const delta = (Math.random() * 2.4) - 0.6;
-      current = Math.max(0, current + delta);
-      ticker.textContent = fmt(current);
-      ticker.classList.remove('flash');
-      void ticker.offsetWidth;
-      ticker.classList.add('flash');
-    }, 3200);
-  }
-
-  // Signup — posts to the Worker, which stores the address in Postgres.
-  // Only show the confirmation once the server has actually accepted it:
-  // this promises the reader we will email them, so it must be true.
-  const form = document.getElementById('signup-form');
-  const confirmMsg = document.getElementById('confirm-msg');
-  const emailInput = document.getElementById('email-input');
-  const errorMsg = document.getElementById('signup-error');
-  const submitBtn = form.querySelector('button[type="submit"]');
-
-  form.addEventListener('submit', async function(e){
-    e.preventDefault();
-    errorMsg.hidden = true;
-
-    const original = submitBtn.textContent;
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Adding…';
-
-    try {
-      let res;
-      try {
-        res = await fetch('/api/waitlist', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: emailInput.value })
-        });
-      } catch {
-        // fetch rejects with "Failed to fetch", which tells a visitor nothing.
-        throw new Error('Could not reach the server. Check your connection and try again.');
-      }
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.reason || 'Something went wrong. Try again in a moment.');
-
-      form.style.display = 'none';
-      confirmMsg.style.display = 'flex';
-    } catch (err) {
-      errorMsg.textContent = err.message;
-      errorMsg.hidden = false;
-      submitBtn.disabled = false;
-      submitBtn.textContent = original;
-    }
-  });
-</script>
-
 <script>
 (function(){
-"use strict";
+  "use strict";
 
-/* ============================================================
-   1 · CATEGORIES — colour follows the entity, never its rank.
-   Slot order below is the validated order (see the CSS block).
-   ============================================================ */
-const CATS = [
-  { id:'home',      label:'Home',      color:'var(--cat-home)',      hex:'#3987e5', budget:2200 },
-  { id:'groceries', label:'Groceries', color:'var(--cat-groceries)', hex:'#d95926', budget:820  },
-  { id:'shopping',  label:'Shopping',  color:'var(--cat-shopping)',  hex:'#199e70', budget:480  },
-  { id:'dining',    label:'Dining',    color:'var(--cat-dining)',    hex:'#c98500', budget:420  },
-  { id:'pets',      label:'Pets',      color:'var(--cat-pets)',      hex:'#d55181', budget:210  },
-  { id:'transport', label:'Transport', color:'var(--cat-transport)', hex:'#008300', budget:300  },
-  { id:'bills',     label:'Bills',     color:'var(--cat-bills)',     hex:'#9085e9', budget:530  }
-];
-const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
-const TOTAL_BUDGET = CATS.reduce((s,c) => s + c.budget, 0);
+  /* The stacks assemble after the owl lands: bottom coin of a column first,
+     columns left to right. Written here rather than as forty CSS rules
+     because the delays are arithmetic, and arithmetic belongs in one place. */
+  var cols = document.querySelectorAll('.coins > span');
+  for (var c = 0; c < cols.length; c++) {
+    var coins = cols[c].querySelectorAll('i');
+    for (var i = 0; i < coins.length; i++) {
+      coins[i].style.animationDelay = (1.02 + c * 0.10 + i * 0.06).toFixed(2) + 's';
+    }
+  }
 
-const ACCOUNTS = [
-  { id:'checking', label:'Checking ••1847' },
-  { id:'amex',     label:'Amex ••3312' },
-  { id:'visa',     label:'Visa ••9021' },
-  { id:'savings',  label:'Savings ••5560' }
-];
-const ACCT = Object.fromEntries(ACCOUNTS.map(a => [a.id, a]));
+  /* ---- the waitlist ----
+     Two forms, one state. Whichever is used, both show the confirmation — a
+     page that asks again lower down for something already given is a page
+     contradicting itself.
 
-/* ============================================================
-   2 · DEMO DATA — deterministic, generated in the browser.
-   ============================================================ */
-const MERCHANTS = [
-  { name:'Whole Foods Market',   cat:'groceries', acct:'amex',     per:[2,4], amt:[52,148] },
-  { name:"Trader Joe's",         cat:'groceries', acct:'amex',     per:[2,3], amt:[28,86]  },
-  { name:'Costco Wholesale',     cat:'groceries', acct:'visa',     per:[0,1], amt:[110,240]},
-  { name:'Amazon',               cat:'shopping',  acct:'visa',     per:[2,5], amt:[16,120] },
-  { name:'Nordstrom',            cat:'shopping',  acct:'visa',     per:[0,1], amt:[68,210] },
-  { name:'Etsy',                 cat:'shopping',  acct:'visa',     per:[0,2], amt:[22,64]  },
-  { name:'Best Buy',             cat:'shopping',  acct:'visa',     per:[0,1], amt:[45,320] },
-  { name:'Blue Bottle Coffee',   cat:'dining',    acct:'amex',     per:[3,7], amt:[5,14]   },
-  { name:'Chipotle',             cat:'dining',    acct:'amex',     per:[1,3], amt:[12,26]  },
-  { name:'Sushi Ren',            cat:'dining',    acct:'amex',     per:[0,2], amt:[38,96]  },
-  { name:'DoorDash',             cat:'dining',    acct:'visa',     per:[1,3], amt:[24,58]  },
-  { name:'Chewy',                cat:'pets',      acct:'visa',     per:[0,2], amt:[34,92]  },
-  { name:'PetSmart',             cat:'pets',      acct:'amex',     per:[0,1], amt:[18,64]  },
-  { name:'Riverside Veterinary', cat:'pets',      acct:'visa',     per:[0,1], amt:[85,260] },
-  { name:'Bark Ave Grooming',    cat:'pets',      acct:'amex',     per:[0,1], amt:[55,75]  },
-  { name:'Shell',                cat:'transport', acct:'visa',     per:[1,3], amt:[38,72]  },
-  { name:'Uber',                 cat:'transport', acct:'amex',     per:[1,4], amt:[9,38]   },
-  { name:'BART',                 cat:'transport', acct:'checking', per:[1,3], amt:[6,20]   },
-  { name:'Home Depot',           cat:'home',      acct:'visa',     per:[0,2], amt:[24,180] },
-  { name:'IKEA',                 cat:'home',      acct:'visa',     per:[0,1], amt:[45,290] },
-  { name:'Ace Hardware',         cat:'home',      acct:'checking', per:[0,1], amt:[12,58]  }
-];
-/* recurring, same day each month */
-const RECURRING = [
-  { name:'Bay Ridge Property Mgmt', cat:'home',      acct:'checking', day:1,  amt:1850,  label:'Rent' },
-  { name:'PG&E',                    cat:'bills',     acct:'checking', day:12, amt:[88,168] },
-  { name:'Comcast Xfinity',         cat:'bills',     acct:'checking', day:8,  amt:89.99 },
-  { name:'Verizon Wireless',        cat:'bills',     acct:'checking', day:20, amt:118.4 },
-  { name:'State Farm',              cat:'bills',     acct:'checking', day:18, amt:142.6 },
-  { name:'Spotify',                 cat:'bills',     acct:'amex',     day:4,  amt:11.99 },
-  { name:'Netflix',                 cat:'bills',     acct:'amex',     day:6,  amt:22.99 }
-];
-const INCOME = [
-  { name:'Acme Corp · Payroll',  acct:'checking', days:[1,15], amt:2612.44 },
-  { name:'Studio K · Freelance', acct:'checking', days:[11],   amt:[0,980] },
-  { name:'Interest',             acct:'savings',  days:[3],    amt:[9,26] }
-];
+     The confirmation appears only once the server has accepted the address.
+     It promises we will email them, so it has to be true. */
+  var forms = Array.prototype.slice.call(document.querySelectorAll('[data-signup]'));
 
-function mulberry32(a){
-  return function(){
-    a |= 0; a = a + 0x6D2B79F5 | 0;
-    let t = Math.imul(a ^ a >>> 15, 1 | a);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-const rand = mulberry32(20260817);
-const rnd = (lo,hi) => lo + rand() * (hi - lo);
-const rndInt = (lo,hi) => Math.floor(rnd(lo, hi + 1));
-const money = v => Math.round(v * 100) / 100;
-const pick = a => a[Math.floor(rand() * a.length)];
+  function settle() {
+    forms.forEach(function (f) {
+      var wrap = f.parentNode;
+      f.style.display = 'none';
+      var fine = wrap.querySelector('[data-fine]');
+      var err = wrap.querySelector('[data-error]');
+      var done = wrap.querySelector('[data-done]');
+      if (fine) fine.style.display = 'none';
+      if (err) err.hidden = true;
+      if (done) done.style.display = 'flex';
+    });
+  }
 
-const TODAY = new Date();
-TODAY.setHours(0,0,0,0);
-/* 48 months, oldest → newest. Four years, because the trend chart draws every
-   month against the same month a year earlier: whatever range is on screen,
-   the twelve months behind it have to exist. At the widest range — 36 bars —
-   that needs 48 months, and the oldest twelve are only ever the line. */
-const TREND_RANGES = [3, 6, 9, 12, 24, 36];
-const MONTHS = [];
-for (let i = 47; i >= 0; i--){
-  const d = new Date(TODAY.getFullYear(), TODAY.getMonth() - i, 1);
-  MONTHS.push(d);
-}
-const monthKey = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2,'0');
-const daysInMonth = d => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  forms.forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var input = form.querySelector('input[type=email]');
+      var btn = form.querySelector('button[type=submit]');
+      var err = form.parentNode.querySelector('[data-error]');
+      var original = btn.textContent;
 
-function buildTransactions(){
-  const out = [];
-  let id = 0;
-  MONTHS.forEach(m => {
-    const dim = daysInMonth(m);
-    const isCurrent = m.getMonth() === TODAY.getMonth() && m.getFullYear() === TODAY.getFullYear();
-    const lastDay = isCurrent ? TODAY.getDate() : dim;
-    const push = (day, name, catId, acct, amt, note) => {
-      if (day > lastDay || day < 1) return;
-      out.push({
-        id: 't' + (id++),
-        date: new Date(m.getFullYear(), m.getMonth(), day),
-        merchant: name, defaultCat: catId, acct: acct,
-        amount: money(amt), note: note || ''
+      if (err) err.hidden = true;
+      btn.disabled = true;
+      btn.textContent = 'Adding…';
+
+      fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: input.value })
+      }).catch(function () {
+        // fetch rejects with "Failed to fetch", which tells a visitor nothing.
+        throw new Error('Could not reach the server. Check your connection and try again.');
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          if (!res.ok) throw new Error(body.reason || 'Something went wrong. Try again in a moment.');
+          settle();
+        });
+      }).catch(function (e2) {
+        if (err) { err.textContent = e2.message; err.hidden = false; }
+        btn.disabled = false;
+        btn.textContent = original;
       });
-    };
-    INCOME.forEach(src => src.days.forEach(day => {
-      const amt = Array.isArray(src.amt) ? rnd(src.amt[0], src.amt[1]) : src.amt * rnd(0.99, 1.01);
-      if (amt < 1) return;
-      push(day, src.name, null, src.acct, amt);
-    }));
-    RECURRING.forEach(r => {
-      const amt = Array.isArray(r.amt) ? rnd(r.amt[0], r.amt[1]) : r.amt;
-      push(r.day, r.name, r.cat, r.acct, -amt, r.label || '');
-    });
-    MERCHANTS.forEach(mc => {
-      const n = rndInt(mc.per[0], mc.per[1]);
-      for (let k = 0; k < n; k++){
-        push(rndInt(1, dim), mc.name, mc.cat, mc.acct, -rnd(mc.amt[0], mc.amt[1]));
-      }
     });
   });
-  out.sort((a,b) => b.date - a.date || a.id.localeCompare(b.id));
-  return out;
-}
-const TXNS = buildTransactions();
-
-/* ============================================================
-   3 · STATE — overrides + merchant rules survive a reload.
-   ============================================================ */
-const STORE_KEY = 'bilancio.dashboard.v1';
-const state = {
-  range: 'this-month',
-  account: 'all',
-  category: 'all',          // set by clicking a budget row
-  overrides: {},            // txn id  → cat id
-  rules: {},                // merchant → cat id
-  selected: new Set(),
-  txLimit: 8,
-  hidden: new Set(),        // legend toggles on the trend chart
-  trendMonths: 12,          // bars on the trend chart; the line reaches 12 further back
-  lastAction: null
-};
-try {
-  const saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
-  if (saved && typeof saved === 'object'){
-    if (saved.overrides) state.overrides = saved.overrides;
-    if (saved.rules) state.rules = saved.rules;
-  }
-} catch(e){ /* first visit, or storage blocked — demo still works */ }
-
-function persist(){
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ overrides: state.overrides, rules: state.rules }));
-  } catch(e){ /* private mode — in-memory only */ }
-}
-
-/* effective category: an explicit edit wins, then a merchant rule, then the default */
-function catOf(t){
-  if (t.amount > 0) return null;
-  return state.overrides[t.id] || state.rules[t.merchant] || t.defaultCat;
-}
-function isEdited(t){
-  return Boolean(state.overrides[t.id]) || (Boolean(state.rules[t.merchant]) && state.rules[t.merchant] !== t.defaultCat);
-}
-
-/* ============================================================
-   4 · FORMATTING
-   ============================================================ */
-const fmt0 = new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:0 });
-const fmt2 = new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', minimumFractionDigits:2, maximumFractionDigits:2 });
-const money0 = v => fmt0.format(v);
-const money2 = v => fmt2.format(v);
-function moneyCompact(v){
-  const a = Math.abs(v);
-  if (a >= 10000) return (v < 0 ? '-' : '') + '$' + (a / 1000).toFixed(a >= 100000 ? 0 : 1) + 'K';
-  return money0(v);
-}
-const pct = (v, d) => (d ? (v / d) * 100 : 0);
-const fmtPct = v => (Math.round(v * 10) / 10).toFixed(1) + '%';
-const dateShort = d => d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
-const monthShort = d => d.toLocaleDateString('en-US', { month:'short' });
-const monthLong = d => d.toLocaleDateString('en-US', { month:'long', year:'numeric' });
-
-function el(tag, cls, text){
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text != null) n.textContent = text;   // labels are data — never innerHTML
-  return n;
-}
-const SVGNS = 'http://www.w3.org/2000/svg';
-function svg(tag, attrs){
-  const n = document.createElementNS(SVGNS, tag);
-  for (const k in attrs) n.setAttribute(k, attrs[k]);
-  return n;
-}
-/* draw at the container's real width so a 24px bar is 24 real pixels — never up-scaled */
-function chartWidth(host, min){
-  const w = host.clientWidth || min;
-  return Math.max(min, Math.round(w));
-}
-/* "Groceries  $265 · 5.1%" on one line — two tspans, no collision-prone second row */
-function inlineLabel(x, y, name, detail){
-  const t = svg('text', { class:'dlabel', x:x, y:y, 'dominant-baseline':'middle' });
-  const a = svg('tspan', {}); a.textContent = name;
-  const b = svg('tspan', { class:'dlabel soft', dx:'7' }); b.textContent = detail;
-  t.appendChild(a); t.appendChild(b);
-  return t;
-}
-
-/* ============================================================
-   5 · RANGES
-   ============================================================ */
-function rangeFor(key){
-  const y = TODAY.getFullYear(), m = TODAY.getMonth();
-  switch(key){
-    case 'last-month': {
-      const s = new Date(y, m - 1, 1), e = new Date(y, m, 0);
-      return { start:s, end:e, months:1, label:monthLong(s), current:false };
-    }
-    case 'last-3': {
-      const s = new Date(y, m - 2, 1);
-      return { start:s, end:TODAY, months:3, label:'Last 3 months', current:true };
-    }
-    case 'last-6': {
-      const s = new Date(y, m - 5, 1);
-      return { start:s, end:TODAY, months:6, label:'Last 6 months', current:true };
-    }
-    case 'ytd': {
-      const s = new Date(y, 0, 1);
-      return { start:s, end:TODAY, months:m + 1, label:y + ' year to date', current:true };
-    }
-    default: {
-      const s = new Date(y, m, 1);
-      return { start:s, end:TODAY, months:1, label:monthLong(s), current:true };
-    }
-  }
-}
-/* the equivalent window immediately before — what deltas compare against */
-function priorRange(r, key){
-  const y = TODAY.getFullYear(), m = TODAY.getMonth();
-  if (key === 'this-month') return { start:new Date(y, m - 1, 1), end:new Date(y, m - 1, TODAY.getDate()) };
-  if (key === 'last-month') return { start:new Date(y, m - 2, 1), end:new Date(y, m - 1, 0) };
-  const back = r.months;
-  return { start:new Date(r.start.getFullYear(), r.start.getMonth() - back, 1), end:new Date(r.start.getFullYear(), r.start.getMonth(), 0) };
-}
-function inWindow(t, w){ return t.date >= w.start && t.date <= w.end; }
-
-function matchesFilters(t){
-  if (state.account !== 'all' && t.acct !== state.account) return false;
-  if (state.category !== 'all' && catOf(t) !== state.category) return false;
-  return true;
-}
-/* the slice every chart and stat on the page is computed from */
-function sliceFor(window_){
-  return TXNS.filter(t => inWindow(t, window_) && matchesFilters(t));
-}
-
-function totals(rows){
-  let income = 0, expense = 0;
-  const byCat = Object.fromEntries(CATS.map(c => [c.id, 0]));
-  rows.forEach(t => {
-    if (t.amount > 0) income += t.amount;
-    else { expense += -t.amount; const c = catOf(t); if (c in byCat) byCat[c] += -t.amount; }
-  });
-  return { income, expense, net: income - expense, byCat };
-}
-
-/* ============================================================
-   6 · TOOLTIP — one shared node; keyboard focus shows the same
-   ============================================================ */
-const tipEl = document.getElementById('tip');
-function showTip(rows, title, evt){
-  tipEl.textContent = '';
-  if (title){ tipEl.appendChild(el('div', 'tip-title', title)); }
-  rows.forEach(r => {
-    const row = el('div', 'row' + (r.total ? ' tot' : ''));
-    const key = el('div', 'key');
-    if (r.color){ const i = el('i'); i.style.background = r.color; key.appendChild(i); }
-    key.appendChild(document.createTextNode(r.label));
-    row.appendChild(el('div', 'val', r.value));      // value leads, label follows
-    row.insertBefore(key, row.firstChild);
-    tipEl.appendChild(row);
-  });
-  tipEl.classList.add('on');
-  tipEl.setAttribute('aria-hidden', 'false');
-  positionTip(evt);
-}
-function positionTip(evt){
-  let x = 0, y = 0;
-  if (evt && evt.clientX != null && evt.clientX !== 0){ x = evt.clientX + 14; y = evt.clientY + 14; }
-  else if (evt && evt.target && evt.target.getBoundingClientRect){
-    const b = evt.target.getBoundingClientRect();
-    x = b.left + b.width / 2; y = b.top - 8;
-  }
-  const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
-  if (x + w > window.innerWidth - 10) x = window.innerWidth - w - 10;
-  if (y + h > window.innerHeight - 10) y = Math.max(10, y - h - 26);
-  tipEl.style.left = Math.max(10, x) + 'px';
-  tipEl.style.top = Math.max(10, y) + 'px';
-}
-function hideTip(){ tipEl.classList.remove('on'); tipEl.setAttribute('aria-hidden','true'); }
-/* wire a mark: hover + keyboard focus give identical readouts */
-function bindTip(node, rowsFn, title, label){
-  node.setAttribute('tabindex', '0');
-  node.setAttribute('role', 'img');
-  if (label) node.setAttribute('aria-label', label);
-  node.addEventListener('pointerenter', e => showTip(rowsFn(), title, e));
-  node.addEventListener('pointermove', positionTip);
-  node.addEventListener('pointerleave', hideTip);
-  node.addEventListener('focus', e => showTip(rowsFn(), title, e));
-  node.addEventListener('blur', hideTip);
-}
-
-/* ============================================================
-   7 · STAT TILES — value + delta + 12-month sparkline
-   ============================================================ */
-function monthlySeries(metric){
-  // Still twelve: the tiles are a year at a glance, not the whole data set.
-  return MONTHS.slice(-12).map(m => {
-    const w = { start:new Date(m.getFullYear(), m.getMonth(), 1), end:new Date(m.getFullYear(), m.getMonth() + 1, 0) };
-    const t = totals(sliceFor(w));
-    if (metric === 'income') return t.income;
-    if (metric === 'expense') return t.expense;
-    if (metric === 'net') return t.net;
-    return t.income ? (t.net / t.income) * 100 : 0;
-  });
-}
-function sparkline(values, tone){
-  const W = 116, H = 30, P = 4;
-  const s = svg('svg', { class:'spark', width:W, height:H, viewBox:'0 0 ' + W + ' ' + H, 'aria-hidden':'true', focusable:'false' });
-  const lo = Math.min.apply(null, values), hi = Math.max.apply(null, values);
-  const span = (hi - lo) || 1;
-  const x = i => P + (i / (values.length - 1)) * (W - P * 2);
-  const y = v => H - P - ((v - lo) / span) * (H - P * 2);
-  const d = values.map((v,i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
-  s.appendChild(svg('path', { d:d + ' L' + x(values.length - 1).toFixed(1) + ',' + H + ' L' + x(0).toFixed(1) + ',' + H + ' Z',
-                              fill:'var(--deemph)', 'fill-opacity':'0.10', stroke:'none' }));
-  s.appendChild(svg('path', { d:d, fill:'none', stroke:'var(--deemph)', 'stroke-width':'2', 'stroke-linejoin':'round', 'stroke-linecap':'round' }));
-  const cx = x(values.length - 1), cy = y(values[values.length - 1]);
-  s.appendChild(svg('circle', { cx:cx, cy:cy, r:'5.5', fill:'var(--surface)' }));          // 2px surface ring
-  s.appendChild(svg('circle', { cx:cx, cy:cy, r:'3.5', fill:'var(' + tone + ')' }));
-  return s;
-}
-function statTile(o){
-  const t = el('div', 'tile');
-  t.appendChild(el('div', 't-label', o.label));
-  const v = el('div', 't-value', o.value);        // proportional figures — no tabular-nums here
-  t.appendChild(v);
-  const foot = el('div', 't-foot');
-  const dcls = o.deltaGood === null ? 'flat' : (o.deltaGood ? 'up-good' : 'down-bad');
-  const d = el('div', 't-delta ' + dcls);
-  d.appendChild(el('span', 'dir', o.deltaDir));
-  d.appendChild(el('span', null, o.delta));
-  d.appendChild(el('span', 'vs', o.vs));
-  foot.appendChild(d);
-  foot.appendChild(sparkline(o.series, o.deltaGood === false ? '--critical' : '--good'));
-  t.appendChild(foot);
-  const sr = el('span', 'sr-only', o.label + ': ' + o.value + '. ' + o.delta + ' ' + o.vs + '. Sparkline shows the last 12 months; monthly values are in the tables below.');
-  t.appendChild(sr);
-  return t;
-}
-function deltaOf(now, before, upIsGood){
-  if (!before) return { text:'no prior period', dir:'', good:null };
-  const change = ((now - before) / Math.abs(before)) * 100;
-  if (Math.abs(change) < 0.05) return { text:'flat', dir:'', good:null };
-  const up = change > 0;
-  return { text:(up ? '+' : '') + (Math.round(change * 10) / 10).toFixed(1) + '%', dir:up ? '▲' : '▼', good:(up === upIsGood) };
-}
-
-/* ============================================================
-   8 · SANKEY — income sources → the ledger → where it went
-   ============================================================ */
-function layoutColumn(items, top, bottom, gap){
-  const n = items.length;
-  if (!n) return [];
-  const H = (bottom - top) - gap * (n - 1);
-  const sum = items.reduce((s,i) => s + i.value, 0) || 1;
-  const MIN = 13;
-  let hs = items.map(i => (i.value / sum) * H);
-  let deficit = 0, flex = 0;
-  hs.forEach(h => { if (h < MIN) deficit += MIN - h; else flex += h; });
-  if (deficit > 0 && flex > 0) hs = hs.map(h => h < MIN ? MIN : h - (h / flex) * deficit);
-  let y = top;
-  return items.map((it, i) => { const o = Object.assign({}, it, { y:y, h:Math.max(1, hs[i]) }); y += hs[i] + gap; return o; });
-}
-function ribbon(x1, y1, x2, y2, h1, h2){
-  const xm = (x1 + x2) / 2;
-  return 'M' + x1 + ',' + y1 +
-         ' C' + xm + ',' + y1 + ' ' + xm + ',' + y2 + ' ' + x2 + ',' + y2 +
-         ' L' + x2 + ',' + (y2 + h2) +
-         ' C' + xm + ',' + (y2 + h2) + ' ' + xm + ',' + (y1 + h1) + ' ' + x1 + ',' + (y1 + h1) + ' Z';
-}
-function renderSankey(rows, r){
-  const host = document.getElementById('sankey-chart');
-  host.textContent = '';
-  const t = totals(rows);
-
-  const sources = [];
-  const bySrc = {};
-  rows.filter(x => x.amount > 0).forEach(x => { bySrc[x.merchant] = (bySrc[x.merchant] || 0) + x.amount; });
-  Object.keys(bySrc).sort((a,b) => bySrc[b] - bySrc[a]).forEach(k => sources.push({ key:k, label:k.split(' · ')[0], value:bySrc[k], color:'var(--good)' }));
-
-  const outs = CATS.map(c => ({ key:c.id, label:c.label, value:t.byCat[c.id], color:c.color, hex:c.hex })).filter(o => o.value > 0.5);
-  const leftover = t.net;
-  if (leftover > 0) outs.unshift({ key:'saved', label:'Left over', value:leftover, color:'var(--good)', hex:'#00F0A8' });
-  if (leftover < 0) sources.push({ key:'drawdown', label:'Drawn from savings', value:-leftover, color:'var(--warning)' });
-
-  if (!sources.length || !outs.length){
-    host.appendChild(el('p', 'empty', 'No cash flow in this slice — widen the range or clear the filters.'));
-    document.getElementById('sankey-sub').textContent = '';
-    return;
-  }
-
-  const inTotal = sources.reduce((s,i) => s + i.value, 0);
-  const outTotal = outs.reduce((s,i) => s + i.value, 0);
-
-  /* A 760px Sankey scrolled sideways on a phone hides its own labels.
-     Below that, the same part-to-whole story is told as a stacked bar + labelled rows. */
-  if (chartWidth(host, 0) < 700){
-    renderFlowCompact(host, sources, outs, inTotal, outTotal);
-    document.getElementById('sankey-caption').textContent =
-      'Bar width is the share of everything that came in. Every slice is listed below it with its amount.';
-    document.getElementById('sankey-sub').textContent =
-      money0(t.income) + ' in, ' + money0(t.expense) + ' out — ' + r.label.toLowerCase() + '.';
-    buildFlowTable(sources, outs, inTotal, outTotal);
-    return;
-  }
-
-  const W = chartWidth(host, 760), H = Math.max(340, 46 + outs.length * 44), PT = 16, PB = 20;
-  const wN = 11, xL = 4;
-  const xR = Math.round(W * 0.66), xHub = Math.round(W * 0.33);
-  const s = svg('svg', { viewBox:'0 0 ' + W + ' ' + H, width:W, height:H, role:'presentation', style:'display:block' });
-
-  const L = layoutColumn(sources, PT, H - PB, 22);
-  const R = layoutColumn(outs, PT, H - PB, 18);
-  const hubTop = PT, hubH = (H - PB) - PT;
-
-  /* hub node */
-  s.appendChild(svg('rect', { class:'snode', x:xHub, y:hubTop, width:13, height:hubH, fill:'var(--good)', 'fill-opacity':'0.5', rx:'1' }));
-
-  /* ribbons: sources → hub */
-  let hubIn = hubTop;
-  L.forEach(n => {
-    const h2 = (n.value / inTotal) * hubH;
-    const p = svg('path', { class:'ribbon', d:ribbon(xL + wN, n.y, xHub, hubIn, n.h, h2), fill:n.color, 'fill-opacity':'0.17', stroke:'none' });
-    const g = svg('g', { class:'mark' });
-    g.appendChild(p);
-    bindTip(g,
-      () => [{ label:n.label, value:money2(n.value), color:n.color }, { label:'share of money in', value:fmtPct(pct(n.value, inTotal)), total:true }],
-      'Into the ledger', n.label + ', ' + money2(n.value) + ', ' + fmtPct(pct(n.value, inTotal)) + ' of money in');
-    g.addEventListener('pointerenter', () => p.setAttribute('fill-opacity','0.34'));
-    g.addEventListener('focus', () => p.setAttribute('fill-opacity','0.34'));
-    g.addEventListener('pointerleave', () => p.setAttribute('fill-opacity','0.17'));
-    g.addEventListener('blur', () => p.setAttribute('fill-opacity','0.17'));
-    s.appendChild(g);
-    hubIn += h2;
-
-    s.appendChild(svg('rect', { class:'snode', x:xL, y:n.y, width:wN, height:n.h, fill:n.color, 'fill-opacity':'0.85', rx:'1' }));
-    s.appendChild(inlineLabel(xL + wN + 10, n.y + n.h / 2, n.label, money0(n.value)));
-  });
-
-  /* ribbons: hub → destinations */
-  let hubOut = hubTop;
-  R.forEach(n => {
-    const h1 = (n.value / outTotal) * hubH;
-    const p = svg('path', { class:'ribbon', d:ribbon(xHub + 13, hubOut, xR, n.y, h1, n.h), fill:n.color, 'fill-opacity':'0.20', stroke:'none' });
-    const g = svg('g', { class:'mark' });
-    g.appendChild(p);
-    const share = fmtPct(pct(n.value, outTotal));
-    bindTip(g,
-      () => [{ label:n.label, value:money2(n.value), color:n.color }, { label:'share of money out', value:share, total:true }],
-      'Out of the ledger', n.label + ', ' + money2(n.value) + ', ' + share + ' of money out');
-    g.addEventListener('pointerenter', () => p.setAttribute('fill-opacity','0.38'));
-    g.addEventListener('focus', () => p.setAttribute('fill-opacity','0.38'));
-    g.addEventListener('pointerleave', () => p.setAttribute('fill-opacity','0.20'));
-    g.addEventListener('blur', () => p.setAttribute('fill-opacity','0.20'));
-    s.appendChild(g);
-    hubOut += h1;
-
-    s.appendChild(svg('rect', { class:'snode', x:xR, y:n.y, width:wN, height:n.h, fill:n.color, 'fill-opacity':'0.85', rx:'1' }));
-    s.appendChild(inlineLabel(xR + wN + 10, n.y + n.h / 2, n.label, money0(n.value) + ' · ' + share));
-  });
-
-  /* hub label */
-  const hl = svg('text', { class:'axlabel', x:xHub + 6, y:hubTop - 5, 'text-anchor':'middle' });
-  hl.textContent = 'The ledger · ' + money0(inTotal);
-  s.appendChild(hl);
-
-  host.appendChild(s);
-  document.getElementById('sankey-caption').textContent =
-    'Ribbon thickness is the amount. Every flow is labelled, so nothing depends on colour alone.';
-  document.getElementById('sankey-sub').textContent =
-    money0(t.income) + ' in, ' + money0(t.expense) + ' out — ' + r.label.toLowerCase() + '.';
-  buildFlowTable(sources, outs, inTotal, outTotal);
-}
-
-/* the table twin, shared by both renderings */
-function buildFlowTable(sources, outs, inTotal, outTotal){
-  const tw = document.getElementById('sankey-table');
-  tw.textContent = '';
-  tw.appendChild(buildTable(
-    ['Flow', 'Direction', 'Amount', 'Share'],
-    sources.map(n => [n.label, 'In', money2(n.value), fmtPct(pct(n.value, inTotal))])
-      .concat(outs.map(n => [n.label, 'Out', money2(n.value), fmtPct(pct(n.value, outTotal))]))
-  ));
-}
-
-/* narrow screens: part-to-whole as a stacked bar + labelled rows (2px surface gaps) */
-function renderFlowCompact(host, sources, outs, inTotal, outTotal){
-  const wrap = el('div', 'flow-compact');
-
-  const inHead = el('div', 'flow-head');
-  inHead.appendChild(el('span', null, 'Money in'));
-  inHead.appendChild(el('span', 'mono', money0(inTotal)));
-  wrap.appendChild(inHead);
-  sources.forEach(n => wrap.appendChild(flowRow(n, inTotal)));
-
-  const outHead = el('div', 'flow-head');
-  outHead.appendChild(el('span', null, 'Where it went'));
-  outHead.appendChild(el('span', 'mono', money0(outTotal)));
-  wrap.appendChild(outHead);
-
-  const bar = el('div', 'flow-bar');
-  bar.setAttribute('role', 'img');
-  bar.setAttribute('aria-label', 'Share of money out: ' + outs.map(o => o.label + ' ' + fmtPct(pct(o.value, outTotal))).join(', '));
-  outs.forEach(n => {
-    const seg = el('span');
-    seg.style.flex = n.value + ' 0 0';
-    seg.style.background = n.color;
-    bar.appendChild(seg);
-  });
-  wrap.appendChild(bar);
-  outs.forEach(n => wrap.appendChild(flowRow(n, outTotal)));
-
-  host.appendChild(wrap);
-}
-function flowRow(n, total){
-  const row = el('div', 'flow-row');
-  const sw = el('span', 'swatch'); sw.style.background = n.color;
-  row.appendChild(sw);
-  row.appendChild(el('span', 'fname', n.label));
-  row.appendChild(el('span', 'famt mono', money0(n.value)));
-  row.appendChild(el('span', 'fshare mono', fmtPct(pct(n.value, total))));
-  return row;
-}
-
-/* ============================================================
-   9 · BUDGET BARS — bar + budget tick + status (icon and label)
-   ============================================================ */
-function renderBudgets(rows, r){
-  const host = document.getElementById('budget-chart');
-  host.textContent = '';
-  const t = totals(rows);
-  const budgetFor = c => c.budget * r.months;
-
-  const ordered = CATS.slice().sort((a,b) => t.byCat[b.id] - t.byCat[a.id]);   // rows re-sort; colours never move
-  const maxVal = Math.max.apply(null, ordered.map(c => Math.max(t.byCat[c.id], budgetFor(c)))) || 1;
-
-  if (t.expense <= 0){
-    host.appendChild(el('p', 'empty', 'No spending in this slice.'));
-  }
-
-  ordered.forEach(c => {
-    const spent = t.byCat[c.id], budget = budgetFor(c);
-    const row = el('div', 'brow');
-
-    const name = el('div', 'bname');
-    const sw = el('span', 'swatch'); sw.style.background = c.color;
-    name.appendChild(sw);
-    const btn = el('button', null, c.label);
-    btn.type = 'button';
-    btn.setAttribute('aria-label', 'Filter transactions to ' + c.label);
-    btn.addEventListener('click', () => {
-      state.category = state.category === c.id ? 'all' : c.id;
-      state.txLimit = 8; state.selected.clear();
-      render();
-      openView('view-transactions');   // filtering a category takes you to the charges behind it
-    });
-    if (state.category === c.id) btn.style.color = 'var(--good)';
-    name.appendChild(btn);
-    row.appendChild(name);
-
-    const barWrap = el('div');
-    const track = el('div', 'btrack');
-    track.style.background = 'rgba(231,238,243,0.06)';
-    const fill = el('div', 'bfill');
-    fill.style.width = Math.max(0, Math.min(100, (spent / maxVal) * 100)) + '%';
-    fill.style.background = c.color;
-    track.appendChild(fill);
-    const tick = el('div', 'blimit');
-    tick.style.left = 'calc(' + Math.min(100, (budget / maxVal) * 100) + '% - 1px)';
-    tick.title = 'Budget ' + money0(budget);
-    track.appendChild(tick);
-    barWrap.appendChild(track);
-
-    const over = spent - budget;
-    const st = el('div', 'bstatus status ' + (over > 0 ? 'critical' : (spent > budget * 0.85 ? 'warning' : 'good')));
-    st.appendChild(el('span', 'ico', over > 0 ? '⚠' : (spent > budget * 0.85 ? '!' : '✓')));
-    st.appendChild(el('span', null,
-      over > 0 ? money0(over) + ' over budget'
-               : (spent > budget * 0.85 ? money0(budget - spent) + ' left — running close' : money0(budget - spent) + ' left')));
-    barWrap.appendChild(st);
-    row.appendChild(barWrap);
-
-    const amt = el('div', 'bamt');
-    amt.appendChild(document.createTextNode(money0(spent)));
-    amt.appendChild(el('span', 'of', ' of ' + money0(budget)));
-    row.appendChild(amt);
-
-    bindTip(track,
-      () => [
-        { label:'Spent', value:money2(spent), color:c.color },
-        { label:'Budget', value:money0(budget) },
-        { label:over > 0 ? 'Over by' : 'Left', value:money0(Math.abs(over)), total:true }
-      ],
-      c.label,
-      c.label + ': ' + money2(spent) + ' of ' + money0(budget) + ' budget, ' + (over > 0 ? money0(over) + ' over' : money0(-over) + ' left'));
-
-    host.appendChild(row);
-  });
-
-  document.getElementById('budget-sub').textContent =
-    money0(t.expense) + ' spent of ' + money0(TOTAL_BUDGET * r.months) + ' budgeted' + (r.months > 1 ? ' across ' + r.months + ' months' : '') + '.' +
-    (isNarrowed() ? ' Budgets cover every account — this view is filtered, so the bars read short.' : '');
-
-  const tw = document.getElementById('budget-table');
-  tw.textContent = '';
-  tw.appendChild(buildTable(
-    ['Category', 'Spent', 'Budget', 'Difference', 'Share of spend'],
-    ordered.map(c => {
-      const spent = t.byCat[c.id], budget = budgetFor(c);
-      return [c.label, money2(spent), money0(budget),
-              (spent > budget ? '+' : '') + money0(spent - budget) + (spent > budget ? ' over' : ' under'),
-              fmtPct(pct(spent, t.expense))];
-    })
-  ));
-}
-
-/* ============================================================
-   10 · TREND — stacked columns, last 6 months, fixed slot order
-   ============================================================ */
-function renderTrend(){
-  const host = document.getElementById('trend-chart');
-  host.textContent = '';
-  /* Twelve bars, and the twelve months before them as the comparison line.
-     Both sides honour the legend toggles, or the comparison would be unfair. */
-  const monthTotal = m => {
-    const w = { start:new Date(m.getFullYear(), m.getMonth(), 1), end:new Date(m.getFullYear(), m.getMonth() + 1, 0) };
-    const t = totals(sliceFor(w));
-    return { month:m, byCat:t.byCat, total:CATS.reduce((s,c) => s + (state.hidden.has(c.id) ? 0 : t.byCat[c.id]), 0) };
-  };
-  const n = TREND_RANGES.includes(state.trendMonths) ? state.trendMonths : 12;
-  const months = MONTHS.slice(-n);
-  /* The comparison window is the visible one shifted back twelve months, so it
-     always holds exactly n entries. Ending this slice at -n instead of -12 is
-     correct only when n is 12, and silently wrong at every other range. */
-  const priorMonths = MONTHS.slice(-(n + 12), -12);
-  const data = months.map(monthTotal);
-  const prior = priorMonths.map(monthTotal);
-
-  /* At 24 and 36 bars every column cannot carry a label without them colliding,
-     so thin them out and drop the per-column totals — the axis still gives the
-     scale, and the tooltip still gives the exact figure. */
-  const labelEvery = Math.ceil(n / 12);
-  const showColumnTotals = n <= 12;
-
-  const W = chartWidth(host, 420), H = 300, PL = 56, PR = 12, PT = 22, PB = 34;   // PB holds the x-axis band
-  const plotW = W - PL - PR, plotH = H - PT - PB;
-  /* Scale to whichever is taller — a spike last year must not clip off the top. */
-  const rawMax = Math.max.apply(null, data.map(d => d.total).concat(prior.map(d => d.total))) || 1;
-  /* four ticks that land on round numbers */
-  const rough = rawMax / 4;
-  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
-  const step = mag * ([1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find(m => m * mag >= rough) || 10);
-  const yMax = step * 4;
-  const y = v => PT + plotH - (v / yMax) * plotH;
-  const band = plotW / data.length;
-  const barW = Math.min(24, band * 0.5);
-
-  const s = svg('svg', { viewBox:'0 0 ' + W + ' ' + H, width:W, height:H, role:'presentation', style:'display:block' });
-
-  for (let i = 0; i <= 4; i++){
-    const v = (yMax / 4) * i, yy = y(v);
-    s.appendChild(svg('line', { class:'gridline', x1:PL, x2:W - PR, y1:yy, y2:yy }));
-    const tk = svg('text', { class:'tick', x:PL - 9, y:yy + 3.5, 'text-anchor':'end' });
-    tk.textContent = moneyCompact(v);
-    s.appendChild(tk);
-  }
-  s.appendChild(svg('line', { class:'axisline', x1:PL, x2:W - PR, y1:y(0), y2:y(0) }));
-
-  data.forEach((d, i) => {
-    const cx = PL + band * i + band / 2;
-    const x0 = cx - barW / 2;
-    const visible = CATS.filter(c => !state.hidden.has(c.id) && d.byCat[c.id] > 0);
-    let acc = 0;
-    visible.forEach((c, k) => {
-      const v = d.byCat[c.id];
-      const yTop = y(acc + v), yBot = y(acc);
-      const isTop = k === visible.length - 1;
-      /* 2px surface gap does the separating — never a stroke around the mark */
-      const gap = k === 0 ? 0 : 2;
-      const h = Math.max(1, (yBot - yTop) - gap);
-      const rTop = isTop ? Math.min(4, h / 2) : 0;
-      const path = 'M' + x0 + ',' + (yTop + h) +
-                   ' L' + x0 + ',' + (yTop + rTop) +
-                   (rTop ? ' Q' + x0 + ',' + yTop + ' ' + (x0 + rTop) + ',' + yTop : '') +
-                   ' L' + (x0 + barW - rTop) + ',' + yTop +
-                   (rTop ? ' Q' + (x0 + barW) + ',' + yTop + ' ' + (x0 + barW) + ',' + (yTop + rTop) : '') +
-                   ' L' + (x0 + barW) + ',' + (yTop + h) + ' Z';
-      const seg = svg('path', { class:'seg', d:path, fill:c.color });
-      const g = svg('g', { class:'mark' });
-      g.appendChild(seg);
-      const hit = svg('rect', { class:'hit', x:cx - band / 2, y:yTop, width:band, height:Math.max(24, h) });
-      g.appendChild(hit);
-      bindTip(g,
-        () => [
-          { label:c.label, value:money2(v), color:c.color },
-          { label:'month total', value:money2(d.total), total:true }
-        ],
-        monthShort(d.month) + ' ' + d.month.getFullYear(),
-        c.label + ' in ' + monthShort(d.month) + ': ' + money2(v));
-      s.appendChild(g);
-      acc += v;
-    });
-
-    /* label selectively — the column total only, on the cap */
-    if (showColumnTotals){
-      const lb = svg('text', { class:'dlabel soft', x:cx, y:y(d.total) - 7, 'text-anchor':'middle' });
-      lb.textContent = moneyCompact(d.total);
-      s.appendChild(lb);
-    }
-
-    /* year on January and on the first column, so a long span reads without
-       repeating the year under every bar. At wide ranges only every nth
-       column is labelled, or they overlap into mush. */
-    const labelThis = (i === 0) || (i % labelEvery === 0) || d.month.getMonth() === 0;
-    if (!labelThis) return;
-    const xl = svg('text', { class:'tick', x:cx, y:H - PB + 17, 'text-anchor':'middle' });
-    xl.textContent = (i === 0 || d.month.getMonth() === 0)
-      ? monthShort(d.month) + " '" + String(d.month.getFullYear()).slice(-2)
-      : monthShort(d.month);
-    s.appendChild(xl);
-  });
-
-  /* ---- the same month, one year earlier ----
-     Appended after the bars so it draws over them, and dashed so it reads as a
-     reference rather than as another category. */
-  const pts = prior.map((p, i) => ({ x:PL + band * i + band / 2, y:y(p.total), prior:p, now:data[i] }));
-  s.appendChild(svg('path', {
-    class:'yoy-line', fill:'none',
-    d: pts.map((pt, i) => (i ? 'L' : 'M') + pt.x.toFixed(1) + ',' + pt.y.toFixed(1)).join(' ')
-  }));
-
-  pts.forEach(pt => {
-    const g = svg('g', { class:'mark' });
-    g.appendChild(svg('circle', { class:'yoy-dot', cx:pt.x, cy:pt.y, r:3.5 }));
-    g.appendChild(svg('circle', { class:'hit', cx:pt.x, cy:pt.y, r:15 }));
-    const diff = pt.now.total - pt.prior.total;
-    bindTip(g,
-      () => [
-        { label:monthShort(pt.prior.month) + ' ' + pt.prior.month.getFullYear(), value:money2(pt.prior.total) },
-        { label:'this year', value:money2(pt.now.total) },
-        { label:diff >= 0 ? 'more than last year' : 'less than last year', value:money2(Math.abs(diff)), total:true }
-      ],
-      monthShort(pt.now.month) + ' vs a year earlier',
-      monthShort(pt.now.month) + ': ' + money2(pt.now.total) + ' this year against ' + money2(pt.prior.total) + ' a year earlier.');
-    s.appendChild(g);
-  });
-
-  host.appendChild(s);
-
-  const RANGE_TITLE = {
-    3:  'Three months, against a year earlier',
-    6:  'Six months, against a year earlier',
-    9:  'Nine months, against a year earlier',
-    12: 'A year, against the year before',
-    24: 'Two years, against the years before',
-    36: 'Three years, against the years before'
-  };
-  document.getElementById('h-trend').textContent = RANGE_TITLE[n] || RANGE_TITLE[12];
-
-  /* The headline comparison is against a year ago, not against last month —
-     that is the question the line was added to answer. */
-  const last = data[data.length - 1], lastYear = prior[prior.length - 1];
-  const gap = last.total - lastYear.total;
-  document.getElementById('trend-sub').textContent = lastYear
-    ? monthShort(last.month) + ' is ' + money0(Math.abs(gap)) +
-      (gap >= 0 ? ' above ' : ' below ') +
-      monthShort(lastYear.month) + ' ' + lastYear.month.getFullYear() + '.'
-    : '';
-
-  /* legend — always present for two or more series; click to isolate */
-  const lg = document.getElementById('trend-legend');
-  lg.textContent = '';
-  CATS.forEach(c => {
-    const li = el('li');
-    const b = el('button');
-    b.type = 'button';
-    b.setAttribute('aria-pressed', state.hidden.has(c.id) ? 'true' : 'false');
-    b.setAttribute('aria-label', (state.hidden.has(c.id) ? 'Show ' : 'Hide ') + c.label + ' in the trend chart');
-    const sw = el('span', 'swatch'); sw.style.background = c.color;
-    b.appendChild(sw);
-    b.appendChild(document.createTextNode(c.label));
-    b.addEventListener('click', () => {
-      if (state.hidden.has(c.id)) state.hidden.delete(c.id); else state.hidden.add(c.id);
-      renderTrend();
-    });
-    li.appendChild(b);
-    lg.appendChild(li);
-  });
-
-  /* The line is a reference, not a series you can switch off — its key says so
-     with a dash rather than a swatch, and it is not a button. */
-  const yoyLi = el('li', 'legend-static');
-  const dash = el('span', 'swatch-line');
-  yoyLi.appendChild(dash);
-  yoyLi.appendChild(document.createTextNode('Same month, last year'));
-  lg.appendChild(yoyLi);
-
-  const tw = document.getElementById('trend-table');
-  tw.textContent = '';
-  tw.appendChild(buildTable(
-    ['Month'].concat(CATS.map(c => c.label)).concat(['Total', 'Year earlier']),
-    data.map((d, i) => [monthShort(d.month) + ' ' + d.month.getFullYear()]
-      .concat(CATS.map(c => money0(d.byCat[c.id])))
-      .concat([
-        money0(CATS.reduce((s,c) => s + d.byCat[c.id], 0)),
-        money0(CATS.reduce((s,c) => s + prior[i].byCat[c.id], 0))
-      ]))
-  ));
-}
-
-/* ============================================================
-   11 · TABLE VIEW — the accessible twin of every chart
-   ============================================================ */
-function buildTable(headers, rows){
-  const t = el('table', 'data');
-  const thead = el('thead'), hr = el('tr');
-  headers.forEach((h,i) => { const th = el('th', i ? 'num' : null, h); if (i) th.style.textAlign = 'right'; hr.appendChild(th); });
-  thead.appendChild(hr); t.appendChild(thead);
-  const tb = el('tbody');
-  rows.forEach(r => {
-    const tr = el('tr');
-    r.forEach((c,i) => tr.appendChild(el('td', i ? 'num' : null, c)));
-    tb.appendChild(tr);
-  });
-  t.appendChild(tb);
-  const wrap = el('div', 'scroll-x');
-  wrap.appendChild(t);
-  return wrap;
-}
-document.querySelectorAll('.tbl-toggle').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const key = btn.dataset.table;
-    const on = btn.getAttribute('aria-pressed') === 'true';
-    btn.setAttribute('aria-pressed', on ? 'false' : 'true');
-    btn.textContent = on ? 'Table view' : 'Chart view';
-    document.getElementById(key + '-chart').hidden = !on;
-    document.getElementById(key + '-table').hidden = on;
-    const lg = key === 'trend' ? document.getElementById('trend-legend') : null;
-    if (lg) lg.hidden = !on;
-  });
-});
-
-/* ============================================================
-   12 · TRANSACTIONS — recategorize one, many, or a merchant
-   ============================================================ */
-function renderTx(rows){
-  const body = document.getElementById('tx-body');
-  body.textContent = '';
-  const visible = rows.slice(0, state.txLimit);
-
-  if (!rows.length){
-    const tr = el('tr'); const td = el('td', 'empty', 'Nothing matches these filters.');
-    td.colSpan = 6; tr.appendChild(td); body.appendChild(tr);
-  }
-
-  visible.forEach(t => {
-    const tr = el('tr');
-
-    const cb = el('td');
-    if (t.amount < 0){                       // income has no category to re-file
-      const box = document.createElement('input');
-      box.type = 'checkbox';
-      box.checked = state.selected.has(t.id);
-      box.setAttribute('aria-label', 'Select ' + t.merchant + ' on ' + dateShort(t.date));
-      box.addEventListener('change', () => {
-        if (box.checked) state.selected.add(t.id); else state.selected.delete(t.id);
-        renderTxTools(rows);
-      });
-      cb.appendChild(box);
-    }
-    tr.appendChild(cb);
-
-    tr.appendChild(el('td', 'date', dateShort(t.date)));
-
-    const mt = el('td', 'merchant');
-    mt.appendChild(document.createTextNode(t.merchant));
-    if (t.note){ mt.appendChild(document.createTextNode(' ')); mt.appendChild(el('span', 'flag', '· ' + t.note)); }
-    if (isEdited(t)){ mt.appendChild(document.createTextNode(' ')); mt.appendChild(el('span', 'flag', state.rules[t.merchant] ? '· rule' : '· edited')); }
-    tr.appendChild(mt);
-
-    tr.appendChild(el('td', 'acct', ACCT[t.acct].label));
-
-    const ct = el('td');
-    if (t.amount > 0){
-      const cell = el('div', 'cat-cell');
-      const sw = el('span', 'swatch'); sw.style.background = 'var(--good)';
-      cell.appendChild(sw);
-      cell.appendChild(el('span', null, 'Income'));
-      ct.appendChild(cell);
-    } else {
-      const cell = el('div', 'cat-cell');
-      const sw = el('span', 'swatch'); sw.style.background = CAT[catOf(t)].color;
-      cell.appendChild(sw);
-      const sel = el('select', 'cat-select');
-      sel.setAttribute('aria-label', 'Category for ' + t.merchant + ' on ' + dateShort(t.date));
-      CATS.forEach(c => {
-        const o = document.createElement('option');
-        o.value = c.id; o.textContent = c.label;
-        if (c.id === catOf(t)) o.selected = true;
-        sel.appendChild(o);
-      });
-      sel.addEventListener('change', () => recategorize([t.id], sel.value, t.merchant));
-      cell.appendChild(sel);
-      ct.appendChild(cell);
-    }
-    tr.appendChild(ct);
-
-    tr.appendChild(el('td', 'num' + (t.amount > 0 ? ' pos' : ''), (t.amount > 0 ? '+' : '') + money2(t.amount)));
-    body.appendChild(tr);
-  });
-
-  const more = document.getElementById('show-more');
-  more.hidden = rows.length <= state.txLimit;
-  more.textContent = 'Show ' + Math.min(8, rows.length - state.txLimit) + ' more of ' + rows.length;
-
-  const all = document.getElementById('select-all');
-  const selectable = visible.filter(t => t.amount < 0);
-  all.checked = selectable.length > 0 && selectable.every(t => state.selected.has(t.id));
-  all.indeterminate = !all.checked && selectable.some(t => state.selected.has(t.id));
-  all.onchange = () => {
-    selectable.forEach(t => { if (all.checked) state.selected.add(t.id); else state.selected.delete(t.id); });
-    renderTx(rows); renderTxTools(rows);
-  };
-
-  renderTxTools(rows);
-}
-
-function renderTxTools(rows){
-  const host = document.getElementById('tx-tools');
-  host.textContent = '';
-  const n = state.selected.size;
-
-  if (state.category !== 'all'){
-    const chip = el('span', 'count');
-    chip.appendChild(document.createTextNode('Filtered to ' + CAT[state.category].label + ' · '));
-    const clear = el('button', 'linkbtn', 'clear');
-    clear.type = 'button';
-    clear.addEventListener('click', () => { state.category = 'all'; state.selected.clear(); render(); });
-    chip.appendChild(clear);
-    host.appendChild(chip);
-  }
-
-  if (!n){
-    host.appendChild(el('span', 'count', rows.length + ' transaction' + (rows.length === 1 ? '' : 's') + ' · tick a few to re-file them together'));
-    return;
-  }
-  host.appendChild(el('span', 'count', n + ' selected'));
-  const sel = el('select', 'ctl');
-  sel.setAttribute('aria-label', 'Move the selected transactions to a category');
-  const ph = document.createElement('option');
-  ph.value = ''; ph.textContent = 'Move to…'; ph.selected = true; ph.disabled = true;
-  sel.appendChild(ph);
-  CATS.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.label; sel.appendChild(o); });
-  sel.addEventListener('change', () => { if (sel.value) recategorize(Array.from(state.selected), sel.value, null); });
-  host.appendChild(sel);
-  const clear = el('button', 'btn', 'Clear selection');
-  clear.type = 'button';
-  clear.addEventListener('click', () => { state.selected.clear(); render(); });
-  host.appendChild(clear);
-}
-
-/* ============================================================
-   13 · RECATEGORIZE + RULES + UNDO
-   ============================================================ */
-function recategorize(ids, catId, merchant){
-  const before = { overrides:Object.assign({}, state.overrides), rules:Object.assign({}, state.rules) };
-  ids.forEach(id => { state.overrides[id] = catId; });
-  state.lastAction = before;
-  state.selected.clear();
-  persist();
-  render();
-
-  const label = CAT[catId].label;
-  const msg = ids.length === 1
-    ? 'Moved to ' + label + '.'
-    : ids.length + ' transactions moved to ' + label + '.';
-  const actions = [{ text:'Undo', kind:'btn', run:undo }];
-  if (merchant && state.rules[merchant] !== catId){
-    actions.unshift({
-      text:'Always for ' + merchant, kind:'btn-accent',
-      run(){
-        const snap = { overrides:Object.assign({}, state.overrides), rules:Object.assign({}, state.rules) };
-        state.rules[merchant] = catId;
-        TXNS.forEach(t => { if (t.merchant === merchant) delete state.overrides[t.id]; });
-        state.lastAction = snap;
-        persist(); render();
-        toast('Every ' + merchant + ' charge now files under ' + label + ' — past and future.', [{ text:'Undo', kind:'btn', run:undo }]);
-      }
-    });
-  }
-  toast(msg, actions);
-}
-function undo(){
-  if (!state.lastAction) return;
-  state.overrides = state.lastAction.overrides;
-  state.rules = state.lastAction.rules;
-  state.lastAction = null;
-  persist(); render();
-  toast('Reverted.', []);
-}
-
-let toastTimer = null;
-function toast(message, actions){
-  const host = document.getElementById('toast');
-  host.textContent = '';
-  host.appendChild(el('span', 'msg', message));
-  (actions || []).forEach(a => {
-    const b = el('button', a.kind === 'btn-accent' ? 'btn btn-accent' : 'btn', a.text);
-    b.type = 'button';
-    b.addEventListener('click', () => { host.classList.remove('on'); a.run(); });
-    host.appendChild(b);
-  });
-  host.classList.add('on');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => host.classList.remove('on'), (actions && actions.length) ? 7000 : 2600);
-}
-
-/* ============================================================
-   14 · HERO + KPI RENDER
-   ============================================================ */
-/* a filter that narrows the slice makes it a slice of the budget, not the budget */
-function isNarrowed(){
-  return state.account !== 'all' || Boolean(state.search) || state.category !== 'all';
-}
-
-function renderHeadline(rows, r, key){
-  const t = totals(rows);
-  const prior = totals(sliceFor(priorRange(r, key)));
-
-  /* --- hero: one per view --- */
-  const label = document.getElementById('hero-label');
-  const value = document.getElementById('hero-value');
-  const sub = document.getElementById('hero-sub');
-  const meter = document.getElementById('hero-meter');
-  meter.textContent = ''; sub.textContent = '';
-
-  /* safe-to-spend only means something against the whole budget — never a filtered slice of it */
-  if (key === 'this-month' && !isNarrowed()){
-    const budget = TOTAL_BUDGET;
-    const left = budget - t.expense;
-    const dim = daysInMonth(TODAY), day = TODAY.getDate();
-    const expected = budget * (day / dim);
-    const perDay = left > 0 ? left / Math.max(1, dim - day) : 0;
-    const overPace = t.expense > expected;
-
-    label.textContent = 'Safe to spend · rest of ' + monthShort(TODAY);
-    value.textContent = money0(Math.max(0, left));
-    value.style.color = left < 0 ? 'var(--critical)' : 'var(--ink)';
-    sub.appendChild(document.createTextNode(left < 0 ? 'You are ' : 'That is about '));
-    const b = el('b', null, left < 0 ? money0(-left) + ' past the budget' : money0(perDay) + ' a day');
-    sub.appendChild(b);
-    sub.appendChild(document.createTextNode(left < 0 ? ' with ' + (dim - day) + ' days still to go.' : ' for the ' + (dim - day) + ' days left in ' + monthLong(TODAY).split(' ')[0] + '.'));
-
-    const track = el('div', 'meter-track');
-    const tone = left < 0 ? '--critical' : (overPace ? '--warning' : '--good');
-    track.style.background = 'rgba(231,238,243,0.07)';                                  /* fallback */
-    track.style.background = 'color-mix(in srgb, var(' + tone + ') 16%, transparent)';   /* same-ramp track */
-    const fill = el('div', 'meter-fill');
-    fill.style.width = Math.min(100, pct(t.expense, budget)) + '%';
-    fill.style.background = 'var(' + tone + ')';
-    track.appendChild(fill);
-    const tick = el('div', 'meter-tick');
-    tick.style.left = 'calc(' + Math.min(100, pct(expected, budget)) + '% - 1px)';
-    track.appendChild(tick);
-    meter.appendChild(track);
-
-    const lg = el('div', 'meter-legend');
-    const l1 = el('span'); l1.appendChild(el('span', 'mono', money0(t.expense))); l1.appendChild(document.createTextNode(' spent of ' + money0(budget)));
-    lg.appendChild(l1);
-    const st = el('span', 'status ' + (left < 0 ? 'critical' : (overPace ? 'warning' : 'good')));
-    st.appendChild(el('span', 'ico', left < 0 ? '⚠' : (overPace ? '!' : '✓')));
-    st.appendChild(el('span', null, left < 0 ? 'over budget' : (overPace ? 'ahead of pace' : 'on pace')));
-    lg.appendChild(st);
-    meter.appendChild(lg);
-
-    const note = el('div', 'meter-legend');
-    note.appendChild(el('span', null, 'The pale tick is where a steady month would have you on day ' + day + '.'));
-    meter.appendChild(note);
-  } else {
-    label.textContent = 'Net cash flow · ' + r.label;
-    value.textContent = (t.net > 0 ? '+' : '') + money0(t.net);
-    value.style.color = t.net >= 0 ? 'var(--ink)' : 'var(--critical)';
-    sub.appendChild(document.createTextNode(t.net >= 0 ? 'You kept ' : 'You drew down '));
-    sub.appendChild(el('b', null, fmtPct(Math.abs(pct(t.net, t.income)))));
-    sub.appendChild(document.createTextNode(t.net >= 0 ? ' of everything that came in.' : ' of everything that came in.'));
-
-    const track = el('div', 'meter-track');
-    track.style.background = 'rgba(231,238,243,0.06)';
-    const fill = el('div', 'meter-fill');
-    fill.style.width = Math.min(100, pct(t.expense, t.income || 1)) + '%';
-    fill.style.background = t.net >= 0 ? 'var(--good)' : 'var(--critical)';
-    track.appendChild(fill);
-    meter.appendChild(track);
-    const lg = el('div', 'meter-legend');
-    const l1 = el('span'); l1.appendChild(el('span', 'mono', money0(t.expense))); l1.appendChild(document.createTextNode(' out of ' + money0(t.income) + ' in'));
-    lg.appendChild(l1);
-    const st = el('span', 'status ' + (t.net >= 0 ? 'good' : 'critical'));
-    st.appendChild(el('span', 'ico', t.net >= 0 ? '✓' : '⚠'));
-    st.appendChild(el('span', null, t.net >= 0 ? 'in the black' : 'in the red'));
-    lg.appendChild(st);
-    meter.appendChild(lg);
-  }
-
-  /* --- KPI tiles --- */
-  const row = document.getElementById('kpi-row');
-  row.textContent = '';
-  const vsLabel = key === 'this-month' ? 'vs. same days last month' : 'vs. prior period';
-  const dIncome = deltaOf(t.income, prior.income, true);
-  const dExpense = deltaOf(t.expense, prior.expense, false);
-  const dNet = deltaOf(t.net, prior.net, true);
-  const rateNow = t.income ? (t.net / t.income) * 100 : 0;
-  const ratePrior = prior.income ? (prior.net / prior.income) * 100 : 0;
-  const dRate = deltaOf(rateNow, ratePrior, true);
-
-  row.appendChild(statTile({ label:'Money in', value:money0(t.income), delta:dIncome.text, deltaDir:dIncome.dir, deltaGood:dIncome.good, vs:vsLabel, series:monthlySeries('income') }));
-  row.appendChild(statTile({ label:'Money out', value:money0(t.expense), delta:dExpense.text, deltaDir:dExpense.dir, deltaGood:dExpense.good, vs:vsLabel, series:monthlySeries('expense') }));
-  row.appendChild(statTile({ label:'Kept', value:(t.net > 0 ? '+' : '') + money0(t.net), delta:dNet.text, deltaDir:dNet.dir, deltaGood:dNet.good, vs:vsLabel, series:monthlySeries('net') }));
-  row.appendChild(statTile({ label:'Savings rate', value:fmtPct(rateNow), delta:dRate.text, deltaDir:dRate.dir, deltaGood:dRate.good, vs:vsLabel, series:monthlySeries('rate') }));
-}
-
-/* ============================================================
-   15 · RENDER EVERYTHING FROM ONE SLICE
-   ============================================================ */
-function render(){
-  const key = state.range;
-  const r = rangeFor(key);
-  r.range = key;
-  const rows = sliceFor(r);
-
-  renderHeadline(rows, r, key);
-  renderSankey(rows, r);
-  renderBudgets(rows, r);
-  renderTrend();
-  renderTx(rows.slice().sort((a,b) => b.date - a.date));
-
-  const nRules = Object.keys(state.rules).length, nEdits = Object.keys(state.overrides).length;
-  const parts = [];
-  if (nRules) parts.push(nRules + ' merchant rule' + (nRules === 1 ? '' : 's'));
-  if (nEdits) parts.push(nEdits + ' edit' + (nEdits === 1 ? '' : 's'));
-  document.getElementById('rules-count').textContent = parts.length ? parts.join(' · ') : 'No rules yet';
-}
-
-/* ---- controls ---- */
-const accSel = document.getElementById('f-account');
-const optAll = document.createElement('option');
-optAll.value = 'all'; optAll.textContent = 'All accounts';
-accSel.appendChild(optAll);
-ACCOUNTS.forEach(a => { const o = document.createElement('option'); o.value = a.id; o.textContent = a.label; accSel.appendChild(o); });
-
-document.getElementById('f-range').addEventListener('change', e => { state.range = e.target.value; state.txLimit = 8; state.selected.clear(); render(); });
-accSel.addEventListener('change', e => { state.account = e.target.value; state.txLimit = 8; state.selected.clear(); render(); });
-document.getElementById('show-more').addEventListener('click', () => { state.txLimit += 8; render(); });
-/* Trend range is local to that one chart — it does not touch the global range
-   filter, which drives every other view. Only the trend needs redrawing. */
-document.getElementById('f-trend-range').addEventListener('change', e => {
-  state.trendMonths = parseInt(e.target.value, 10);
-  renderTrend();
-  syncRailHeight();
-});
-document.getElementById('reset-demo').addEventListener('click', () => {
-  state.overrides = {}; state.rules = {}; state.selected.clear(); state.category = 'all'; state.lastAction = null;
-  persist(); render(); toast('Demo reset — every category back to its default.', []);
-});
-window.addEventListener('scroll', hideTip, { passive:true });
-
-/* ============================================================
-   16 · THE RAIL — five views in one strip you scroll left to right
-   ============================================================ */
-const rail = document.getElementById('dash-rail');
-const panels = Array.from(rail.querySelectorAll('.dash-panel'));
-const tabs = Array.from(document.querySelectorAll('#dash-tabs .dash-tab'));
-const dots = document.getElementById('dash-dots');
-const prevBtn = document.getElementById('dash-prev');
-const nextBtn = document.getElementById('dash-next');
-const PREFERS_STILL = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-let activeIndex = 0;
-prevBtn.disabled = true;
-
-panels.forEach((p, i) => {
-  const d = document.createElement('i');
-  if (!i) d.className = 'on';
-  dots.appendChild(d);
-});
-
-/* the strip is only ever as tall as the view you are on */
-function syncRailHeight(){
-  const panel = panels[activeIndex];
-  if (panel) rail.style.height = panel.offsetHeight + 'px';
-}
-function markActive(i){
-  if (i === activeIndex) return;
-  activeIndex = i;
-  tabs.forEach((t, k) => { if (k === i) t.setAttribute('aria-current','true'); else t.removeAttribute('aria-current'); });
-  Array.from(dots.children).forEach((d, k) => d.classList.toggle('on', k === i));
-  prevBtn.disabled = i === 0;
-  nextBtn.disabled = i === panels.length - 1;
-  syncRailHeight();
-}
-function goTo(i){
-  const target = panels[Math.max(0, Math.min(panels.length - 1, i))];
-  if (!target) return;
-  markActive(panels.indexOf(target));
-  rail.scrollTo({ left: target.offsetLeft - panels[0].offsetLeft, behavior: PREFERS_STILL ? 'auto' : 'smooth' });
-}
-function openView(id){
-  const i = panels.findIndex(p => p.id === id);
-  if (i >= 0) goTo(i);
-}
-
-tabs.forEach((t, i) => t.addEventListener('click', () => goTo(i)));
-prevBtn.addEventListener('click', () => goTo(activeIndex - 1));
-nextBtn.addEventListener('click', () => goTo(activeIndex + 1));
-
-/* scrolling the strip by hand keeps the tabs, dots and height in step */
-let scrollTimer = null;
-rail.addEventListener('scroll', () => {
-  clearTimeout(scrollTimer);
-  scrollTimer = setTimeout(() => {
-    const mid = rail.scrollLeft + rail.clientWidth / 2;
-    let best = 0, bestDist = Infinity;
-    panels.forEach((p, i) => {
-      const c = (p.offsetLeft - panels[0].offsetLeft) + p.offsetWidth / 2;
-      const d = Math.abs(c - mid);
-      if (d < bestDist){ bestDist = d; best = i; }
-    });
-    markActive(best);
-  }, 90);
-}, { passive:true });
-
-/* tabbing into an off-screen view brings it along rather than clipping it */
-rail.addEventListener('focusin', e => {
-  const panel = e.target.closest('.dash-panel');
-  if (panel) markActive(panels.indexOf(panel));
-});
-
-/* a footer link like #view-trend lands on the strip and selects that view */
-function openFromHash(){
-  const id = location.hash.slice(1);
-  const i = panels.findIndex(p => p.id === id);
-  if (i < 0) return false;
-  markActive(i);
-  rail.scrollTo({ left: panels[i].offsetLeft - panels[0].offsetLeft, behavior:'auto' });
-  document.getElementById('dash').scrollIntoView({ block:'start', behavior: PREFERS_STILL ? 'auto' : 'smooth' });
-  return true;
-}
-document.querySelectorAll('a[href^="#view-"]').forEach(a => {
-  a.addEventListener('click', e => {
-    e.preventDefault();
-    history.replaceState(null, '', a.getAttribute('href'));
-    openFromHash();
-  });
-});
-window.addEventListener('hashchange', openFromHash);
-
-/* charts are drawn at their container's real width — redraw when that changes */
-let resizeTimer = null, lastW = window.innerWidth;
-window.addEventListener('resize', () => {
-  if (window.innerWidth === lastW) return;
-  lastW = window.innerWidth;
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => { render(); goTo(activeIndex); }, 140);
-});
-
-render();
-syncRailHeight();
-
-/* the panel grows and shrinks as its data changes — keep the strip in step */
-const heightHooks = ['#f-range', '#f-account', '#show-more', '#reset-demo'];
-heightHooks.forEach(sel => {
-  const node = document.querySelector(sel);
-  if (node) node.addEventListener(node.tagName === 'SELECT' ? 'change' : 'click', () => setTimeout(syncRailHeight, 0));
-});
-document.getElementById('dash').addEventListener('change', () => setTimeout(syncRailHeight, 0));
-document.getElementById('dash').addEventListener('click', () => setTimeout(syncRailHeight, 0));
-
-/* webfonts land after first paint and reflow the panels */
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncRailHeight).catch(() => {});
-window.addEventListener('load', syncRailHeight, { once:true });
-
-/* arriving on #view-trend from the footer opens that view directly */
-if (location.hash) requestAnimationFrame(openFromHash);
 })();
 </script>
 
