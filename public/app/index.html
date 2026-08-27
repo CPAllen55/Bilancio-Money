@@ -766,6 +766,17 @@
   /* Income. It was a flat block at .4, which matched a wash of colour behind
      the bars; the chart draws a line with a square on it now, so the key does
      too. The square is the ::after — same six pixels it is on the chart. */
+  /* The running total on Net Activity: a line with the hollow dot that is
+     actually on it. It used to borrow .shaded, which on Trend means "budget
+     ahead" — and once Net Activity grew a projection of its own, one swatch
+     would have stood for two different things in the same key. */
+  .kswatch.wave{ position:relative; height:0; width:15px; border-radius:0;
+                 border-top:2px solid var(--mint); }
+  .kswatch.wave::after{ content:""; position:absolute; left:50%; top:-4px;
+                        width:8px; height:8px; margin-left:-4px; border-radius:50%;
+                        box-sizing:border-box; background:var(--bg-panel);
+                        border:2px solid var(--mint); }
+
   .kswatch.line{ position:relative; height:0; width:15px; border-radius:0;
                  border-top:2px solid var(--mint); }
   .kswatch.line::after{ content:""; position:absolute; left:50%; top:-3px;
@@ -1604,6 +1615,10 @@
           <option value="12" selected>Last 12 months</option>
           <option value="24">Last 2 years</option>
         </select>
+        <!-- Word for word the switch on Trend, and deliberately so: it is the
+             same question asked of the same forecast, and two labels for one
+             idea is two ideas as far as the reader is concerned. -->
+        <label class="switch"><input type="checkbox" id="net-forecast-on"><span class="sw" aria-hidden="true"></span>Project rest of year from budget</label>
       </div>
       <div class="card"><div id="net-chart"></div></div>
     </section>
@@ -4013,15 +4028,44 @@ function niceStep(x) {
 
 async function renderNet() {
   const months = Number($('net-range').value);
-  const tr = await authed('/api/trend?months=' + months);
+  const wantForecast = $('net-forecast-on').checked;
+
+  /* Fetched only when it is wanted, unlike Trend — which needs the plan either
+     way for the figures under its axis. Nothing on this chart reads the budget
+     unless the months ahead are being drawn. */
+  const [tr, fc] = await Promise.all([
+    authed('/api/trend?months=' + months),
+    wantForecast ? authed('/api/forecast').catch(() => null) : Promise.resolve(null)
+  ]);
   if (tr.categories) { categoryList = tr.categories; catOptCache = {}; rememberColours(categoryList); }
 
+  const actual = tr.series || [];
+
+  // Only the months that run past the record. A projection for a month already
+  // measured would be a plan overwriting the thing it was made from.
+  let ahead = [];
+  if (fc && fc.method !== 'insufficient-data') {
+    const lastActual = actual.length ? actual[actual.length - 1].month : '';
+    ahead = fc.months.filter(m => m.projected && m.month > lastActual);
+  }
+
+  /* The running total carries straight on through the projection rather than
+     restarting at it. That is the whole point of turning the switch on: the
+     question is where the year ends up, and an answer that begins again in
+     September answers nothing. */
   let running = 0;
-  const rows = (tr.series || []).map(m => {
-    const net = (m.income || 0) - (m.expense || 0);
-    running += net;
-    return { month: m.month, income: m.income || 0, expense: m.expense || 0, net: net, cumulative: running };
-  });
+  const rows = actual.map(m => {
+      const net = (m.income || 0) - (m.expense || 0);
+      running += net;
+      return { month: m.month, income: m.income || 0, expense: m.expense || 0,
+               net: net, cumulative: running, projected: false };
+    })
+    .concat(ahead.map(m => {
+      const net = (m.income || 0) - (m.expense || 0);
+      running += net;
+      return { month: m.month, income: m.income || 0, expense: m.expense || 0,
+               net: net, cumulative: running, projected: true };
+    }));
 
   netData = { months: rows };
   if (netSel && !rows.some(r => r.month === netSel)) netSel = null;
@@ -4042,6 +4086,9 @@ function drawNet() {
   const NET_DOWN = (cs.getPropertyValue('--coral') || '').trim() || '#FF5C72';
 
   const total = rows[rows.length - 1].cumulative;
+  const firstProjected = rows.findIndex(r => r.projected);
+  const hasProj = firstProjected > -1;
+  const aheadCount = hasProj ? rows.length - firstProjected : 0;
   /* Sized the way the Trend charts are: in rendered pixels, through the
      measured scale, so a figure is the size it says it is. */
   const W = 880, PL = 74, PR = 14, PT = 24, plotH = 258;
@@ -4077,6 +4124,25 @@ function drawNet() {
                category charts do instead of staying flat beside them. */
             reliefDefs('net', [NET_UP, NET_DOWN]);
 
+  /* The forecast region, shaded before anything else so the rest draws on top
+     of it. Bordered on all four sides rather than split off by a single line,
+     for the reason Trend gives: a chart that quietly changes character halfway
+     across is worse than one that says where the change is. Same fill, same
+     dashes, same plate — it is the same region on a different chart. */
+  if (hasProj) {
+    const x0 = PL + band * firstProjected;
+    const bw = W - PR - x0;
+    svg += '<rect x="' + x0.toFixed(1) + '" y="' + PT + '" width="' + bw.toFixed(1) +
+           '" height="' + plotH + '" fill="var(--mint)" opacity=".10"/>' +
+           '<rect x="' + x0.toFixed(1) + '" y="' + PT + '" width="' + bw.toFixed(1) +
+           '" height="' + plotH + '" fill="none" stroke="var(--mint-dim)" stroke-width="1" ' +
+           'stroke-dasharray="4 3" opacity=".55"/>' +
+           '<rect x="' + (x0 + 6).toFixed(1) + '" y="' + (PT + 5) + '" width="60" height="17" rx="3" ' +
+           'fill="var(--bg)" opacity=".72"/>' +
+           '<text x="' + (x0 + 14).toFixed(1) + '" y="' + (PT + 17) + '" ' +
+           'font-size="10.5" fill="var(--mint)" letter-spacing=".08em">budget</text>';
+  }
+
   for (let v = yMin; v <= yMax + step / 2; v += step) {
     const yy = y(v);
     const isZero = Math.abs(v) < step / 1000;
@@ -4095,15 +4161,36 @@ function drawNet() {
      and below it is money you are down, and one colour for both would make the
      crossing point invisible, which is the only point on the line that matters. */
   const pts = rows.map((r, i) => [PL + band * i + band / 2, y(r.cumulative)]);
-  let d = 'M' + PL + ',' + y(rows[0].cumulative).toFixed(1) +
-          ' L' + pts[0][0].toFixed(1) + ',' + pts[0][1].toFixed(1);
-  for (let i = 1; i < pts.length; i++) {
-    const p0 = pts[i - 1], p1 = pts[i];
-    const mx = (p0[0] + p1[0]) / 2;
-    d += ' C' + mx.toFixed(1) + ',' + p0[1].toFixed(1) + ' ' + mx.toFixed(1) + ',' + p1[1].toFixed(1) +
-         ' ' + p1[0].toFixed(1) + ',' + p1[1].toFixed(1);
-  }
-  d += ' L' + (W - PR) + ',' + y(rows[rows.length - 1].cumulative).toFixed(1);
+
+  /* One smooth run through points a..b. `lead` and `tail` extend it flat to
+     the margins, which is what makes the wave meet both edges of the plot
+     rather than floating in the middle of it. */
+  const curve = (a, b, lead, tail) => {
+    let s = lead
+      ? 'M' + PL + ',' + pts[a][1].toFixed(1) + ' L' + pts[a][0].toFixed(1) + ',' + pts[a][1].toFixed(1)
+      : 'M' + pts[a][0].toFixed(1) + ',' + pts[a][1].toFixed(1);
+    for (let i = a + 1; i <= b; i++) {
+      const p0 = pts[i - 1], p1 = pts[i];
+      const mx = (p0[0] + p1[0]) / 2;
+      s += ' C' + mx.toFixed(1) + ',' + p0[1].toFixed(1) + ' ' + mx.toFixed(1) + ',' + p1[1].toFixed(1) +
+           ' ' + p1[0].toFixed(1) + ',' + p1[1].toFixed(1);
+    }
+    if (tail) s += ' L' + (W - PR) + ',' + pts[b][1].toFixed(1);
+    return s;
+  };
+
+  const last = pts.length - 1;
+  const d = curve(0, last, true, true);
+
+  /* Drawn in two strokes when there is a projection, joined at the last real
+     month so there is no gap: solid across what happened, dashed across what
+     is planned. The shaded region says where the boundary is; the dashes say
+     it again on the one mark that would otherwise read as a measurement all
+     the way to December. */
+  const solidTo = hasProj ? Math.max(0, firstProjected - 1) : last;
+  const dSolid = curve(0, solidTo, true, !hasProj);
+  const dDash = hasProj ? curve(solidTo, last, false, true) : '';
+
   const area = d + ' L' + (W - PR) + ',' + zero.toFixed(1) + ' L' + PL + ',' + zero.toFixed(1) + ' Z';
 
   svg += '<defs>' +
@@ -4119,9 +4206,20 @@ function drawNet() {
       '<stop offset="1" stop-color="var(--coral)" stop-opacity=".03"/></linearGradient>' +
     '</defs>' +
     '<path d="' + area + '" fill="url(#netUp)" clip-path="url(#netAbove)"/>' +
-    '<path d="' + area + '" fill="url(#netDown)" clip-path="url(#netBelow)"/>' +
-    '<path d="' + d + '" fill="none" stroke="var(--mint)" stroke-width="1.8" opacity=".85" clip-path="url(#netAbove)"/>' +
-    '<path d="' + d + '" fill="none" stroke="var(--coral)" stroke-width="1.8" opacity=".85" clip-path="url(#netBelow)"/>';
+    '<path d="' + area + '" fill="url(#netDown)" clip-path="url(#netBelow)"/>';
+
+  /* Above zero it is money kept and below it money you are down, so each run
+     is stroked twice against the two clips — one colour for both would hide
+     the crossing point, which is the only point on the line that matters. */
+  const wave = (path, dashed) =>
+    '<path d="' + path + '" fill="none" stroke="var(--mint)" stroke-width="1.8" opacity="' +
+      (dashed ? '.65' : '.85') + '" clip-path="url(#netAbove)"' +
+      (dashed ? ' stroke-dasharray="5 4"' : '') + '/>' +
+    '<path d="' + path + '" fill="none" stroke="var(--coral)" stroke-width="1.8" opacity="' +
+      (dashed ? '.65' : '.85') + '" clip-path="url(#netBelow)"' +
+      (dashed ? ' stroke-dasharray="5 4"' : '') + '/>';
+
+  svg += wave(dSolid, false) + (hasProj ? wave(dDash, true) : '');
 
   /* ---- a marker per month on the wave ----
      The wave carries the running total and had nothing on it to aim at. A line
@@ -4135,15 +4233,27 @@ function drawNet() {
      within three pixels on a line that moves. */
   pts.forEach(([px, py], i) => {
     const r = rows[i];
+    /* Two different questions, and they had been sharing one answer.
+       The dot sits on the running total, so its colour follows the running
+       total. The line underneath reports the month, so its wording has to
+       follow the month — this read "kept $93" for a month that was down $93
+       whenever the running total happened to be positive, which is most of
+       them. */
     const up = r.cumulative >= 0;
-    svg += '<g class="netdot" ' +
-      tipAttrs('Running total', r.month, r.cumulative, 0,
-        (up ? 'kept ' : 'down ') + money(Math.abs(r.net)) + ' in ' + monthLabel(r.month)) + '>' +
+    const kept = r.net >= 0;
+    svg += '<g class="netdot"' + (r.projected ? ' opacity=".55"' : '') + ' ' +
+      tipAttrs(r.projected ? 'Running total (projected)' : 'Running total',
+        r.month, r.cumulative, 0,
+        (r.projected ? 'budgeted to ' + (kept ? 'keep ' : 'be down ')
+                     : (kept ? 'kept ' : 'down ')) +
+        money(Math.abs(r.net)) + ' in ' + monthLabel(r.month)) + '>' +
       '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) +
         '" r="11" fill="transparent"></circle>' +
       '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) +
         '" r="3.6" fill="var(--bg-panel)" stroke="' +
-        (up ? 'var(--mint)' : 'var(--coral)') + '" stroke-width="2"></circle></g>';
+        (up ? 'var(--mint)' : 'var(--coral)') + '" stroke-width="2"' +
+        // Hollow and dashed, so a point on the plan never passes for a reading.
+        (r.projected ? ' stroke-dasharray="2 1.6"' : '') + '></circle></g>';
   });
 
   const every = Math.ceil(rows.length / 12);
@@ -4160,19 +4270,36 @@ function drawNet() {
              ' data-month="' + escapeHtml(r.month) + '" tabindex="0" role="button"' +
              ' x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
              '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="1"' +
-             ' fill="' + relief('net', colour) + '" style="color:' + colour + '">' +
-             '<title>' + monthLabel(r.month) + ': ' + (up ? 'kept ' : 'down ') + money(Math.abs(r.net)) +
-             ' · running total ' + money(r.cumulative) + '</title></rect>';
+             ' fill="' + relief('net', colour) + '" style="color:' + colour + '"' +
+             // Same colour, dimmed and outlined — the shape stays comparable
+             // with the months beside it and never passes for one of them.
+             // The rule Trend uses, so a dashed bar means one thing in the app.
+             (r.projected
+               ? ' opacity=".45" stroke="' + colour + '" stroke-width="1" stroke-dasharray="2 2"'
+               : '') + '>' +
+             '<title>' + monthLabel(r.month) + ': ' +
+             (r.projected ? 'budgeted to ' + (up ? 'keep ' : 'be down ')
+                          : (up ? 'kept ' : 'down ')) + money(Math.abs(r.net)) +
+             ' · running total ' + money(r.cumulative) +
+             (r.projected ? ' (projected)' : '') + '</title></rect>';
 
       /* What the bar came to, above it — or below it when the bar hangs down,
          so the figure is always on the outside of the bar and never inside it.
-         Skipped where the columns are too narrow to hold one, on the same rule
-         the Trend figures use. */
-      if (band >= 46) {
+         Skipped where the columns are too narrow to hold one.
+
+         The threshold is 56 here and 46 on Trend, which is not an oversight.
+         Trend prints its figures in a table under the axis where each has its
+         own column; these sit loose over the bars, so neighbours run into each
+         other rather than getting narrower. 46 was survivable at the twelve
+         months this chart used to top out at. Switching the projection on adds
+         five more inside the same width, and at a band of 46 the row became a
+         line of touching digits. The figure is still in the tooltip and in the
+         panel below, so nothing is lost but the crowding. */
+      if (band >= 56) {
         const fy = up ? top - type.fig * 0.45 : top + h + type.fig;
         svg += '<text class="netfig" x="' + cx.toFixed(1) + '" y="' + fy.toFixed(1) +
           '" text-anchor="middle" font-size="' + type.fig + '" fill="' + colour +
-          '" opacity="' + (netSel && !on ? '.3' : '.95') + '">' +
+          '" opacity="' + (netSel && !on ? '.3' : (r.projected ? '.6' : '.95')) + '">' +
           (up ? '' : '\u2212') + money0(Math.abs(r.net)) + '</text>';
       }
     }
@@ -4182,8 +4309,8 @@ function drawNet() {
       const label = MONTH_NAMES[Number(parts[1]) - 1] +
         (parts[1] === '01' || i === 0 ? " '" + parts[0].slice(2) : '');
       svg += '<text x="' + cx.toFixed(1) + '" y="' + (PT + plotH + type.month + 10).toFixed(1) +
-             '" text-anchor="middle" font-size="' + type.month +
-             '" fill="var(--muted)">' + label + '</text>';
+             '" text-anchor="middle" font-size="' + type.month + '" fill="' +
+             (r.projected ? 'var(--mint-dim)' : 'var(--muted)') + '">' + label + '</text>';
     }
   });
   svg += '</svg>';
@@ -4193,15 +4320,28 @@ function drawNet() {
       '<span class="klabel">Kept that month</span></div>' +
     '<div class="kitem static"><span class="kswatch" style="background:var(--coral)"></span>' +
       '<span class="klabel">Down that month</span></div>' +
-    '<div class="kitem static"><span class="kswatch shaded"></span>' +
-      '<span class="klabel">Running total</span></div>';
+    '<div class="kitem static"><span class="kswatch wave"></span>' +
+      '<span class="klabel">Running total</span></div>' +
+    (hasProj
+      ? '<div class="kitem static"><span class="kswatch shaded"></span>' +
+        '<span class="klabel">Budget ahead</span></div>'
+      : '');
 
+  /* The figure top right is the end of the running total, so switching the
+     projection on changes what it is: no longer what was kept, but where the
+     year lands if the plan holds. A number that changes meaning without
+     changing its label is the sort of thing people quote back at you six
+     months later, so the label changes with it. */
   host.innerHTML =
     '<div class="net-head">' +
-      '<div><p class="eyebrow">Net activity · ' + rows.length + ' months</p>' +
-        '<p class="fc-method" style="margin:5px 0 0">Each bar is that month on its own. The wave adds them up as it goes.</p></div>' +
+      '<div><p class="eyebrow">Net activity · ' + (rows.length - aheadCount) + ' months' +
+          (hasProj ? ' + ' + aheadCount + ' from budget' : '') + '</p>' +
+        '<p class="fc-method" style="margin:5px 0 0">Each bar is that month on its own. ' +
+          'The wave adds them up as it goes.' +
+          (hasProj ? ' Everything inside the shaded panel is the plan, not the record.' : '') +
+        '</p></div>' +
       '<div class="net-total">' +
-        '<p class="eyebrow">Total kept</p>' +
+        '<p class="eyebrow">' + (hasProj ? 'Projected by year end' : 'Total kept') + '</p>' +
         '<p class="net-figure ' + (total >= 0 ? 'up' : 'down') + '">' +
           (total >= 0 ? '' : '−') + money(Math.abs(total)) + '</p>' +
       '</div>' +
@@ -4221,10 +4361,13 @@ function netDetailHtml(rows) {
   if (!r) return '<span class="hint">That month is no longer in view.</span>';
 
   return '<div class="dt"><b>' + monthLabel(r.month) + '</b>' +
-    '<span class="dsub">' + (r.net >= 0 ? 'kept ' : 'down ') + money(Math.abs(r.net)) + '</span></div>' +
+    '<span class="dsub">' +
+      (r.projected ? 'budgeted to ' + (r.net >= 0 ? 'keep ' : 'be down ')
+                   : (r.net >= 0 ? 'kept ' : 'down ')) + money(Math.abs(r.net)) +
+      (r.projected ? ' · projected' : '') + '</span></div>' +
     '<div class="dfacts">' +
-      fact(money(r.income), 'came in') +
-      fact(money(r.expense), 'went out') +
+      fact(money(r.income), r.projected ? 'budgeted in' : 'came in') +
+      fact(money(r.expense), r.projected ? 'budgeted out' : 'went out') +
       fact((r.cumulative >= 0 ? '' : '−') + money(Math.abs(r.cumulative)), 'running total by then') +
     '</div>';
 }
@@ -4245,6 +4388,11 @@ $('net-chart').addEventListener('keydown', (e) => {
 });
 
 $('net-range').addEventListener('change', () => { netSel = null; refresh(); });
+
+/* The chart draws the projected months too, so the switch has to fetch and
+   redraw rather than filter something already on screen. The selection is
+   dropped because it may be pointing at a month that is about to disappear. */
+$('net-forecast-on').addEventListener('change', () => { netSel = null; renderNet(); });
 
 /* -------------------------------------------------------------- budgeting -- */
 
