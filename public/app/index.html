@@ -1262,6 +1262,14 @@
      grows with its children rather than the children spilling into a shared
      list — which is the point of separating them at all. */
   .bv-list{ display:flex; flex-direction:column; gap:10px; }
+  /* Income is not one of the categories below it and should not read as the
+     first of them. A mint edge down its left and a wider gap under it, so the
+     eye takes it as the thing the rest is measured against rather than as the
+     biggest spender.
+     Its verdict has no coral to worry about — see budgetPair — so the accent
+     is the only colour on the card and it can afford to be the mint. */
+  .bv-card.bv-income{ border-left:3px solid var(--mint); margin-bottom:8px; }
+  .bv-card.bv-income .bv-head b{ letter-spacing:.01em; }
   .bv-card{ background:var(--surface); border:1px solid var(--hair);
             border-radius:6px; padding:15px 20px 13px; }
   .bv-head{ display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:10px; }
@@ -5899,9 +5907,23 @@ const fillBudgetRanges = () => fillMonthOptions('bud-range');
  * parent that has none — opens the transactions behind its own figure. Both
  * are a "+", so the difference is carried in the attribute rather than in the
  * look, and the one handler reads it. */
-function budgetPair(label, colour, actual, budget, expand) {
+/* `opts` decides which side of the ledger the row is on.
+ *
+ *   tone:'income'   money arriving. Past the plan is good, not bad, so the
+ *                   bar never turns red and the verdict reads the other way.
+ *   shareOf:<cents> the row is a part of something rather than a plan of its
+ *                   own — used for the income sources, which have no budget
+ *                   because income is planned as one monthly figure (see
+ *                   buildShapedPlan). The track becomes the whole, and the
+ *                   verdict is this row's share of it.
+ */
+function budgetPair(label, colour, actual, budget, expand, opts) {
+  opts = opts || {};
+  const income = opts.tone === 'income';
+  const share = opts.shareOf > 0 ? opts.shareOf : 0;
+  if (share) budget = share;
   const hasBudget = budget > 0;
-  const over = hasBudget && actual > budget;
+  const over = hasBudget && !share && actual > budget;
   const pct = hasBudget ? (actual / budget) * 100 : 0;
 
   // Under: the track is the budget and the fill is the share of it spent.
@@ -5910,10 +5932,25 @@ function budgetPair(label, colour, actual, budget, expand) {
   const fillPct = !hasBudget ? 100 : over ? 100 : pct;
   const markPct = over ? (budget / actual) * 100 : null;
 
-  const verdict = !hasBudget
-    ? '<span class="bv-none">no budget yet</span>'
-    : '<span class="bv-verdict ' + (over ? 'bad' : 'good') + '">' +
-      money(Math.abs(actual - budget)) + (over ? ' over' : ' left') + '</span>';
+  /* What the row amounts to, in words.
+   *
+   *   a share      the proportion, because there is nothing to be over or
+   *                under — it is a part of a whole and the whole is the bar.
+   *   income       "above plan" is good and "to go" is neither: being partway
+   *                through a month is not a shortfall, so it takes plain ink
+   *                rather than the coral a category over its budget gets.
+   *   spending     as before.
+   */
+  const verdict =
+    share
+      ? '<span class="bv-verdict">' + Math.round(pct) + '% of income</span>'
+      : !hasBudget
+        ? '<span class="bv-none">no budget yet</span>'
+        : income
+          ? '<span class="bv-verdict' + (over ? ' good' : '') + '">' +
+            money(Math.abs(actual - budget)) + (over ? ' above plan' : ' to go') + '</span>'
+          : '<span class="bv-verdict ' + (over ? 'bad' : 'good') + '">' +
+            money(Math.abs(actual - budget)) + (over ? ' over' : ' left') + '</span>';
 
   const toggle = expand
     ? '<button class="ctog" type="button" data-' + (expand.kind === 'kids' ? 'bud' : 'bud-tx') +
@@ -5935,7 +5972,10 @@ function budgetPair(label, colour, actual, budget, expand) {
    * No budget is green: nothing has been exceeded. The category keeps its own
    * colour in the swatch beside its name, which is where identity belongs —
    * next to the label, not inside the measurement. */
-  const fill = over ? 'var(--coral)' : 'var(--mint)';
+  /* Coral means "past a limit". Income has no limit to be past, and a share
+     of a whole cannot exceed the whole, so both of those stay mint however
+     they land. Only a spending row can turn red. */
+  const fill = (over && !income) ? 'var(--coral)' : 'var(--mint)';
 
   /* The figures move off the heading and into the bar, the way the Overview's
      did. They were sitting a bar's width away from the measurement they
@@ -5946,7 +5986,8 @@ function budgetPair(label, colour, actual, budget, expand) {
 
      Printed twice, once in the ink that reads on the track and once clipped to
      the fill. See .bcap. */
-  const cap = money0(actual) + ' spent' + (hasBudget ? ' of ' + money0(budget) : '');
+  const cap = money0(actual) + (income ? ' earned' : ' spent') +
+    (hasBudget ? ' of ' + money0(budget) : '');
   const capHtml =
     '<span class="bcap">' + escapeHtml(cap) + '</span>' +
     '<span class="bcap on" style="width:' + fillPct.toFixed(2) + '%"><span>' +
@@ -5982,12 +6023,65 @@ async function renderBudgetView() {
     .filter(p => p[1] > 0 || p[2] > 0)
     .sort((a, b) => b[1] - a[1]);
 
-  if (!parents.length) {
-    host.innerHTML = '<p class="empty">Nothing spent in this period.</p>';
-    return;
-  }
+  /* Income first, and fixed there.
+   *
+   * It was not on this tab at all: "Against the plan" showed what every
+   * category cost against its budget and said nothing about the other half of
+   * the plan, which is what was supposed to come in. A month can be inside
+   * every spending budget it has and still be a bad month.
+   *
+   * Built before the empty check below, so a month with income and no
+   * spending still has something on the page.
+   *
+   * Pinned rather than sorted in. Everything below is ordered by what it cost,
+   * because the question there is "where did the money go"; income is not
+   * competing in that ordering and would move around inside it as the months
+   * changed, which is the opposite of what a fixed reference is for.
+   *
+   * Its sources — salary, dividends, interest — are top-level slugs of their
+   * own rather than children of "income", so they roll up through
+   * byIncomeParent and expand exactly the way a spending parent's children do.
+   * They carry no budget of their own because income is planned as a single
+   * monthly figure, so they are measured as a share of what came in. */
+  const incomeActual = s.totals.income || 0;
+  const incomePlan = (s.budget && s.budget.available && s.budget.income > 0) ? s.budget.income : 0;
+  const incomeSources = Object.entries(s.totals.byIncomeParent || {})
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1]);
 
-  host.innerHTML = parents.map(pair => {
+  const incomeCard = (incomeActual > 0 || incomePlan > 0)
+    ? '<div class="bv-card bv-income">' +
+      budgetPair('Income', colourOf('income'), incomeActual, incomePlan,
+        incomeSources.length > 1
+          ? { kind: 'kids', slug: 'income', open: budgetOpen.has('income') }
+          : { kind: 'tx', slug: 'income', open: budgetTxOpen.has('income') },
+        { tone: 'income' }) +
+      (incomeSources.length > 1
+        ? '<div class="bv-kids" data-bud-kids="income"' +
+          (budgetOpen.has('income') ? '' : ' hidden') + '>' +
+          incomeSources.map(([slug, amount]) => '<div class="bv-kid">' +
+            budgetPair(labelOfSlug(slug), colourOf(slug), amount, 0,
+              { kind: 'tx', slug: slug, open: budgetTxOpen.has(slug) },
+              { tone: 'income', shareOf: incomeActual }) +
+            '<div class="bv-tx" data-bud-tx-for="' + escapeHtml(slug) + '"' +
+            (budgetTxOpen.has(slug) ? '' : ' hidden') + '></div>' +
+            '</div>').join('') + '</div>'
+        : '<div class="bv-tx" data-bud-tx-for="income"' +
+          (budgetTxOpen.has('income') ? '' : ' hidden') + '></div>') +
+      '</div>'
+    : '';
+
+  /* An empty spending list no longer empties the tab.
+     This used to return before anything was drawn, which was right when the
+     tab was nothing but spending. Now the income card can be the only thing
+     on it — a month with a pay cheque in and nothing out is a real month, and
+     "Nothing spent in this period" is a note about the list below rather than
+     a verdict on the whole view. */
+  const emptyNote = parents.length
+    ? ''
+    : '<p class="empty">Nothing spent in this period.</p>';
+
+  host.innerHTML = incomeCard + emptyNote + parents.map(pair => {
     const slug = pair[0], actual = pair[1], budget = pair[2];
     const kids = categoryList
       .filter(c => c.parentSlug === slug)
