@@ -23,6 +23,16 @@
     --mint:#00F0A8; --mint-dim:#00A876; --mint-glow:rgba(0,240,168,0.35); --mint-bg:rgba(0,240,168,0.08);
     --coral:#FF5C72; --warning:#FAB219;
     --surface:#0F171F; --grid:#1B2630;
+    /* The ledger's own two surfaces: the band the headings sit on, and the
+       stripe on every other row. Both are a step off the card rather than a
+       colour of their own — a table that is legible because of its stripes is
+       a table with too many rows on it, and these are only there to stop the
+       eye losing its line across five columns. */
+    --row-head:#151E27; --row-alt:rgba(231,238,243,0.028);
+    /* Dates and column headings. Grey on black is the right weight for
+       something you read past; see the light block for why it is not grey
+       there. */
+    --ink-quiet:#7E90A2;
     --cat-home:#3987e5; --cat-groceries:#d95926; --cat-shopping:#199e70;
     --cat-dining:#c98500; --cat-pets:#d55181; --cat-transport:#008300; --cat-bills:#9085e9;
 
@@ -128,6 +138,28 @@
        than as part of the surface. Ink on it is 12.0:1; its option list stays
        on the card colour, where the muted optgroup labels still clear 4.5. */
     --field:#F2E2B4;
+    /* The stripe goes lighter than the card, not darker.
+     *
+     * Darker was the obvious choice and it broke something: coral on a cream
+     * card measures 4.5:1, and taking the ground down even slightly took it to
+     * 4.33 — a stripe that exists to help the eye track a row, quietly making
+     * every amount on every other row fail. Lighter cannot do that. Whatever
+     * clears the floor on the card clears it by more on the stripe, which
+     * makes the striping free rather than something to re-measure every time
+     * a colour lands in this table. (The dark theme has always worked this
+     * way, for the same arithmetic upside down: its stripe is a white veil.) */
+    --row-head:#EFE0B6; --row-alt:#FCF6E3;
+    /* Dates and column headings.
+     *
+     * These were pushed to full ink when every grey in the light theme was,
+     * because #111 was the only thing that measured. Full ink is right for a
+     * figure and wrong for a date: it puts the timestamp at exactly the weight
+     * of the description beside it, and the eye has nowhere to rest.
+     *
+     * Brown rather than grey, out of the same family as the page. #5E4820 is
+     * 7.4:1 on the card — well past the 4.5 floor, so it is quiet by choice
+     * rather than by accident. */
+    --ink-quiet:#5E4820;
     /* And is exactly what the light theme should not have. A cream page with
        monospace figures reads as a terminal someone painted; the same numbers
        in the text face read as a document. Tabular figures below keep the
@@ -370,6 +402,23 @@
      grey on cream is just faint — 4.5:1 is a floor for text you have to be able
      to read, not a target for text you read constantly. Both take full ink in
      the light, which is 13.0:1 on a card. */
+  /* The ledger keeps its browns in the light theme.
+   *
+   * The blanket rule below sends every date and every heading to full ink,
+   * which was the right call when the alternative was a grey that measured
+   * 4.3:1. It is the wrong call for this table: at full ink the timestamp
+   * weighs exactly as much as the description next to it, and a row of five
+   * equal-weight columns has no shape. --ink-quiet is 7.4:1, so it is a step
+   * back by choice rather than a step back that happens to be hard to read.
+   *
+   * Written after the rule it overrides, because they have the same
+   * specificity and the later one wins. */
+  :root[data-theme="light"] #tx-list table.data td.date,
+  :root[data-theme="light"] #tx-list table.data th,
+  :root[data-theme="light"] #tx-list table.data .thf{ color:var(--ink-quiet); }
+  /* Typed into rather than opened, so it takes the ink of what you typed. */
+  :root[data-theme="light"] #tx-list input.thi:not(:placeholder-shown){ color:var(--mint); }
+
   :root[data-theme="light"] table.data td.date,
   :root[data-theme="light"] table.data th,
   /* The gradient runs up into near-white, which is a highlight on the dark
@@ -1296,25 +1345,116 @@
                  padding:0 10px 10px 0; font-weight:500; }
   /* The date was carrying its colour inline, which put it out of reach of the
      theme. It is a class now so it can say something different in each. */
-  table.data td.date{ color:var(--muted); }
+  table.data td.date{ color:var(--ink-quiet); }
 
-  /* The date column is a number column and took the right-alignment that comes
-     with that, which put every date hard against the descriptions — ten pixels
-     from them, and a hundred from the "Date" heading it belongs under. A date
-     is not a quantity, and nothing lines up underneath it that wants its units
-     stacked, so the alignment was buying nothing and costing the one gap on the
-     row that has to be legible.
+  /* ---- the ledger ----
+   *
+   * Everything from here to the end of the block is scoped to #tx-list, so
+   * the Tracker's drill-down tables keep the plain treatment they have.
+   *
+   * ── The columns ─────────────────────────────────────────────────────────
+   *
+   * Fixed rather than shrink-to-fit. The table was letting each column take
+   * what its contents happened to need, which meant the layout changed every
+   * time the filters changed — a page of short merchant names and a page of
+   * long ones put the amounts in two different places, and there is no reading
+   * of a ledger where that is what you want.
+   *
+   * Description takes the slack, because it is the only column whose contents
+   * genuinely vary, and it is the one that runs out of room first. Everything
+   * else is the width of the widest thing it will ever hold. */
+  #tx-list table.data{ table-layout:fixed; }
+  #tx-list col.c-date{ width:106px; }
+  #tx-list col.c-desc{ width:auto; }
+  #tx-list col.c-sub{ width:112px; }
+  #tx-list col.c-cat{ width:178px; }
+  /* Wide enough for a six-figure total in the dark theme, whose numeric face
+     is a monospace and needs about a sixth more room than the light one. */
+  #tx-list col.c-amt{ width:126px; }
 
-     Shrunk to its contents at the same time. Left-aligned in a column the table
-     had made 188px wide, it would have traded a cramped gap for a canyon; the
-     width goes to the descriptions instead, which are what actually run out of
-     room. Scoped to this table so the Tracker's own drill-down is untouched. */
+  /* One line, always.
+   *
+   * A fixed table gives the description whatever the other four leave, and on
+   * a narrow card that is not much — "Oakwood Property Mgmt" was breaking into
+   * two lines and taking the row height with it, which made a list of forty
+   * transactions a list of forty different heights. The avatar holds its size
+   * and the name gives way; the full text is on the title, and the filter
+   * above the column searches the whole string either way.
+   *
+   * Done on the cell rather than by making it a flex container: display:flex
+   * on a td takes it out of the table box model, the browser wraps it in an
+   * anonymous cell, and the column it was supposed to line up with stops
+   * lining up. overflow and text-overflow work on a table-cell directly, so
+   * long as the table is fixed — which it now is.
+   *
+   * Scoped to tbody, and that matters: the footer row puts a colspan-4 label
+   * first, so its total is also "the second cell" and was being ellipsised
+   * down to "+$8,014.…" in the dark theme, where the numeric face is a
+   * monospace and runs wider. */
+  #tx-list table.data tbody td:nth-child(2){ overflow:hidden; white-space:nowrap;
+                                             text-overflow:ellipsis; }
+
+  /* Below this the five columns stop fitting whatever is given up, so the card
+     scrolls sideways rather than crushing them. The table keeps a floor wide
+     enough for the fixed four plus a readable description. */
+  #tx-list{ overflow-x:auto; }
+  #tx-list table.data{ min-width:640px; }
+
+  /* A date is not a quantity: nothing lines up underneath it that wants its
+     units stacked, so it takes the left edge like the text it is. */
+  #tx-list table.data td.date{ text-align:left; white-space:nowrap; }
+
+  /* Every cell gets a left edge to sit against, which is what moves the
+     descriptions off the dates and the categories off the descriptions. The
+     first and last take a wider one so the row has a margin inside the card
+     rather than running into its border. */
+  #tx-list table.data th,
+  #tx-list table.data td{ padding:10px 14px; }
   #tx-list table.data th:first-child,
-  #tx-list table.data td.date{ text-align:left; width:1%; white-space:nowrap; }
+  #tx-list table.data td:first-child{ padding-left:18px; }
+  #tx-list table.data th:last-child,
+  #tx-list table.data td:last-child{ padding-right:18px; }
+
+  /* ── The heading band ────────────────────────────────────────────────────
+   *
+   * The headings sit on their own ground now rather than floating over the
+   * card, so the row reads as the top of a table instead of as the first line
+   * of it. What has not changed is that every one of them is a control: the
+   * selects keep their native carets, which is the only thing on the row
+   * saying it can be opened, and the whole point of dressing them as headings
+   * was that they still look like headings. */
+  #tx-list table.data thead th{ background:var(--row-head);
+    border-bottom:1px solid var(--hair-strong); padding-top:12px; padding-bottom:12px;
+    vertical-align:middle; }
+  #tx-list table.data thead th:first-child{ border-radius:6px 0 0 0; }
+  #tx-list table.data thead th:last-child{ border-radius:0 6px 0 0; }
+  /* The bottom margin was spacing the headings off the first row back when
+     nothing else did. The band's padding does it now, and the margin left the
+     control sitting high in its own cell. */
+  #tx-list table.data thead .thf{ margin:0 0 0 -4px; }
+  #tx-list table.data thead .thwrap{ min-height:24px; }
+
+  /* ── The rows ────────────────────────────────────────────────────────────
+   *
+   * Striped, faintly. Five columns is enough that the eye can drop a line
+   * between the description and the amount, and the alternative fix — a rule
+   * under every row — draws forty lines to solve a problem that a tint solves
+   * with none. The top border goes: the stripe is doing that job. */
+  #tx-list table.data tbody td{ border-top:none; vertical-align:middle; }
+  #tx-list table.data tbody tr:nth-child(even){ background:var(--row-alt); }
   table.data td{ padding:9px 10px 9px 0; border-top:1px solid var(--hair); vertical-align:top; }
   table.data td.num{ text-align:right; font-family:var(--font-num);
                      font-variant-numeric:tabular-nums; white-space:nowrap; }
   td.num.in{ color:var(--mint); }
+  /* Money out in red, money in in green, on this table only.
+   *
+   * Worth saying out loud, because it breaks a rule the rest of the app keeps:
+   * mint and coral are verdict colours everywhere else, good and bad, and a
+   * grocery shop is neither. A ledger is the one place the convention earns
+   * its keep — the column is nothing but signed amounts, the sign is the only
+   * thing being asked of it, and a minus sign at eleven pixels is a poor way
+   * to carry it. Scoped to #tx-list so no total, chart or tile picks it up. */
+  #tx-list td.num.out{ color:var(--coral); }
   .pill{ font-family:var(--font-num); font-size:11px; color:var(--ink-soft);
          border:1px solid var(--hair); border-radius:99px; padding:2px 8px; white-space:nowrap; }
   /* The category cell is editable, so it looks editable rather than like text. */
@@ -1323,6 +1463,40 @@
                  border:1px solid var(--hair); border-radius:6px;
                  padding:5px 8px; max-width:190px; cursor:pointer; }
   select.catsel:hover{ border-color:var(--mint-dim); }
+  /* One shape down the column, whatever is in it.
+   *
+   * These were sized to their contents, so "Coffee" drew a box half the width
+   * of "Travel & Entertainment" and the column read as a ragged edge rather
+   * than as a set of controls. They are all the same control and they all do
+   * the same thing, so they are all the same size; the column is fixed, so
+   * 100% of it is a fixed width. A long label ellipsises rather than pushing
+   * the box wider — the full name is one click away in the menu itself. */
+  #tx-list select.catsel{ width:100%; max-width:none;
+                          text-overflow:ellipsis; }
+
+  /* ── the subscription mark ──
+     A charge that comes back. Worked out from the ledger rather than read off
+     it — see recurring.ts — so the cell carries the evidence in its title:
+     nobody should have to take a derived label on trust. */
+  /* Outlined rather than filled, and in the darker mint.
+   *
+   * Filled with --mint-bg and lettered in --mint it measured 3.85:1 in the
+   * light theme — the tint darkens the ground and the ink was the lighter of
+   * the two greens, so the pill lost on both sides at once. Unfilled, in
+   * --mint-dim, it is 5.4:1. The ring and the dot carry it perfectly well
+   * without a fill; the fill was decoration that happened to cost legibility. */
+  .subpill{ display:inline-flex; align-items:center; gap:5px;
+            font-family:var(--font-num); font-size:11px; font-weight:600;
+            letter-spacing:.04em; text-transform:uppercase;
+            color:var(--mint-dim); background:none;
+            border:1px solid var(--mint-dim); border-radius:99px;
+            padding:3px 9px; white-space:nowrap; cursor:default; }
+  .subpill::before{ content:""; width:5px; height:5px; border-radius:50%;
+                    background:var(--mint-dim); flex:none; }
+  /* The dark theme runs the other way: --mint-dim is the darker green there
+     too, and against a near-black row the brighter one is what reads. */
+  :root:not([data-theme="light"]) .subpill{ color:var(--mint); border-color:var(--mint-dim); }
+  :root:not([data-theme="light"]) .subpill::before{ background:var(--mint); }
 
   /* ---- the merchant mark, at the head of a description ----
      A monogram underneath and the logo over it, rather than a logo with a
@@ -2602,9 +2776,21 @@ async function renderTransactions() {
   categoryList = r.categories; catOptCache = {};
   const host = $('tx-list');
 
+  /* Declared once, so the widths live in the stylesheet with the rest of the
+     layout rather than being repeated on every th and td. */
+  const cols = '<colgroup><col class="c-date"><col class="c-desc">' +
+    '<col class="c-sub"><col class="c-cat"><col class="c-amt"></colgroup>';
+
+  /* Subscription sits between the description and the category, which is what
+     pushes the category right. It is the only heading on the row that is not a
+     control, because it is the only column that is not a filter — the verdict
+     is worked out for the merchants on the page, so filtering on it would mean
+     working it out for the whole ledger first. A caret it cannot honour would
+     be worse than no caret. */
   const head = '<thead><tr>' +
     '<th>' + txHeaderSelect('f-date', 'Date', txFilters.period, txMonthOptions(txFilters.period)) + '</th>' +
     '<th>' + txHeaderInput('f-desc', 'Description', txFilters.merchant, r.merchants) + '</th>' +
+    '<th>Subscription</th>' +
     '<th>' + txHeaderSelect('f-cat', 'Category', txFilters.category, txCategoryOptions(txFilters.category)) + '</th>' +
     '<th style="text-align:right">' +
       txHeaderSelect('f-amt', 'Amount', txFilters.amount,
@@ -2617,7 +2803,7 @@ async function renderTransactions() {
   if (!r.transactions.length) {
     // The headings still have to be reachable, or a filter that matches nothing
     // takes its own undo away with it.
-    host.innerHTML = '<table class="data">' + head + '</table>' +
+    host.innerHTML = '<table class="data">' + cols + head + '</table>' +
       '<p class="empty">' + (filtering ? 'Nothing matches these filters.' : 'No transactions yet.') + '</p>' +
       (filtering ? '<p class="msg"><a href="#" id="tx-clear" style="color:var(--mint-dim)">Clear filters</a></p>' : '');
     restoreCaret();
@@ -2631,16 +2817,20 @@ async function renderTransactions() {
                  : t.categorySource === 'rule' ? 'your rule' : '';
     return '<tr data-id="' + t.id + '" data-merchant="' + escapeHtml(t.name) + '">' +
       '<td class="num date">' + t.date + '</td>' +
-      '<td>' + avatar(t) + '<span class="tx-name">' + escapeHtml(t.name) + '</span>' +
+      // Titled because the cell truncates: a name clipped to "Oakwood
+      // Property ..." with no way to see the rest is a name the row has lost.
+      '<td>' + avatar(t) + '<span class="tx-name" title="' + escapeHtml(t.name) + '">' +
+        escapeHtml(t.name) + '</span>' +
         (t.pending ? ' <span class="pill">pending</span>' : '') +
         (source ? ' <span class="pill">' + source + '</span>' : '') + '</td>' +
+      '<td>' + subscriptionCell(t) + '</td>' +
       // Amount decides which side of the ledger this row is on. The menu holds
       // only what it is currently showing; the rest arrives when it is opened.
       '<td><select class="catsel" data-id="' + t.id + '" data-slug="' +
         escapeHtml(t.category || '') + '" data-side="' + (t.amount > 0 ? 'income' : 'spend') + '">' +
         '<option>' + escapeHtml(t.category ? labelOfSlug(t.category) : '—') + '</option>' +
         '</select></td>' +
-      '<td class="num' + (t.amount > 0 ? ' in' : '') + '">' +
+      '<td class="num' + (t.amount > 0 ? ' in' : ' out') + '">' +
         (t.amount > 0 ? '+' : '') + money(t.amount) + '</td></tr>';
   }).join('');
 
@@ -2653,15 +2843,33 @@ async function renderTransactions() {
   if (s.in) parts.push('+' + money(s.in) + ' in');
   if (s.out) parts.push(money(-s.out) + ' out');
   const foot = '<tfoot><tr>' +
-    '<td class="tx-total-label" colspan="3">' + r.total + ' transaction' + (r.total === 1 ? '' : 's') +
+    '<td class="tx-total-label" colspan="4">' + r.total + ' transaction' + (r.total === 1 ? '' : 's') +
       (parts.length > 1 ? ' · ' + parts.join(' · ') : '') + '</td>' +
     '<td class="num tx-total">' +
       (s.net > 0 ? '+' : '') + money(s.net) + '</td></tr></tfoot>';
 
-  host.innerHTML = '<table class="data">' + head + '<tbody>' + rows + '</tbody>' + foot + '</table>' +
+  host.innerHTML = '<table class="data">' + cols + head + '<tbody>' + rows + '</tbody>' + foot + '</table>' +
     '<p class="msg" id="tx-msg">' + r.transactions.length + ' of ' + r.total + ' shown' +
     (filtering ? ' · <a href="#" id="tx-clear" style="color:var(--mint-dim)">clear filters</a>' : '') + '.</p>';
   restoreCaret();
+}
+
+/**
+ * The subscription cell.
+ *
+ * The word on the pill is the cadence, because that is the useful part — you
+ * already know it is Netflix, what you want to know is that it comes back
+ * every month. The evidence is on the title: how long it has been running,
+ * how many charges, what it costs now, and whether that has gone up. A label
+ * the app worked out rather than read should be able to show its working.
+ */
+function subscriptionCell(t) {
+  const s = t.subscription;
+  if (!s) return '';
+  const note = 'Monthly since ' + monthLabel(String(s.since).slice(0, 7)) +
+    ' · ' + s.count + ' charges · ' + money(s.cents) + ' now' +
+    (s.rose ? ', up from less' : '');
+  return '<span class="subpill" title="' + escapeHtml(note) + '">Monthly</span>';
 }
 
 /* Delegated: the headings are rebuilt on every render, so binding to them

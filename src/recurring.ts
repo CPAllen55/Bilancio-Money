@@ -17,7 +17,7 @@
  *   1. At least three charges. Two is a coincidence — any pair of visits to
  *      the same shop a month apart at a similar price would qualify, and the
  *      column would be wrong more often than right.
- *   2. Every gap between consecutive charges is a month: 26 to 35 days. The
+ *   2. Every gap between consecutive charges is a month: 25 to 37 days. The
  *      spread is for billing dates that slide off weekends and for the 28-day
  *      February, not for "roughly monthly".
  *   3. Every step in price either holds or goes up. Holding means within 1% —
@@ -62,8 +62,21 @@ export interface Verdict {
 }
 
 export const MIN_CHARGES = 3;
-export const MONTH_MIN_DAYS = 26;
-export const MONTH_MAX_DAYS = 35;
+/* A month, generously.
+ *
+ * These were 26 and 35, on the reasoning that a bill posts on its nominal day
+ * or is pushed to the next business day — so 28 at the tightest and 34 at the
+ * loosest. That holds for posting delays, which only ever run late. It does
+ * not hold for a billing date that moves earlier: a charge on the 17th of
+ * February followed by one on the 14th of March is 25 days, and February is
+ * short enough that a two-day slide gets there.
+ *
+ * 25 to 37 costs nothing. The nearest real cadences are three-weekly at 21 and
+ * six-weekly at 42, both comfortably outside, and twice-monthly at 15 is not
+ * close. Widening the window does not weaken the rule, because the window is
+ * not what does the work — the price test is. */
+export const MONTH_MIN_DAYS = 25;
+export const MONTH_MAX_DAYS = 37;
 /** The 99% test: this much either side still counts as the same price. */
 export const SAME_PRICE = 0.01;
 /** A rise past this is a different charge, not the same one costing more. */

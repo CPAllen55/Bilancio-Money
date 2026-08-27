@@ -22,6 +22,7 @@ import {
 import { requireUser } from "./auth";
 import { classify, merchantKey } from "./categories";
 import { buildShapedPlan, learnWindow, loadOverrides } from "./plan";
+import { judgeAll, type Charge, type Verdict } from "./recurring";
 
 const summary = new Hono<{ Bindings: Env }>();
 
@@ -436,6 +437,76 @@ function withOverrides(db: ReturnType<typeof getDb>["db"], userId: string) {
     );
 }
 
+/* ---------------------------------------------------------- subscriptions -- */
+
+/* How far back to look for a repeating charge.
+ *
+ * Eighteen months, which is six more than the longest range the Transactions
+ * tab offers. The rule wants three consecutive months and the reader may be
+ * looking at a page from a year ago, so the window has to cover the run around
+ * whatever is on screen rather than the run up to today.
+ *
+ * The row cap is a backstop against a merchant string that turns out to match
+ * half the ledger. It drops the oldest first, which is the right end to lose:
+ * the rule reads consecutive pairs, so losing the tail of a long run leaves
+ * the recent run intact and the verdict unchanged. */
+const SUBSCRIPTION_MONTHS = 18;
+const SUBSCRIPTION_SCAN_CAP = 6000;
+
+/**
+ * Which of the merchants on this page are charging on a subscription.
+ *
+ * Asked of the merchants on the page rather than of the whole ledger: the
+ * question is only ever "is this row a subscription", and a user with four
+ * years of history has no interest in paying to evaluate merchants that are
+ * not on screen. One extra query, bounded by the names it was given.
+ */
+async function subscriptionsFor(
+  db: ReturnType<typeof getDb>["db"],
+  ids: string[],
+  displayName: ReturnType<typeof sql<string>>,
+  names: string[],
+  today: Date,
+): Promise<Map<string, Verdict>> {
+  if (!names.length || !ids.length) return new Map();
+
+  const from = new Date(today);
+  from.setUTCMonth(from.getUTCMonth() - SUBSCRIPTION_MONTHS);
+
+  const history = await db
+    .select({
+      date: transactions.date,
+      amount: transactions.amount,
+      name: transactions.name,
+      merchantName: transactions.merchantName,
+    })
+    .from(transactions)
+    .where(
+      and(
+        inArray(transactions.accountId, ids),
+        gte(transactions.date, ymd(from)),
+        inArray(displayName, names),
+        // A charge that has not settled has neither a final amount nor a final
+        // date, and the rule reads both.
+        eq(transactions.pending, false),
+      ),
+    )
+    .orderBy(desc(transactions.date))
+    .limit(SUBSCRIPTION_SCAN_CAP);
+
+  const byKey = new Map<string, Charge[]>();
+  for (const r of history) {
+    const key = merchantKey(r.merchantName, r.name);
+    if (!key) continue;
+    // The column is Plaid's way round already: positive means money left.
+    const list = byKey.get(key);
+    if (list) list.push({ date: r.date, cents: Number(r.amount) });
+    else byKey.set(key, [{ date: r.date, cents: Number(r.amount) }]);
+  }
+
+  return judgeAll(byKey);
+}
+
 /* ------------------------------------------------------------------ budget -- */
 
 /** Every calendar month a window touches, both ends included. */
@@ -757,6 +828,12 @@ summary.get("/transactions", async (c) => {
       moneyOut = Number(totals[0].moneyOut);
     }
 
+    /* Judged off the names on this page, which is the smallest question that
+       answers every row. Distinct, so a page of two hundred Starbucks rows
+       asks about one merchant. */
+    const pageNames = [...new Set(rows.map((r) => r.merchantName ?? r.name).filter(Boolean))];
+    const subs = await subscriptionsFor(db, ids, displayName, pageNames, new Date());
+
     // Every description in the period, for the list on that column. Still
     // capped, but the cap stopped being the limit of what is reachable when the
     // heading became typeable — anything past it is found by typing part of it.
@@ -797,6 +874,18 @@ summary.get("/transactions", async (c) => {
              our own origin, so the URL Plaid gave us never reaches a browser
              and cannot be fetched from one. */
           logo: logoFile(r.logoUrl),
+          /* Worked out, not stored — see recurring.ts for the rule and for
+             what it deliberately refuses to guess at. Null rather than false
+             where there is no verdict, so the client can tell "not a
+             subscription" from "never asked". */
+          subscription: subs.get(key)
+            ? {
+                cents: subs.get(key)!.cents,
+                since: subs.get(key)!.since,
+                count: subs.get(key)!.count,
+                rose: subs.get(key)!.rose,
+              }
+            : null,
         };
       }),
     });
