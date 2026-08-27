@@ -482,10 +482,20 @@
    * the fill, inside a box clipped to exactly the fill width. Both copies are
    * absolutely positioned at the same offset, so the glyphs land on top of
    * each other and the colour changes precisely at the fill edge. */
+  /* Bold, and half a point larger. At 12px regular this measured 5.3:1 on the
+     light theme's green, which clears the floor and still read thin — a
+     saturated ground eats light strokes, and a contrast ratio does not know
+     how heavy the type is. 600 weight is the fix; making it larger instead
+     would have started crowding the track.
+
+     White on the fill in the light theme, which is what --on-fill already
+     resolves to there. It stays dark in the dark theme, where the fill is
+     #00F0A8: white on that is 1.3:1, which is not a readability preference,
+     it is invisible. */
   .bcap{ position:absolute; left:9px; top:0; height:100%; display:flex;
          align-items:center; white-space:nowrap; pointer-events:none;
-         font-family:var(--font-num); font-size:12px; letter-spacing:.01em;
-         color:var(--ink); }
+         font-family:var(--font-num); font-size:12.5px; font-weight:600;
+         letter-spacing:.01em; color:var(--ink); }
   .bcap.on{ left:0; overflow:hidden; }
   .bcap.on span{ position:absolute; left:9px; top:0; height:100%;
                  display:flex; align-items:center; color:var(--on-fill); }
@@ -1198,14 +1208,35 @@
   .bv-head b{ font-weight:600; }
   /* The verdict is the answer to the question the two bars pose, so it sits on
      the same line as the name rather than under the bars. */
-  .bv-verdict{ margin-left:14px; font-family:var(--font-num); font-size:12px;
+  /* margin-left:auto now that .bv-figures no longer sits between it and the
+     name — without it the verdict would huddle against the label instead of
+     holding the right edge above the bar's own right edge. */
+  .bv-verdict{ margin-left:auto; font-family:var(--font-num); font-size:12px;
                min-width:98px; text-align:right; }
   .bv-verdict.good{ color:var(--mint); }
   .bv-verdict.bad{ color:var(--coral); }
-  .bv-none{ margin-left:14px; font-size:11.5px; color:var(--muted);
+  .bv-none{ margin-left:auto; font-size:11.5px; color:var(--muted);
              min-width:98px; text-align:right; }
   .bv-row{ display:flex; align-items:center; gap:12px; margin-bottom:4px; }
   .bv-row .btrack{ flex:1 1 auto; position:relative; overflow:visible; height:12px; }
+  /* The Overview's bar, here too. Same class, same caption, same two-layer
+     ink — this view was already asking the Overview's question (how much of
+     this budget has gone) and answering it the Overview's old way, with the
+     figures parked in the heading a bar's width from the thing they describe.
+
+     The overflow has to be restated: .bv-row .btrack and .btrack.thick have
+     the same specificity, and .bv-row .btrack is written later, so without
+     this the clip that keeps the caption inside the bar loses. */
+  .bv-row .btrack.thick{ height:21px; overflow:hidden; }
+  /* Children are a step down in the hierarchy and a step down in height, but
+     they carry the same caption — a row you cannot read the figures off is
+     not worth three pixels. */
+  .bv-kid .bv-row .btrack.thick{ height:18px; }
+  .bv-kid .bcap, .bv-kid .bcap.on span{ font-size:11.5px; }
+  /* Full height, for the reason the Overview's mark is: the track clips now,
+     so an overhang would simply be cut off. */
+  .btrack.thick .bv-tick{ top:0; bottom:0; width:3px;
+                          box-shadow:0 0 0 1px var(--surface); }
   /* Where the budget ran out. Its whole job is to divide what was within
      budget from what was not, so it has to cut through the bar AND read on the
      card either side of it — which is why the colour follows the theme rather
@@ -1223,9 +1254,6 @@
   .bv-pct{ flex:0 0 46px; text-align:right; font-family:var(--font-num);
            font-size:12px; color:var(--mint); }
   .bv-pct.bad{ color:var(--coral); }
-  .bv-figures{ margin-left:auto; font-family:var(--font-num); font-size:12.5px;
-               color:var(--ink); }
-  .bv-dim{ color:var(--muted); }
   .bv-kids{ margin:10px 0 2px 26px; padding-left:14px; border-left:1px solid var(--hair); }
   .bv-kid{ padding:8px 0; }
   .bv-kid .bv-head{ font-size:12.5px; margin-bottom:7px; }
@@ -1233,7 +1261,6 @@
   .bv-kid .btrack{ height:9px; }
   @media (max-width:560px){
     .bv-head{ flex-wrap:wrap; }
-    .bv-figures{ margin-left:26px; }
     .bv-verdict, .bv-none{ margin-left:auto; min-width:0; }
     .bv-kids{ margin-left:8px; }
   }
@@ -5581,14 +5608,28 @@ function budgetPair(label, colour, actual, budget, expand) {
    * next to the label, not inside the measurement. */
   const fill = over ? 'var(--coral)' : 'var(--mint)';
 
+  /* The figures move off the heading and into the bar, the way the Overview's
+     did. They were sitting a bar's width away from the measurement they
+     describe, and the heading now carries the name and the verdict — which is
+     what a heading is for. Rounded to the dollar for the same reason as the
+     Overview: the budget is a shaped estimate and the penny is invented
+     precision. The exact amounts are still in the drill-down below.
+
+     Printed twice, once in the ink that reads on the track and once clipped to
+     the fill. See .bcap. */
+  const cap = money0(actual) + ' spent' + (hasBudget ? ' of ' + money0(budget) : '');
+  const capHtml =
+    '<span class="bcap">' + escapeHtml(cap) + '</span>' +
+    '<span class="bcap on" style="width:' + fillPct.toFixed(2) + '%"><span>' +
+    escapeHtml(cap) + '</span></span>';
+
   return '<div class="bv-head">' + toggle +
       '<span class="swatch" style="background:' + colour + '"></span>' +
       '<b>' + escapeHtml(label) + '</b>' +
-      '<span class="bv-figures">' + money(actual) +
-        (hasBudget ? ' <span class="bv-dim">of ' + money(budget) + '</span>' : '') + '</span>' +
       verdict + '</div>' +
-    '<div class="bv-row"><div class="btrack">' +
+    '<div class="bv-row"><div class="btrack thick">' +
       '<div class="bfill" style="width:' + fillPct.toFixed(1) + '%;background:' + fill + '"></div>' +
+      capHtml +
       (markPct !== null
         ? '<div class="bv-tick" style="left:' + markPct.toFixed(1) + '%" title="budget ran out here — ' +
           money(budget) + '"></div>'
