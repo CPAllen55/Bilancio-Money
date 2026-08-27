@@ -766,6 +766,15 @@
   .panel-box .ktotal{ padding:13px 15px; background:var(--bg-panel);
                       border-bottom:0; margin:0; }
   .panel-box .kitem.static{ padding:9px 15px; }
+  /* The two overlay rows. They carry a box like every other row, so they take
+     the row padding rather than the caption padding — and they grey out the
+     same way a switched-off category does, which is the whole point of making
+     them switches. */
+  .panel-box .kitem.layer{ padding:9px 15px; }
+  .kitem.layer .kpick.static{ display:flex; align-items:center; gap:10px;
+                              flex:1; min-width:0; }
+  .kitem.layer.off .kswatch{ filter:grayscale(1); opacity:.55; }
+  .kitem.layer.off .klabel{ text-decoration:line-through; }
   @media (max-width:900px){
     .trend-side{ flex:none; width:100%; }
     .trend-key.panel-box{ flex:none; width:100%; }
@@ -836,10 +845,12 @@
                         box-sizing:border-box; background:var(--bg-panel);
                         border:2px solid var(--mint); }
 
+  /* 3 and 7, following the chart. A swatch that draws a thinner line than the
+     thing it names is a swatch pointing at something else. */
   .kswatch.line{ position:relative; height:0; width:15px; border-radius:0;
-                 border-top:2px solid var(--mint); }
-  .kswatch.line::after{ content:""; position:absolute; left:50%; top:-3px;
-                        width:6px; height:6px; margin-left:-3px;
+                 border-top:3px solid var(--mint); }
+  .kswatch.line::after{ content:""; position:absolute; left:50%; top:-3.5px;
+                        width:7px; height:7px; margin-left:-3.5px;
                         background:var(--mint); }
   .klabel{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .kamt{ margin-left:auto; font-family:var(--font-num); font-size:11px; color:var(--muted); }
@@ -3351,6 +3362,16 @@ let trendVisible = 0;      // months in view
    upper one lists parents and the lower one lists children, and turning off
    "Food and Dining" upstairs should not empty the chart downstairs. */
 const trendOff = new Set();
+/* The two things on this chart that are not categories: the income line and
+   the year-ago line. They get their own set rather than joining trendOff,
+   which holds category slugs and is asked `has(id)` for every one of them —
+   and one of the app's own slugs is literally "income", so putting the layer
+   in there would switch off a category by name collision. Separate set,
+   separate scope, no chance of it.
+
+   Both start on, because both were always drawn. */
+const trendLayerOff = new Set();
+const layerOn = (name) => !trendLayerOff.has(name);
 const pieOff = new Set();
 
 /** What a month comes to once the switched-off categories are taken out. */
@@ -3655,10 +3676,20 @@ function drawTrend() {
   // that is no longer visible — and the axis is always labelled, so the framing
   // states its own scale instead of implying a fixed one.
   const highest = rows => Math.max.apply(null, rows.concat([0]));
+  /* A line that is switched off does not get to set the ceiling.
+   *
+   * The axis reaches whatever it has to reach to hold everything drawn, which
+   * used to be everything full stop. Now that the two lines can be turned off,
+   * an axis that still reserved room for them would answer a switch that says
+   * "stop showing me income" with a chart that leaves a third of itself empty
+   * where income used to be — the mark gone and its footprint still there.
+   *
+   * Categories already work this way through shownTotal and trendOff. This is
+   * the same rule applied to the other two things on the chart. */
   const windowPeak = Math.max(
     highest(all.map(m => shownTotal(m.byParent, trendOff))),
-    highest(all.map(m => m.income)),
-    highest(prior.map(m => m.expense))
+    layerOn('income') ? highest(all.map(m => m.income)) : 0,
+    layerOn('prior') ? highest(prior.map(m => m.expense)) : 0
   );
 
   // A window with nothing in it would otherwise be given an axis running $0 to
@@ -3813,15 +3844,20 @@ function drawTrend() {
    * Over the bars now rather than under them. Behind, the line vanished
    * exactly where a column rose past it — which is the month worth looking at.
    */
-  if (all.some(m => m.income > 0)) {
+  if (layerOn('income') && all.some(m => m.income > 0)) {
     const pts = all.map((m, i) => [PL + band * i + band / 2, y(m.income)]);
+    // 3 rather than 2. At two pixels against nine stacked bands it read as a
+    // gridline someone had tinted; it is the one line on the chart that is a
+    // different quantity from everything under it, and it should look like it.
     svg += '<polyline points="' +
       pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ') +
-      '" fill="none" stroke="var(--mint)" stroke-width="2" ' +
+      '" fill="none" stroke="var(--mint)" stroke-width="3" ' +
       'stroke-linejoin="round" stroke-linecap="round" opacity="' +
       (trendSel ? '.3' : '.9') + '"/>';
 
-    const s = 6;
+    // The markers grow with it, or a 6px square on a 3px line reads as a lump
+    // in the line rather than as a reading on it.
+    const s = 7;
     all.forEach((m, i) => {
       const [px, py] = pts[i];
       svg += '<g class="incdot"' + (trendSel ? ' opacity=".3"' : '') + ' ' +
@@ -3834,9 +3870,14 @@ function drawTrend() {
     });
   }
 
-  // Year-ago line spans only the actual months — there is no "last year" for a
-  // month that has not happened.
-  if (prior.length) {
+  /* Year-ago line spans only the actual months — there is no "last year" for a
+     month that has not happened.
+
+     Switched off, only the line and its dots go. The LAST YR and CHANGE rows
+     under the axis stay: this key is a legend for the marks on the chart, and
+     those rows are a table with their own labels. Hiding them from here would
+     mean a swatch in the key silently governing figures nowhere near it. */
+  if (layerOn('prior') && prior.length) {
     const pts = prior.map((p, i) => (PL + band * i + band / 2).toFixed(1) + ',' + y(p.expense).toFixed(1));
     svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--ink)" stroke-width="2" ' +
            'stroke-dasharray="5 4" opacity="' + (trendSel ? '.25' : '.78') + '"/>';
@@ -3933,17 +3974,31 @@ function drawTrend() {
   /* The dashed line is read before the swatches now, not after them: it
      explains a mark that crosses every column, so it belongs above a list of
      things that each occupy one. */
-  const dashNote = prior.length
-    ? '<div class="kitem static"><span class="kswatch dash"></span>' +
-      '<span class="klabel">Same month, last year</span></div>'
-    : '';
+  /* The overlays, as switches rather than as captions.
+   *
+   * These were legends: a swatch, a name, and no way to act on either. Every
+   * other row in this key can be switched off, so two rows that look the same
+   * and cannot be was a distinction the reader had to discover by clicking.
+   *
+   * "Budget ahead" stays a caption, and deliberately: it is not a mark that
+   * can be removed, it is a description of the months the projection switch
+   * above the chart already governs. A second control for the same thing in a
+   * different place is worse than no control. */
+  const layerRow = (name, swatch, label, present) => !present ? '' :
+    '<div class="kitem layer' + (layerOn(name) ? '' : ' off') + '">' +
+      '<span class="kpick static"><span class="kswatch ' + swatch + '"></span>' +
+        '<span class="klabel">' + escapeHtml(label) + '</span></span>' +
+      '<button type="button" class="kbox' + (layerOn(name) ? ' on' : '') +
+        '" data-key-off="' + name + '" data-key-scope="trend-layer"' +
+        ' aria-pressed="' + layerOn(name) + '" aria-label="' +
+        (layerOn(name) ? 'Hide ' : 'Show ') + escapeHtml(label) + '"></button>' +
+    '</div>';
+
+  const dashNote = layerRow('prior', 'dash', 'Same month, last year', prior.length > 0);
 
   const hasIncome = all.some(m => m.income > 0);
   const extras =
-    (hasIncome
-      ? '<div class="kitem static"><span class="kswatch line"></span>' +
-        '<span class="klabel">Income</span></div>'
-      : '') +
+    layerRow('income', 'line', 'Income', hasIncome) +
     (all.some(m => m.projected)
       ? '<div class="kitem static"><span class="kswatch shaded"></span>' +
         '<span class="klabel">Budget ahead</span></div>'
@@ -4156,16 +4211,28 @@ function setTrendSel(next) {
 function keyBoxClick(e) {
   const all = e.target.closest('[data-key-all]');
   if (all) {
-    (all.dataset.keyAll === 'trend' ? trendOff : pieOff).clear();
-    if (all.dataset.keyAll === 'trend') drawTrend(); else drawPie();
+    if (all.dataset.keyAll === 'trend') {
+      // Everything means everything: the two overlays are in this key and
+      // under this button, so a reset that left one of them hidden would be
+      // a button that does not do what it says.
+      trendOff.clear();
+      trendLayerOff.clear();
+      drawTrend();
+    } else {
+      pieOff.clear();
+      drawPie();
+    }
     return true;
   }
   const one = e.target.closest('[data-key-off]');
   if (one) {
-    const off = one.dataset.keyScope === 'trend' ? trendOff : pieOff;
+    const scope = one.dataset.keyScope;
+    const off = scope === 'trend' ? trendOff
+              : scope === 'trend-layer' ? trendLayerOff
+              : pieOff;
     const slug = one.dataset.keyOff;
     if (off.has(slug)) off.delete(slug); else off.add(slug);
-    if (one.dataset.keyScope === 'trend') drawTrend(); else drawPie();
+    if (scope === 'pie') drawPie(); else drawTrend();
     return true;
   }
   return false;
