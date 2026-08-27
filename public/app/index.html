@@ -22,6 +22,23 @@
     --ink:#E7EEF3; --ink-soft:#8A9BAC; --muted:#7E90A2;
     --mint:#00F0A8; --mint-dim:#00A876; --mint-glow:rgba(0,240,168,0.35); --mint-bg:rgba(0,240,168,0.08);
     --coral:#FF5C72; --warning:#FAB219;
+    /* The last twentieth of a budget: spent, but not yet overspent.
+     *
+     * Its own three tokens rather than --warning, and not because --warning is
+     * the wrong idea — because it is the wrong shape for this job. --warning is
+     * a gold, and a gold bar between a green one and a red one reads as a
+     * lighter green at a glance. This is orange-yellow, which is unmistakably
+     * on the way to red.
+     *
+     * --on-near exists because the bar is light in both themes and the caption
+     * sits on top of it. The card's usual --on-fill is white in the light
+     * theme, and white on #F5A623 is 2.0:1 — not faint, unreadable. Dark ink
+     * on it is 7.6:1.
+     *
+     * --near-ink is the same warning used as text on the card rather than on
+     * the bar, which is the opposite problem: #F5A623 on cream is 1.7:1. The
+     * dark theme can use one colour for both; the light theme cannot. */
+    --near:#F59023; --on-near:#0B1520; --near-ink:#F59023;
     --surface:#0F171F; --grid:#1B2630;
     /* The ledger's own two surfaces: the band the headings sit on, and the
        stripe on every other row. Both are a step off the card rather than a
@@ -120,6 +137,7 @@
     --mint:#0B7A55; --mint-dim:#0A6B4B;
     --mint-glow:rgba(11,122,85,0.25); --mint-bg:rgba(11,122,85,0.12);
     --coral:#C3354B; --warning:#8D6300;
+    --near:#F5A623; --on-near:#12253F; --near-ink:#8F3F05;   /* see the dark block */
     --grid:#E2D5B0;
     --on-mint:#FFFFFF; --mint-hot:#0A6B4B;
     /* The dark gold out of the owl's own line work — #A07026 is the commonest
@@ -1282,6 +1300,9 @@
   .bv-verdict{ margin-left:auto; font-family:var(--font-num); font-size:12px;
                min-width:98px; text-align:right; }
   .bv-verdict.good{ color:var(--mint); }
+  /* --near-ink, not --near: the bar colour is chosen to be read on, and this
+     is text being read against the card. See the token block. */
+  .bv-verdict.warn{ color:var(--near-ink); }
   .bv-verdict.bad{ color:var(--coral); }
   .bv-none{ margin-left:auto; font-size:11.5px; color:var(--muted);
              min-width:98px; text-align:right; }
@@ -1321,6 +1342,7 @@
   .bv-tx .hint{ margin:4px 0; }
   .bv-pct{ flex:0 0 46px; text-align:right; font-family:var(--font-num);
            font-size:12px; color:var(--mint); }
+  .bv-pct.warn{ color:var(--near-ink); }
   .bv-pct.bad{ color:var(--coral); }
   .bv-kids{ margin:10px 0 2px 26px; padding-left:14px; border-left:1px solid var(--hair); }
   .bv-kid{ padding:8px 0; }
@@ -1467,35 +1489,49 @@
   #tx-list table.data thead .thf{ margin:0 0 0 -4px; }
   #tx-list table.data thead .thwrap{ min-height:28px; }
 
-  /* The one heading you type into has to look like it.
+  /* The one heading you type into, dressed as a heading.
    *
-   * A select says "openable" with its caret and needs nothing else. An input
-   * has no caret, and on the heading band it came out identical to the plain
-   * SUBSCRIPTION label beside it — same size, same colour, same uppercase, no
-   * edge. It was still a working text field the whole time; it simply stopped
-   * saying so, and a control nobody can see is a control nobody uses.
+   * The first attempt at this gave it a rule under it and a magnifier pinned
+   * to the left of the cell, and it stopped looking like a heading at all: a
+   * full-width underline running the width of the column, with the word in
+   * near-black next to four in brown. Two separate faults —
    *
-   * A field with a rule under it and a magnifier in front of it. Not a boxed
-   * input: this is a heading row, and a full control would shout over the four
-   * beside it. */
-  #tx-list table.data thead input.thi{ margin-left:0; padding-left:20px;
-    border:none; border-bottom:1px solid var(--hair-strong); border-radius:0;
-    background:none; }
-  #tx-list table.data thead input.thi:hover{ border-bottom-color:var(--ink-quiet); }
-  #tx-list table.data thead input.thi:focus{ border-bottom-color:var(--mint-dim);
-    border-bottom-width:2px; }
-  /* On the wrapper rather than the input, because an input cannot carry a
-     pseudo-element of its own. */
-  #tx-list table.data thead th:nth-child(2) .thwrap{ position:relative; }
-  #tx-list table.data thead th:nth-child(2) .thwrap::before{
-    content:""; position:absolute; left:2px; top:50%; width:11px; height:11px;
-    margin-top:-7px; pointer-events:none; opacity:.75;
-    border:1.6px solid currentColor; border-radius:50%;
-    color:var(--ink-quiet); }
-  #tx-list table.data thead th:nth-child(2) .thwrap::after{
-    content:""; position:absolute; left:11px; top:50%; width:5px; height:1.6px;
-    margin-top:2px; pointer-events:none; opacity:.75;
-    background:var(--ink-quiet); transform:rotate(45deg); transform-origin:left center; }
+   *   the placeholder took --muted, which is #111111 in the light theme, so
+   *   the one heading that was not really a heading was also the only one in
+   *   full ink; and
+   *
+   *   the rule was permanent, which is a lot of line for a control that is
+   *   idle almost all the time.
+   *
+   * At rest it is now identical to the other four: same size, same brown, same
+   * letter-spacing. What it has instead of their caret is a magnifier, in the
+   * same place their caret sits and at the same weight — every heading on the
+   * row carries a mark saying what it does, and this one's says "type". The
+   * rule appears on hover and focus, which is when a field needs an edge. */
+  #tx-list table.data thead input.thi{ margin-left:0; padding:0 2px;
+    border:none; border-bottom:1px solid transparent; border-radius:0;
+    background:none; width:auto; flex:0 1 auto; }
+  /* The placeholder IS the heading, so it takes the heading's colour. */
+  #tx-list table.data thead input.thi::placeholder{ color:var(--ink-quiet); opacity:1; }
+  #tx-list table.data thead input.thi:hover{ border-bottom-color:var(--hair-strong); }
+  #tx-list table.data thead input.thi:focus{ border-bottom-color:var(--mint-dim); }
+  /* Once there is something to read, it takes the column. */
+  #tx-list table.data thead input.thi:focus,
+  #tx-list table.data thead input.thi:not(:placeholder-shown){ flex:1 1 auto; width:100%; }
+
+  /* Drawn rather than typed, so it is the same weight in every font the app
+     might be set in. A ring and a handle, sized against the native caret
+     beside it. */
+  .thmag{ flex:none; position:relative; width:10px; height:10px; margin-left:1px;
+          border:1.5px solid var(--ink-quiet); border-radius:50%;
+          opacity:.85; pointer-events:none; }
+  .thmag::after{ content:""; position:absolute; left:7px; top:7px;
+                 width:5px; height:1.5px; background:var(--ink-quiet);
+                 transform:rotate(45deg); transform-origin:left center; }
+  .thsearch:focus-within .thmag,
+  .thsearch:focus-within .thmag::after{ border-color:var(--mint-dim);
+                                        background-color:var(--mint-dim); opacity:1; }
+  .thsearch:focus-within .thmag{ background:none; }
 
   /* ── The rows ────────────────────────────────────────────────────────────
    *
@@ -2769,11 +2805,20 @@ function avatar(t) {
 
 function txHeaderInput(id, label, value, names) {
   const listId = id + '-list';
-  return '<span class="thwrap">' +
+  /* The magnifier is an element rather than a pseudo on the wrapper, so it can
+     sit immediately after the word the way the selects' carets do. As a
+     pseudo it was pinned to the left of a full-width cell, which put it a
+     column away from the label it belonged to.
+
+     size, so the field is the width of its own placeholder at rest and the
+     magnifier lands right beside it. It takes the whole column the moment
+     there is something in it to read. */
+  return '<span class="thwrap thsearch">' +
     '<input class="thf thi' + (value ? ' on' : '') + '" id="' + id + '"' +
-      ' list="' + listId + '" value="' + escapeHtml(value) + '"' +
+      ' size="12" list="' + listId + '" value="' + escapeHtml(value) + '"' +
       ' placeholder="' + escapeHtml(label) + '" autocomplete="off" spellcheck="false"' +
       ' aria-label="Filter by ' + escapeHtml(label) + ' — type to search">' +
+    '<span class="thmag" aria-hidden="true"></span>' +
     '<datalist id="' + listId + '">' +
       (names || []).map(n => '<option value="' + escapeHtml(n) + '"></option>').join('') +
     '</datalist>' +
@@ -5926,6 +5971,19 @@ function budgetPair(label, colour, actual, budget, expand, opts) {
   const over = hasBudget && !share && actual > budget;
   const pct = hasBudget ? (actual / budget) * 100 : 0;
 
+  /* Spent, but not yet overspent.
+   *
+   * Green straight to red means the bar says "fine" right up until it says
+   * "too late" — and the one moment a budget is useful is the moment before it
+   * runs out. The last twentieth of it gets its own colour.
+   *
+   * Only spending has a band. Income cannot be "nearly at" a plan in any sense
+   * worth colouring: arriving is the point, and a bar turning amber at 95% of
+   * expected earnings would be warning about good news. Nor can a share of a
+   * whole, which reaches 100% by definition when there is one source. */
+  const NEAR_BUDGET = 0.95;
+  const near = hasBudget && !income && !share && !over && actual >= budget * NEAR_BUDGET;
+
   // Under: the track is the budget and the fill is the share of it spent.
   // Over: the track is the spend, so the fill is all of it and the budget
   // becomes a mark partway along.
@@ -5949,7 +6007,7 @@ function budgetPair(label, colour, actual, budget, expand, opts) {
         : income
           ? '<span class="bv-verdict' + (over ? ' good' : '') + '">' +
             money(Math.abs(actual - budget)) + (over ? ' above plan' : ' to go') + '</span>'
-          : '<span class="bv-verdict ' + (over ? 'bad' : 'good') + '">' +
+          : '<span class="bv-verdict ' + (over ? 'bad' : near ? 'warn' : 'good') + '">' +
             money(Math.abs(actual - budget)) + (over ? ' over' : ' left') + '</span>';
 
   const toggle = expand
@@ -5972,10 +6030,17 @@ function budgetPair(label, colour, actual, budget, expand, opts) {
    * No budget is green: nothing has been exceeded. The category keeps its own
    * colour in the swatch beside its name, which is where identity belongs —
    * next to the label, not inside the measurement. */
-  /* Coral means "past a limit". Income has no limit to be past, and a share
-     of a whole cannot exceed the whole, so both of those stay mint however
-     they land. Only a spending row can turn red. */
-  const fill = (over && !income) ? 'var(--coral)' : 'var(--mint)';
+  /* Coral means "past a limit". Income has no limit to be past, and a share of
+     a whole cannot exceed the whole, so both of those stay mint however they
+     land. Only a spending row can turn amber, and only a spending row can turn
+     red.
+
+     The caption's ink travels with the fill: the amber is light in both themes
+     and the white that reads on mint and coral would vanish on it. */
+  const fill = (over && !income) ? 'var(--coral)'
+             : near ? 'var(--near)'
+             : 'var(--mint)';
+  const capInk = near ? 'var(--on-near)' : 'var(--on-fill)';
 
   /* The figures move off the heading and into the bar, the way the Overview's
      did. They were sitting a bar's width away from the measurement they
@@ -5990,8 +6055,8 @@ function budgetPair(label, colour, actual, budget, expand, opts) {
     (hasBudget ? ' of ' + money0(budget) : '');
   const capHtml =
     '<span class="bcap">' + escapeHtml(cap) + '</span>' +
-    '<span class="bcap on" style="width:' + fillPct.toFixed(2) + '%"><span>' +
-    escapeHtml(cap) + '</span></span>';
+    '<span class="bcap on" style="width:' + fillPct.toFixed(2) + '%"><span style="color:' +
+    capInk + '">' + escapeHtml(cap) + '</span></span>';
 
   return '<div class="bv-head">' + toggle +
       '<span class="swatch" style="background:' + colour + '"></span>' +
@@ -6005,7 +6070,12 @@ function budgetPair(label, colour, actual, budget, expand, opts) {
           money(budget) + '"></div>'
         : '') +
       '</div>' +
-      (hasBudget ? '<span class="bv-pct' + (over ? ' bad' : '') + '">' +
+      /* The percentage takes the same colour as the bar it labels, which for
+         income means no colour at all: .bv-pct is mint to begin with, and
+         income past its plan was coming out coral because "over" is true and
+         "over" meant bad. Being over on income is the good case. */
+      (hasBudget ? '<span class="bv-pct' +
+        (income ? '' : over ? ' bad' : near ? ' warn' : '') + '">' +
         Math.round(pct) + '%</span>' : '<span class="bv-pct"></span>') +
     '</div>';
 }
