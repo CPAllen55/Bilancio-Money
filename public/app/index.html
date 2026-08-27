@@ -699,6 +699,14 @@
   .kswatch{ width:11px; height:11px; border-radius:2px; flex:none; }
   .kswatch.dash{ height:0; border-top:2px dashed var(--ink); width:15px; opacity:.78; border-radius:0; }
   .kswatch.shaded{ background:var(--mint-bg); border:1px dashed var(--mint-dim); }
+  /* Income. It was a flat block at .4, which matched a wash of colour behind
+     the bars; the chart draws a line with a square on it now, so the key does
+     too. The square is the ::after — same six pixels it is on the chart. */
+  .kswatch.line{ position:relative; height:0; width:15px; border-radius:0;
+                 border-top:2px solid var(--mint); }
+  .kswatch.line::after{ content:""; position:absolute; left:50%; top:-3px;
+                        width:6px; height:6px; margin-left:-3px;
+                        background:var(--mint); }
   .klabel{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .kamt{ margin-left:auto; font-family:var(--font-num); font-size:11px; color:var(--muted); }
 
@@ -727,6 +735,12 @@
                    filter:drop-shadow(0 0 7px var(--ink)); }
   /* The same treatment the year-ago markers get: it grows rather than glows,
      because a shadow on a 3px circle is a smudge. */
+  /* Same treatment as the year-ago marker: it grows rather than glows,
+     because a shadow on a six-pixel square is a smudge. */
+  .incdot{ cursor:default; }
+  .incdot rect:last-child{ transform-box:fill-box; transform-origin:center;
+                           transition:transform .12s ease; }
+  .incdot:hover rect:last-child{ transform:scale(1.4); }
   .netdot{ cursor:default; }
   .netdot circle:last-child{ transform-box:fill-box; transform-origin:center;
                              transition:transform .12s ease; }
@@ -3363,35 +3377,6 @@ function drawTrend() {
            'font-size="' + type.axis + '" fill="var(--muted)">' + money0(v) + '</text>';
   }
 
-  /* ---- income, as a wave behind the bars ----
-     Drawn before the bars so it sits underneath them. Where the wave rises
-     above a bar, that gap is money kept; where a bar breaks through it, that
-     month cost more than it earned. Same axis as spending, or the comparison
-     would be a lie. */
-  if (all.some(m => m.income > 0)) {
-    const pts = all.map((m, i) => [PL + band * i + band / 2, y(m.income)]);
-
-    // Smooth through the points with midpoint control handles — a straight
-    // polyline reads as a measurement, and this is a level, not a series.
-    let d = 'M' + PL + ',' + y(all[0].income).toFixed(1);
-    d += ' L' + pts[0][0].toFixed(1) + ',' + pts[0][1].toFixed(1);
-    for (let i = 1; i < pts.length; i++) {
-      const p0 = pts[i - 1], p1 = pts[i];
-      const mx = (p0[0] + p1[0]) / 2;
-      d += ' C' + mx.toFixed(1) + ',' + p0[1].toFixed(1) + ' ' + mx.toFixed(1) + ',' + p1[1].toFixed(1) +
-           ' ' + p1[0].toFixed(1) + ',' + p1[1].toFixed(1);
-    }
-    d += ' L' + (W - PR) + ',' + y(all[all.length - 1].income).toFixed(1);
-
-    const baseline = y(0);
-    svg += '<defs><linearGradient id="incomeWave" x1="0" y1="0" x2="0" y2="1">' +
-           '<stop offset="0" stop-color="var(--mint)" stop-opacity=".22"/>' +
-           '<stop offset="1" stop-color="var(--mint)" stop-opacity=".02"/></linearGradient></defs>' +
-           '<path d="' + d + ' L' + (W - PR) + ',' + baseline + ' L' + PL + ',' + baseline + ' Z" ' +
-           'fill="url(#incomeWave)"/>' +
-           '<path d="' + d + '" fill="none" stroke="var(--mint)" stroke-width="1.5" opacity=".7"/>';
-  }
-
   all.forEach((m, i) => {
     const cx = PL + band * i + band / 2;
     let acc = 0;
@@ -3441,6 +3426,43 @@ function drawTrend() {
              (m.projected ? 'var(--mint-dim)' : 'var(--muted)') + '">' + label + '</text>';
     }
   });
+
+  /* ---- income, as a line over the bars ----
+   *
+   * It was a filled wave behind them, smoothed through midpoint handles, and
+   * the comment said a straight polyline reads as a measurement while this is
+   * a level. That was the wrong way round for what the chart is asked: income
+   * is a figure per month, the same as the column under it, and a curve
+   * invents values between months that nobody earned.
+   *
+   * Straight segments and a square at each month, so the marker says where a
+   * reading actually is. Square rather than round, because the year-ago line
+   * already owns the circle and two series with the same marker is one series
+   * drawn twice.
+   *
+   * Over the bars now rather than under them. Behind, the line vanished
+   * exactly where a column rose past it — which is the month worth looking at.
+   */
+  if (all.some(m => m.income > 0)) {
+    const pts = all.map((m, i) => [PL + band * i + band / 2, y(m.income)]);
+    svg += '<polyline points="' +
+      pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ') +
+      '" fill="none" stroke="var(--mint)" stroke-width="2" ' +
+      'stroke-linejoin="round" stroke-linecap="round" opacity="' +
+      (trendSel ? '.3' : '.9') + '"/>';
+
+    const s = 6;
+    all.forEach((m, i) => {
+      const [px, py] = pts[i];
+      svg += '<g class="incdot"' + (trendSel ? ' opacity=".3"' : '') + ' ' +
+        tipAttrs('Income', m.month, m.income, 0) + '>' +
+        '<rect x="' + (px - 9).toFixed(1) + '" y="' + (py - 9).toFixed(1) +
+          '" width="18" height="18" fill="transparent"/>' +
+        '<rect x="' + (px - s / 2).toFixed(1) + '" y="' + (py - s / 2).toFixed(1) +
+          '" width="' + s + '" height="' + s + '" fill="var(--mint)" ' +
+          'stroke="var(--bg-panel)" stroke-width="1.5"/></g>';
+    });
+  }
 
   // Year-ago line spans only the actual months — there is no "last year" for a
   // month that has not happened.
@@ -3549,7 +3571,7 @@ function drawTrend() {
   const hasIncome = all.some(m => m.income > 0);
   const extras =
     (hasIncome
-      ? '<div class="kitem static"><span class="kswatch" style="background:var(--mint);opacity:.4"></span>' +
+      ? '<div class="kitem static"><span class="kswatch line"></span>' +
         '<span class="klabel">Income</span></div>'
       : '') +
     (all.some(m => m.projected)
@@ -3656,7 +3678,7 @@ function drawTrend() {
 function detailHtml(all, totals) {
   if (!trendSel) {
     return '<span class="hint">Click a segment for the detail behind it' +
-      (all.some(m => m.income > 0) ? ' — the gap between the wave and a bar is what that month kept.' : '.') +
+      (all.some(m => m.income > 0) ? ' — the gap between the income line and a bar is what that month kept.' : '.') +
       '</span>';
   }
 
