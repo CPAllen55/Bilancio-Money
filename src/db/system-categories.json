@@ -50,7 +50,7 @@
   {
     "slug": "food",
     "label": "Food and Dining",
-    "colour": "#d95926",
+    "colour": "#D93A2B",
     "sortOrder": 20,
     "parent": null,
     "kind": "spend"
@@ -90,7 +90,7 @@
   {
     "slug": "home",
     "label": "Home",
-    "colour": "#3987e5",
+    "colour": "#1F6FD9",
     "sortOrder": 30,
     "parent": null,
     "kind": "spend"
@@ -114,7 +114,7 @@
   {
     "slug": "transportation",
     "label": "Auto & Transport",
-    "colour": "#008a4b",
+    "colour": "#8B45C4",
     "sortOrder": 40,
     "parent": null,
     "kind": "spend"
@@ -178,7 +178,7 @@
   {
     "slug": "shopping",
     "label": "Shopping",
-    "colour": "#199e70",
+    "colour": "#C9A227",
     "sortOrder": 50,
     "parent": null,
     "kind": "spend"
@@ -218,7 +218,7 @@
   {
     "slug": "entertainment",
     "label": "Travel & Entertainment",
-    "colour": "#b4529f",
+    "colour": "#E0611F",
     "sortOrder": 55,
     "parent": null,
     "kind": "spend"
@@ -242,7 +242,7 @@
   {
     "slug": "health-care",
     "label": "Health & Care",
-    "colour": "#d5517a",
+    "colour": "#1E9E4A",
     "sortOrder": 60,
     "parent": null,
     "kind": "spend"
@@ -322,7 +322,7 @@
   {
     "slug": "obligations",
     "label": "Obligations",
-    "colour": "#7e6bd0",
+    "colour": "#0FA3A3",
     "sortOrder": 80,
     "parent": null,
     "kind": "spend"
@@ -362,7 +362,7 @@
   {
     "slug": "giving-work",
     "label": "Giving & Work",
-    "colour": "#4a9c9c",
+    "colour": "#C43E86",
     "sortOrder": 90,
     "parent": null,
     "kind": "spend"
@@ -386,7 +386,7 @@
   {
     "slug": "unsorted",
     "label": "Unsorted",
-    "colour": "#7E90A2",
+    "colour": "#7A8896",
     "sortOrder": 900,
     "parent": null,
     "kind": "spend"

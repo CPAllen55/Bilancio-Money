@@ -1669,17 +1669,30 @@ function rememberColours(list) {
  * against its 8.3.
  */
 const CAT_LIGHT = {
+  /* The nine parents are pinned to the exact values they were specified at,
+     in both themes. Without an entry here readableOnWhite darkens any of them
+     that falls under 3.05:1 on cream — Shopping at 2.04 most of all — and the
+     light chart stops being the colours that were chosen.
+
+     Four of the nine are under that floor against the card. They are large
+     filled bands sitting against each other rather than against the page, and
+     the only edge touching the card is the top of a column, so the cost is a
+     softer boundary there rather than a band nobody can see. A deliberate
+     trade, written down here rather than discovered later. */
+  'food':'#D93A2B', 'home':'#1F6FD9', 'health-care':'#1E9E4A',
+  'shopping':'#C9A227', 'entertainment':'#E0611F', 'transportation':'#8B45C4',
+  'obligations':'#0FA3A3', 'giving-work':'#C43E86', 'unsorted':'#7A8896',
   'income':'#00996B', 'salary':'#00996B', 'interest-earned':'#209775',
   'dividends':'#239758', 'refunds':'#35966C', 'other-income':'#36948D',
   'dining':'#B87900', 'fast-food':'#C5721B', 'rideshare':'#119A40',
   'taxi':'#279863', 'car-insurance':'#479478', 'airlines':'#009595',
-  'travel':'#007295', 'shopping':'#189781', 'general-stores':'#18984E',
+  'travel':'#007295',  'general-stores':'#18984E',
   'online-shopping':'#23977D', 'amazon':'#259683', 'events':'#C365AD',
   'subscriptions':'#8477E7', 'personal':'#C6669E', 'gym':'#DB5988',
   'insurance':'#7687A5', 'family':'#439748', 'kids':'#439748',
   'pets':'#BD762C', 'education':'#368BD2', 'interest-paid':'#9076DB',
-  'fees':'#798898', 'giving-work':'#459292', 'giving':'#DE5D53',
-  'business':'#459292', 'unsorted':'#75889C', 'other':'#75889C'
+  'fees':'#798898',  'giving':'#DE5D53',
+  'business':'#459292',  'other':'#75889C'
 };
 
 /* A category somebody invented has no entry above, so it is darkened here on
@@ -1713,43 +1726,7 @@ function readableOnWhite(hex) {
 /* The one place that decides what a category looks like. Some views know a
    category only through the API row they were handed and never populate
    CAT_COLOUR, so they pass the colour in; the mapping is the same either way. */
-/* The stacked chart, and only the stacked chart.
- *
- * Tableau 10, which is the standard categorical palette for business charts
- * and is worth using precisely because it was designed rather than assembled:
- * the hues are spaced to stay distinct, and the chroma is held low enough that
- * ten of them beside each other read as a set instead of as a clash. Hand-
- * picked colours of the same hues do not do that — the previous set was nine
- * saturated primaries, which is what "odd combo" was describing.
- *
- * Two sets, because one cannot serve both grounds. The light set is not the
- * dark one darkened: darkening everything into the band that reads on cream
- * squashes exactly the differences that tell the colours apart — the failure
- * CAT_LIGHT writes down — and it put pink and brown 31 units apart. These are
- * chosen per hue instead, and hold their separation.
- *
- * Measured against the card each is drawn on, at the 3:1 floor for a graphical
- * object. Dark on #0F171F: 3.97 to 11.22, no two adjacent bands closer than 74.
- * Light on #F7EBCA: 3.65 to 5.24, no two adjacent closer than 52.
- *
- * Keyed to RANK, which is deliberate and is against the rule CAT_LIGHT writes
- * down — two categories swap colours the month they swap places. It holds here
- * because the stack is one figure divided rather than ten identities, and the
- * key beside it is ordered the same way. Everywhere else keeps colourOf, so a
- * category still has one colour wherever it is named rather than ranked.
- */
-const TREND_RAMP_DARK = ['#4E79A7', '#F28E2B', '#E15759', '#76B7B2', '#59A14F',
-                         '#EDC948', '#B07AA1', '#FF9DA7', '#9C755F', '#BAB0AC'];
-const TREND_RAMP_LIGHT = ['#3D6B99', '#B5651D', '#C4373A', '#457E7A', '#487F3F',
-                          '#8A7420', '#8E5C86', '#A8455C', '#7A5A46', '#5F6970'];
-
-/* By position in the window's own ordering, largest first. Anything past the
-   end takes the last colour rather than wrapping back to the top, where it
-   would read as the biggest thing on the chart. */
-function rampAt(i) {
-  const ramp = theme() === 'light' ? TREND_RAMP_LIGHT : TREND_RAMP_DARK;
-  return ramp[Math.min(i, ramp.length - 1)];
-}
+/* THE RAMP THAT WAS HERE HAS BEEN REMOVED. * * Three goes at a palette keyed to rank all ran into the same wall, which * CAT_LIGHT had written down before any of them: a category that changes * colour is not the same category, and rank changes. Colour comes from the * category now, everywhere it is drawn — the nine parents are pinned in * CAT_LIGHT so both themes show exactly the values that were specified. */
 
 const themed = (slug, stored) =>
   theme() !== 'light' ? stored : (CAT_LIGHT[slug] || readableOnWhite(stored));
@@ -3331,9 +3308,6 @@ function drawTrend() {
     if (m.byParent[id] > 0) totals[id] = (totals[id] || 0) + m.byParent[id];
   }));
   const present = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
-  const rampOf = {};
-  present.forEach((id, i) => { rampOf[id] = rampAt(i); });
-
   // The same rollup for the year-ago window, so the key can carry a change
   // column instead of leaving the reader to compare two charts.
   const priorTotals = {};
@@ -3348,7 +3322,8 @@ function drawTrend() {
   let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" ' +
             'style="height:auto;display:block" ' +
             'preserveAspectRatio="xMidYMid meet" role="img" ' +
-            'aria-label="Monthly spending, with the year before and any forecast">';
+            'aria-label="Monthly spending, with the year before and any forecast">' +
+            reliefDefs('tr', present.map(colourOf));
 
   if (emptyWindow) {
     svg += '<text x="' + (PL + plotW / 2) + '" y="' + (PT + plotH / 2) + '" text-anchor="middle" ' +
@@ -3438,7 +3413,8 @@ function drawTrend() {
       // The stack only. Overview, Categories, the pie and Budgeting keep the
       // identity palette; the ramp exists so nine segments of one column read
       // as one quantity divided rather than as a rainbow to be decoded.
-      const colour = rampOf[id] || rampAt(99);
+      const colour = colourOf(id);
+      const face = relief('tr', colour);
       svg += '<rect class="seg' + (on ? ' sel' : '') + (off ? ' dim' : '') + '"' +
              ' data-cat="' + escapeHtml(id) + '" data-month="' + escapeHtml(m.month) + '"' +
              ' ' + tipAttrs(labelOfSlug(id), m.month, v, stackSum) +
@@ -3447,7 +3423,7 @@ function drawTrend() {
              '" width="' + barW.toFixed(1) + '" height="' + Math.max(0.5, bot - top).toFixed(1) +
              // color, not just fill: the hover glow is a drop-shadow in
              // currentColor, so each segment glows its own colour.
-             '" fill="' + colour + '" style="color:' + colour + '"' +
+             '" fill="' + face + '" style="color:' + colour + '"' +
              // Projected bars are the same colours, dimmed and outlined, so the
              // shape is comparable but never mistaken for something that happened.
              (m.projected ? ' opacity=".45" stroke="' + colour + '" stroke-width="1" stroke-dasharray="2 2"' : '') +
@@ -3601,7 +3577,7 @@ function drawTrend() {
   const key = keyList(present.map(id => ({
     // The stack and its own key have to agree, so both take the ramp. Nothing
     // else does — identity colours stay the source of truth everywhere else.
-    slug: id, label: labelOfSlug(id), colour: rampOf[id],
+    slug: id, label: labelOfSlug(id), colour: colourOf(id),
     amount: totals[id], amount_text: money0(totals[id]),
     budget: budgetTotals[id] || 0,
     change: priorTotals[id]
@@ -3670,7 +3646,7 @@ function drawTrend() {
   // The legend swatch takes the colour of the largest band, so it names the
   // ramp with the step the reader's eye has already landed on.
   const sw = $('trend-lg-sw');
-  if (sw) sw.style.background = present.length ? rampOf[present[0]] : 'var(--muted)';
+  if (sw) sw.style.background = present.length ? colourOf(present[0]) : 'var(--muted)';
 
   drawPie();
 }
@@ -3919,6 +3895,10 @@ function drawNet() {
     return;
   }
 
+  const cs = getComputedStyle(document.documentElement);
+  const NET_UP = (cs.getPropertyValue('--mint') || '').trim() || '#00F0A8';
+  const NET_DOWN = (cs.getPropertyValue('--coral') || '').trim() || '#FF5C72';
+
   const total = rows[rows.length - 1].cumulative;
   /* Sized the way the Trend charts are: in rendered pixels, through the
      measured scale, so a figure is the size it says it is. */
@@ -3948,7 +3928,12 @@ function drawNet() {
   let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" ' +
             'style="height:auto;display:block" ' +
             'preserveAspectRatio="xMidYMid meet" role="img" ' +
-            'aria-label="Money kept each month, with a running total">';
+            'aria-label="Money kept each month, with a running total">' +
+            /* This chart's two colours are theme tokens rather than hex, and a
+               gradient cannot be computed from a var(). They are resolved off
+               the document once, here, so these bars get the same relief the
+               category charts do instead of staying flat beside them. */
+            reliefDefs('net', [NET_UP, NET_DOWN]);
 
   for (let v = yMin; v <= yMax + step / 2; v += step) {
     const yy = y(v);
@@ -4025,7 +4010,7 @@ function drawNet() {
     const up = r.net >= 0;
     const top = up ? y(r.net) : zero;
     const h = Math.max(1, Math.abs(y(r.net) - zero));
-    const colour = up ? 'var(--mint)' : 'var(--coral)';
+    const colour = up ? NET_UP : NET_DOWN;
     const on = netSel === r.month;
 
     if (r.income || r.expense) {
@@ -4033,7 +4018,7 @@ function drawNet() {
              ' data-month="' + escapeHtml(r.month) + '" tabindex="0" role="button"' +
              ' x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
              '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="1"' +
-             ' fill="' + colour + '" style="color:' + colour + '">' +
+             ' fill="' + relief('net', colour) + '" style="color:' + colour + '">' +
              '<title>' + monthLabel(r.month) + ': ' + (up ? 'kept ' : 'down ') + money(Math.abs(r.net)) +
              ' · running total ' + money(r.cumulative) + '</title></rect>';
 
@@ -4439,7 +4424,8 @@ function bgChart(kids, parentSlug) {
   let svg = '<svg class="bg-svg" viewBox="0 0 ' + BG_W + ' ' + BG_H + '" width="100%" height="' +
     BG_H + '" preserveAspectRatio="none" data-parent="' + escapeHtml(parentSlug) +
     '" data-hi="' + hi.toFixed(2) + '" data-kids="' +
-    escapeHtml(kids.map(r => r.slug).join(',')) + '">';
+    escapeHtml(kids.map(r => r.slug).join(',')) + '">' +
+    reliefDefs('bg', kids.map(r => themed(r.slug, r.colour)));
 
   bgData.months.forEach((m, i) => {
     const x = BG_PL + band * i + (band - barW) / 2;
@@ -4452,7 +4438,7 @@ function bgChart(kids, parentSlug) {
       const fill = themed(r.slug, r.colour);
       svg += '<rect class="bg-seg' + (v > 0 ? '' : ' empty') + (past ? ' past' : '') +
         '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) +
-        '" height="' + h.toFixed(1) + '" rx="1.5" fill="' + fill + '" ' +
+        '" height="' + h.toFixed(1) + '" rx="1.5" fill="' + relief('bg', fill) + '" ' +
         'style="--seg:' + fill + '" ' +
         'data-seg="' + escapeHtml(r.slug) + '" data-month="' + m + '" ' +
         // One tab stop per chart, not one per block: forty-eight stops in a
@@ -4611,6 +4597,56 @@ function bgInkOn(hex) {
   });
   const lum = 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2];
   return (bgInkCache[hex] = lum > 0.42 ? '#0B0F14' : '#FFFFFF');
+}
+
+/* ---------------------------------------------------------------- relief --
+ *
+ * The bands are filled with a gradient of their own colour rather than a flat
+ * one — lighter at the top, the true colour just past the middle, darker at the
+ * foot. It is the shading a solid object would have, and it does a job beyond
+ * looking like one: where two bands of similar colour meet, the dark foot of
+ * the upper one lands against the light head of the lower and the seam between
+ * them is visible without a stroke.
+ *
+ * Done as a fill and not as a second rect over the first. A stack of nine
+ * across twenty-four months is a lot of shapes to double, and the overlay
+ * would need its own geometry kept in step with the rect underneath — one more
+ * thing to get out of alignment.
+ *
+ * Gradients are defined once per colour per chart and referenced by id.
+ * Non-hex values (a var(--...) or a bare keyword) are passed through flat:
+ * they cannot be arithmetic, and a chart that half-works is worse than one
+ * that plainly does not shade.
+ */
+function shift(hex, amount) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return hex;
+  const to = amount > 0 ? 255 : 0, k = Math.abs(amount);
+  return "#" + [1, 3, 5].map(i => {
+    const v = parseInt(hex.slice(i, i + 2), 16);
+    return Math.round(v + (to - v) * k).toString(16).padStart(2, "0");
+  }).join("");
+}
+
+/** A stable, collision-proof id for one colour inside one chart. */
+const reliefId = (prefix, hex) => prefix + "-" + hex.replace(/[^0-9a-fA-F]/g, "");
+
+/** The <defs> block. Pass every colour the chart is about to use. */
+function reliefDefs(prefix, colours) {
+  const flat = [...new Set(colours)].filter(c => /^#[0-9a-fA-F]{6}$/.test(c));
+  if (!flat.length) return "";
+  return "<defs>" + flat.map(c =>
+    '<linearGradient id="' + reliefId(prefix, c) + '" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="' + shift(c, 0.22) + '"/>' +
+      '<stop offset="52%" stop-color="' + c + '"/>' +
+      '<stop offset="100%" stop-color="' + shift(c, -0.16) + '"/>' +
+    '</linearGradient>').join("") + "</defs>";
+}
+
+/** What to put in a fill attribute: the gradient where there is one. */
+function relief(prefix, colour) {
+  return /^#[0-9a-fA-F]{6}$/.test(colour)
+    ? "url(#" + reliefId(prefix, colour) + ")"
+    : colour;
 }
 
 /* A block has to be this tall before its figure will fit inside it. */
@@ -5600,7 +5636,7 @@ function arcPath(cx, cy, r, a0, a1) {
  * places means two ways to open the same list and a selection that has to mean
  * something in a view that cannot show it.
  */
-function pieBarsSvg(entries, w, ramp) {
+function pieBarsSvg(entries, w) {
   const months = w.perMonth;
   if (!months.length) return '<p class="empty">Nothing in these months.</p>';
 
@@ -5635,7 +5671,8 @@ function pieBarsSvg(entries, w, ramp) {
   let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" ' +
     'style="height:auto;display:block" ' +
     'preserveAspectRatio="xMidYMid meet" role="img" aria-label="' +
-    escapeHtml(w.title) + ' by month">';
+    escapeHtml(w.title) + ' by month">' +
+    reliefDefs('sub', order.map(colourOf));
 
   for (let k = 0; k <= 4; k++) {
     const v = (yMax / 4) * k, yy = y(v);
@@ -5662,7 +5699,8 @@ function pieBarsSvg(entries, w, ramp) {
       svg += '<rect class="seg noclick" ' + tipAttrs(labelOfSlug(slug), m.month, v, monthTotal) +
         ' x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
         '" width="' + barW.toFixed(1) + '" height="' + Math.max(0.5, bot - top).toFixed(1) +
-        '" fill="' + ramp[slug] + '" style="color:' + ramp[slug] + '"></rect>';
+        '" fill="' + relief('sub', colourOf(slug)) +
+        '" style="color:' + colourOf(slug) + '"></rect>';
       acc += v;
     }
 
@@ -5748,13 +5786,8 @@ function drawPie() {
      Keeping one list for both is what left a hidden category still drawn. */
   const shown = entries.filter(([slug]) => !pieOff.has(slug));
   const total = shown.reduce((s, e) => s + e[1], 0) || 1;
-
-  /* Keyed to rank across everything present, not across what is left showing,
-     so switching a category off does not repaint the ones below it. The same
-     rule as the chart above, and the same ramp. */
-  const ramp = {};
-  entries.forEach(([slug], i) => { ramp[slug] = rampAt(i); });
   const R = 132, CX = 150, CY = 150;
+
   let angle = -Math.PI / 2;
 
   const slices = shown.map(([slug, v]) => {
@@ -5763,8 +5796,8 @@ function drawPie() {
     angle = a1;
     const on = pieSel === slug;
     return '<path class="slice' + (on ? ' sel' : '') + (pieSel && !on ? ' dim' : '') + '" ' +
-      'd="' + arcPath(CX, CY, R, a0, a1) + '" fill="' + ramp[slug] + '" ' +
-      'style="color:' + ramp[slug] + '" data-slice="' + escapeHtml(slug) + '" ' +
+      'd="' + arcPath(CX, CY, R, a0, a1) + '" fill="' + colourOf(slug) + '" ' +
+      'style="color:' + colourOf(slug) + '" data-slice="' + escapeHtml(slug) + '" ' +
       'tabindex="0" role="button">' +
       '<title>' + escapeHtml(labelOfSlug(slug)) + ': ' + money(v) +
       ' (' + ((v / total) * 100).toFixed(1) + '%)</title></path>';
@@ -5780,7 +5813,7 @@ function drawPie() {
   };
 
   const legend = keyList(entries.map(([slug, v]) => ({
-    slug, label: labelOfSlug(slug), colour: ramp[slug], amount: v,
+    slug, label: labelOfSlug(slug), colour: colourOf(slug), amount: v,
     amount_text: pieView === 'bars' ? money0(v) : ((v / total) * 100).toFixed(0) + '%',
     change: pieView === 'bars' ? changeOf(slug) : null,
     pick: pieView === 'bars' ? null : 'data-slice="' + escapeHtml(slug) + '"',
@@ -5825,7 +5858,7 @@ function drawPie() {
   // beside a list of transactions is the whole point of it.
   const body = pieView === 'bars'
     ? '<div class="trend-wrap">' +
-        '<div class="trend-plot">' + pieBarsSvg(shown, w, ramp) + '</div>' +
+        '<div class="trend-plot">' + pieBarsSvg(shown, w) + '</div>' +
         '<div class="trend-side">' +
           '<div class="trend-key panel-box">' + legend + '</div>' +
         '</div>' +
