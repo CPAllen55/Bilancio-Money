@@ -14,7 +14,7 @@
  */
 
 import { Hono } from "hono";
-import { and, asc, desc, eq, gte, ilike, isNull, lte, or, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, isNull, lte, notInArray, or, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
 import {
   accounts, categories, items, merchantRules, transactionOverrides, transactions,
@@ -467,8 +467,8 @@ async function subscriptionsFor(
   displayName: ReturnType<typeof sql<string>>,
   names: string[],
   today: Date,
-): Promise<Map<string, Verdict>> {
-  if (!names.length || !ids.length) return new Map();
+): Promise<{ byKey: Map<string, Verdict>; names: Set<string> }> {
+  if (!names.length || !ids.length) return { byKey: new Map(), names: new Set() };
 
   const from = new Date(today);
   from.setUTCMonth(from.getUTCMonth() - SUBSCRIPTION_MONTHS);
@@ -494,17 +494,33 @@ async function subscriptionsFor(
     .orderBy(desc(transactions.date))
     .limit(SUBSCRIPTION_SCAN_CAP);
 
-  const byKey = new Map<string, Charge[]>();
+  const charges = new Map<string, Charge[]>();
+  /* key -> the display names that normalise to it. merchantKey folds case,
+     punctuation and long digit runs together, so one verdict can cover several
+     spellings — and the filter below works in SQL on the display name, which
+     is the column, so it needs them all back. */
+  const spellings = new Map<string, Set<string>>();
+
   for (const r of history) {
     const key = merchantKey(r.merchantName, r.name);
     if (!key) continue;
     // The column is Plaid's way round already: positive means money left.
-    const list = byKey.get(key);
+    const list = charges.get(key);
     if (list) list.push({ date: r.date, cents: Number(r.amount) });
-    else byKey.set(key, [{ date: r.date, cents: Number(r.amount) }]);
+    else charges.set(key, [{ date: r.date, cents: Number(r.amount) }]);
+
+    const shown = r.merchantName ?? r.name;
+    const seen = spellings.get(key);
+    if (seen) seen.add(shown);
+    else spellings.set(key, new Set([shown]));
   }
 
-  return judgeAll(byKey);
+  const byKey = judgeAll(charges);
+  const subNames = new Set<string>();
+  for (const key of byKey.keys()) {
+    for (const n of spellings.get(key) ?? []) subNames.add(n);
+  }
+  return { byKey, names: subNames };
 }
 
 /* ------------------------------------------------------------------ budget -- */
@@ -699,6 +715,9 @@ summary.get("/transactions", async (c) => {
     // column instead would offer a menu of names that are not on screen.
     const merchant = c.req.query("merchant") ?? null;
 
+    const subQ = c.req.query("subscription");
+    const subFilter = subQ === "yes" || subQ === "no" ? subQ : null;
+
     // Absent means "newest first", which is the useful default for a ledger.
     const amountQ = c.req.query("amount");
     const amountSort = amountQ === "asc" || amountQ === "desc" ? amountQ : null;
@@ -735,9 +754,44 @@ summary.get("/transactions", async (c) => {
      *
      * The wildcards are escaped, so a description containing % or _ still finds
      * itself rather than matching half the ledger. */
-    const where = merchant
+    /* Every description in the period. This used to be fetched at the end,
+       purely to fill the menu on that column; it is needed up front now
+       because the subscription verdicts are worked out from it, and the page
+       query may have to filter on them.
+
+       Still capped, but the cap stopped being the limit of what is reachable
+       when the heading became typeable — anything past it is found by typing
+       part of it. */
+    const merchantRows = await db
+      .selectDistinct({ name: displayName })
+      .from(transactions)
+      .where(inPeriod)
+      .orderBy(displayName)
+      .limit(400);
+    const periodNames = merchantRows.map((r) => r.name).filter(Boolean);
+
+    /* Judged across the period's merchants rather than the page's.
+     *
+     * The page's would be enough to label the rows, and was, until the column
+     * became a filter: filtering the page by a verdict computed from the page
+     * is circular. So the question is asked of everything in the window, once,
+     * and both the filter and the labels read the same answer. */
+    const subs = await subscriptionsFor(db, ids, displayName, periodNames, new Date());
+
+    const textWhere = merchant
       ? and(inPeriod, ilike(displayName, "%" + merchant.replace(/[\\%_]/g, (ch) => "\\" + ch) + "%"))
       : inPeriod;
+
+    /* Applied in SQL on the display name, so the count, the totals and the
+       paging all agree with the rows. An empty set is handled rather than
+       passed to inArray, which would build an IN () — a syntax error in
+       Postgres, not an empty result. */
+    const subNames = [...subs.names];
+    const where =
+      !subFilter ? textWhere
+      : subFilter === "yes"
+        ? (subNames.length ? and(textWhere, inArray(displayName, subNames)) : sql`false`)
+        : (subNames.length ? and(textWhere, notInArray(displayName, subNames)) : textWhere);
 
     const page = db
       .select({
@@ -828,28 +882,12 @@ summary.get("/transactions", async (c) => {
       moneyOut = Number(totals[0].moneyOut);
     }
 
-    /* Judged off the names on this page, which is the smallest question that
-       answers every row. Distinct, so a page of two hundred Starbucks rows
-       asks about one merchant. */
-    const pageNames = [...new Set(rows.map((r) => r.merchantName ?? r.name).filter(Boolean))];
-    const subs = await subscriptionsFor(db, ids, displayName, pageNames, new Date());
-
-    // Every description in the period, for the list on that column. Still
-    // capped, but the cap stopped being the limit of what is reachable when the
-    // heading became typeable — anything past it is found by typing part of it.
-    const merchantRows = await db
-      .selectDistinct({ name: displayName })
-      .from(transactions)
-      .where(inPeriod)
-      .orderBy(displayName)
-      .limit(400);
-
     return c.json({
       ok: true,
       total,
       // Across everything matched, in the reader's convention: positive is in.
       sum: { in: moneyIn, out: moneyOut, net: moneyIn - moneyOut },
-      merchants: merchantRows.map((r) => r.name).filter(Boolean),
+      merchants: periodNames,
       categories: ctx.list,
       transactions: rows.map((r) => {
         const { kind, slug } = resolveSlug(r, ctx);
@@ -878,12 +916,12 @@ summary.get("/transactions", async (c) => {
              what it deliberately refuses to guess at. Null rather than false
              where there is no verdict, so the client can tell "not a
              subscription" from "never asked". */
-          subscription: subs.get(key)
+          subscription: subs.byKey.get(key)
             ? {
-                cents: subs.get(key)!.cents,
-                since: subs.get(key)!.since,
-                count: subs.get(key)!.count,
-                rose: subs.get(key)!.rose,
+                cents: subs.byKey.get(key)!.cents,
+                since: subs.byKey.get(key)!.since,
+                count: subs.byKey.get(key)!.count,
+                rose: subs.byKey.get(key)!.rose,
               }
             : null,
         };

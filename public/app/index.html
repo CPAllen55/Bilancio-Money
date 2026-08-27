@@ -1374,14 +1374,26 @@
    * Description takes the slack, because it is the only column whose contents
    * genuinely vary, and it is the one that runs out of room first. Everything
    * else is the width of the widest thing it will ever hold. */
+  /* Proportions, not pixels.
+   *
+   * Every column but the date was a pixel width and the description was auto,
+   * which meant the whole of a wide card went to the description: at 1120px
+   * the category select was clipping "Travel & Entertainment" with four
+   * hundred pixels of empty space beside it. Now the width is shared out, so
+   * the right-hand side grows with the card.
+   *
+   * They are percentages rather than max(136px, 13%). A col accepts max() and
+   * then ignores it — measured, all four came back the same width, because
+   * the declaration is dropped and every column falls back to auto. The floor
+   * those max() calls were meant to provide comes from the table min-width
+   * below instead, which is the honest place for it: below that the card
+   * scrolls rather than each column quietly shrinking past legibility. */
   #tx-list table.data{ table-layout:fixed; }
-  #tx-list col.c-date{ width:106px; }
-  #tx-list col.c-desc{ width:auto; }
-  #tx-list col.c-sub{ width:112px; }
-  #tx-list col.c-cat{ width:178px; }
-  /* Wide enough for a six-figure total in the dark theme, whose numeric face
-     is a monospace and needs about a sixth more room than the light one. */
-  #tx-list col.c-amt{ width:126px; }
+  #tx-list col.c-date{ width:14%; }
+  #tx-list col.c-desc{ width:29%; }
+  #tx-list col.c-sub{ width:16%; }
+  #tx-list col.c-cat{ width:25%; }
+  #tx-list col.c-amt{ width:16%; }
 
   /* One line, always.
    *
@@ -1405,11 +1417,13 @@
   #tx-list table.data tbody td:nth-child(2){ overflow:hidden; white-space:nowrap;
                                              text-overflow:ellipsis; }
 
-  /* Below this the five columns stop fitting whatever is given up, so the card
-     scrolls sideways rather than crushing them. The table keeps a floor wide
-     enough for the fixed four plus a readable description. */
+  /* Below this the five columns stop being readable, so the card scrolls
+     sideways rather than crushing them. 800 is set by the widest thing on the
+     row that cannot shrink: the amount column has to hold a six-figure total
+     in the dark theme, whose numeric face is a monospace and needs about a
+     sixth more room than the light one, and 16% of 800 is that. */
   #tx-list{ overflow-x:auto; }
-  #tx-list table.data{ min-width:640px; }
+  #tx-list table.data{ min-width:800px; }
 
   /* A date is not a quantity: nothing lines up underneath it that wants its
      units stacked, so it takes the left edge like the text it is. */
@@ -1443,7 +1457,37 @@
      nothing else did. The band's padding does it now, and the margin left the
      control sitting high in its own cell. */
   #tx-list table.data thead .thf{ margin:0 0 0 -4px; }
-  #tx-list table.data thead .thwrap{ min-height:24px; }
+  #tx-list table.data thead .thwrap{ min-height:28px; }
+
+  /* The one heading you type into has to look like it.
+   *
+   * A select says "openable" with its caret and needs nothing else. An input
+   * has no caret, and on the heading band it came out identical to the plain
+   * SUBSCRIPTION label beside it — same size, same colour, same uppercase, no
+   * edge. It was still a working text field the whole time; it simply stopped
+   * saying so, and a control nobody can see is a control nobody uses.
+   *
+   * A field with a rule under it and a magnifier in front of it. Not a boxed
+   * input: this is a heading row, and a full control would shout over the four
+   * beside it. */
+  #tx-list table.data thead input.thi{ margin-left:0; padding-left:20px;
+    border:none; border-bottom:1px solid var(--hair-strong); border-radius:0;
+    background:none; }
+  #tx-list table.data thead input.thi:hover{ border-bottom-color:var(--ink-quiet); }
+  #tx-list table.data thead input.thi:focus{ border-bottom-color:var(--mint-dim);
+    border-bottom-width:2px; }
+  /* On the wrapper rather than the input, because an input cannot carry a
+     pseudo-element of its own. */
+  #tx-list table.data thead th:nth-child(2) .thwrap{ position:relative; }
+  #tx-list table.data thead th:nth-child(2) .thwrap::before{
+    content:""; position:absolute; left:2px; top:50%; width:11px; height:11px;
+    margin-top:-7px; pointer-events:none; opacity:.75;
+    border:1.6px solid currentColor; border-radius:50%;
+    color:var(--ink-quiet); }
+  #tx-list table.data thead th:nth-child(2) .thwrap::after{
+    content:""; position:absolute; left:11px; top:50%; width:5px; height:1.6px;
+    margin-top:2px; pointer-events:none; opacity:.75;
+    background:var(--ink-quiet); transform:rotate(45deg); transform-origin:left center; }
 
   /* ── The rows ────────────────────────────────────────────────────────────
    *
@@ -1457,15 +1501,15 @@
   table.data td.num{ text-align:right; font-family:var(--font-num);
                      font-variant-numeric:tabular-nums; white-space:nowrap; }
   td.num.in{ color:var(--mint); }
-  /* Money out in red, money in in green, on this table only.
+  /* Money out takes plain ink; only money in is coloured.
    *
-   * Worth saying out loud, because it breaks a rule the rest of the app keeps:
-   * mint and coral are verdict colours everywhere else, good and bad, and a
-   * grocery shop is neither. A ledger is the one place the convention earns
-   * its keep — the column is nothing but signed amounts, the sign is the only
-   * thing being asked of it, and a minus sign at eleven pixels is a poor way
-   * to carry it. Scoped to #tx-list so no total, chart or tile picks it up. */
-  #tx-list td.num.out{ color:var(--coral); }
+   * It was coral for a while, on the argument that a ledger is the one place
+   * the app's verdict colours earn their keep. They do not. A column where
+   * nearly every row is red is a column where red means "a row", and the four
+   * or five green ones are the only thing the colour is actually saying —
+   * which is exactly what money-in-is-green says on its own. Spending is not
+   * a warning; it is the normal case, and the normal case is ink. */
+  #tx-list td.num.out{ color:var(--ink); }
   .pill{ font-family:var(--font-num); font-size:11px; color:var(--ink-soft);
          border:1px solid var(--hair); border-radius:99px; padding:2px 8px; white-space:nowrap; }
   /* The category cell is editable, so it looks editable rather than like text. */
@@ -2663,7 +2707,17 @@ function askSubcategory(side) {
    of two, and it puts the filter where the thing it filters actually is. They
    are real <select>s dressed as headings rather than a custom popover, so they
    behave like every other menu on the platform — keyboard, touch, and all. */
-const txFilters = { period: '', merchant: '', category: '', amount: '' };
+const txFilters = { period: '', merchant: '', category: '', amount: '', subscription: '' };
+
+/* Which heading drives which filter.
+ *
+ * Written out three times — the change handler, the clear button and the
+ * clear-everything link — which is how the fourth column would have ended up
+ * filtering in one of those places and not the others. Once, here, and the
+ * three of them read it. */
+const TX_FIELD_OF = { 'f-date': 'period', 'f-desc': 'merchant', 'f-cat': 'category',
+                      'f-amt': 'amount', 'f-sub': 'subscription' };
+const txClearAll = () => { for (const k of Object.values(TX_FIELD_OF)) txFilters[k] = ''; };
 
 /* The description column is filtered by typing, not by scrolling.
  *
@@ -2782,6 +2836,7 @@ async function renderTransactions() {
     (txFilters.merchant ? '&merchant=' + encodeURIComponent(txFilters.merchant) : '') +
     (txFilters.category ? '&bucket=' + encodeURIComponent(txFilters.category) : '') +
     (txFilters.amount ? '&amount=' + encodeURIComponent(txFilters.amount) : '') +
+    (txFilters.subscription ? '&subscription=' + encodeURIComponent(txFilters.subscription) : '') +
     '&limit=200');
 
   categoryList = r.categories; catOptCache = {};
@@ -2793,15 +2848,15 @@ async function renderTransactions() {
     '<col class="c-sub"><col class="c-cat"><col class="c-amt"></colgroup>';
 
   /* Subscription sits between the description and the category, which is what
-     pushes the category right. It is the only heading on the row that is not a
-     control, because it is the only column that is not a filter — the verdict
-     is worked out for the merchants on the page, so filtering on it would mean
-     working it out for the whole ledger first. A caret it cannot honour would
-     be worse than no caret. */
+     pushes the category right. It filters like the rest now: the verdict is
+     worked out across every merchant in the period rather than just the ones
+     on the page, so the count, the totals and the paging all agree with it. */
   const head = '<thead><tr>' +
     '<th>' + txHeaderSelect('f-date', 'Date', txFilters.period, txMonthOptions(txFilters.period)) + '</th>' +
     '<th>' + txHeaderInput('f-desc', 'Description', txFilters.merchant, r.merchants) + '</th>' +
-    '<th>Subscription</th>' +
+    '<th>' + txHeaderSelect('f-sub', 'Subscription', txFilters.subscription,
+      '<option value="yes"' + (txFilters.subscription === 'yes' ? ' selected' : '') + '>Subscriptions only</option>' +
+      '<option value="no"' + (txFilters.subscription === 'no' ? ' selected' : '') + '>Everything else</option>') + '</th>' +
     '<th>' + txHeaderSelect('f-cat', 'Category', txFilters.category, txCategoryOptions(txFilters.category)) + '</th>' +
     '<th style="text-align:right">' +
       txHeaderSelect('f-amt', 'Amount', txFilters.amount,
@@ -2809,7 +2864,8 @@ async function renderTransactions() {
         '<option value="desc"' + (txFilters.amount === 'desc' ? ' selected' : '') + '>Descending</option>') +
       '</th></tr></thead>';
 
-  const filtering = txFilters.period || txFilters.merchant || txFilters.category || txFilters.amount;
+  const filtering = txFilters.period || txFilters.merchant || txFilters.category ||
+    txFilters.amount || txFilters.subscription;
 
   if (!r.transactions.length) {
     // The headings still have to be reachable, or a filter that matches nothing
@@ -2914,8 +2970,7 @@ $('tx-list').addEventListener('focusin', (e) => {
 });
 
 $('tx-list').addEventListener('change', (e) => {
-  const map = { 'f-date': 'period', 'f-desc': 'merchant', 'f-cat': 'category', 'f-amt': 'amount' };
-  const key = map[e.target.id];
+  const key = TX_FIELD_OF[e.target.id];
   if (!key) return;
   txFilters[key] = e.target.value;
   renderTransactions().catch(err => say($('global-msg'), err.message, 'bad'));
@@ -2924,11 +2979,10 @@ $('tx-list').addEventListener('change', (e) => {
 $('tx-list').addEventListener('click', (e) => {
   const x = e.target.closest('.thx');
   if (x) {
-    const map = { 'f-date': 'period', 'f-desc': 'merchant', 'f-cat': 'category', 'f-amt': 'amount' };
-    txFilters[map[x.dataset.clear]] = '';
+    txFilters[TX_FIELD_OF[x.dataset.clear]] = '';
   } else if (e.target.id === 'tx-clear') {
     e.preventDefault();
-    txFilters.period = ''; txFilters.merchant = ''; txFilters.category = ''; txFilters.amount = '';
+    txClearAll();
   } else return;
   renderTransactions().catch(err => say($('global-msg'), err.message, 'bad'));
 });
