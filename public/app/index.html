@@ -31,6 +31,10 @@
     --on-mint:#04120C;                    /* text on a mint button */
     --tab-line:var(--mint);               /* under the tab you are on */
     --tick:#FFFFFF;                       /* where a budget ran out */
+    /* Text printed on top of a filled bar. It cannot be --ink: --ink is chosen
+       to read on the card, and a bar is the opposite tone to the card in both
+       themes. Mint here is #00F0A8, so this one goes dark. */
+    --on-fill:#08131C;
     --field:var(--bg-panel);              /* a menu you can press */
     /* The face every figure and label is set in. Monospace is what gives the
        dark theme its terminal look, and that look is the point there. */
@@ -119,6 +123,7 @@
        instead of a line cutting through it. Near-black clears both bars at
        3.5:1 and the card at 15.9:1. */
     --tick:#111111;
+    --on-fill:#FFFFFF;                    /* see the dark block */
     /* A step below the card, so a menu reads as something you can press rather
        than as part of the surface. Ink on it is 12.0:1; its option list stays
        on the card colour, where the muted optgroup labels still clear 4.5. */
@@ -423,22 +428,82 @@
                background:var(--tick); box-shadow:0 0 0 1.5px var(--card-safe);
                pointer-events:auto; cursor:default; }
 
-  /* Income over spending, same scale. Both bars share a track width, so the
-     shorter one is short because less went out — not because it was drawn
-     against a different maximum. */
+  /* Income over spending, each against its own plan.
+   *
+   * These used to share one scale — income drew a full track and spending drew
+   * a fraction of it — so the difference in their lengths was the money kept,
+   * readable without a number. That answered "how much of what came in went
+   * out", which is a question the figure above the bars already answers.
+   *
+   * The track is the budget for that row now, and the fill is what has
+   * actually happened against it. Income at 7,632 of a 10,047 plan is a bar
+   * three quarters full, not a bar that is full because it is the yardstick.
+   *
+   * The cost, stated plainly: the two bars no longer compare to each other.
+   * A full income bar and a full spending bar are the same length and very
+   * different money. What recovers it is the caption inside each bar, which
+   * names both figures, and the kept total in the legend underneath. */
   .bars{ display:flex; flex-direction:column; gap:10px; margin:4px 0 12px; }
   /* The label column held "In" and "Out" and was sized for them. "Expenses"
      is four times the width, so the column grew to fit it; the track gives up
      the difference, which it can afford — it is a proportion, not a scale. */
-  .brow{ display:grid; grid-template-columns:74px minmax(0,1fr) 96px; gap:12px; align-items:center; }
+  /* Two columns since the amount moved inside the bar. The track takes back
+     the 96px the figure used to hold, which is what makes room for a caption
+     that names two numbers rather than one. */
+  .brow{ display:grid; grid-template-columns:74px minmax(0,1fr); gap:12px; align-items:center; }
   .blabel{ font-family:var(--font-num); font-size:11px; letter-spacing:.08em;
            text-transform:uppercase; color:var(--muted); }
   .btrack{ position:relative; height:10px; border-radius:2px; background:var(--grid); }
   .bfill{ position:absolute; inset:0 auto 0 0; border-radius:2px 4px 4px 2px; }
   .bfill.in{ background:var(--mint); opacity:.85; }
   .bfill.out{ background:var(--coral); }
-  .bamt{ font-family:var(--font-num); font-size:12.5px; text-align:right; color:var(--ink); }
-  .bamt.out{ color:var(--coral); }
+
+  /* The Overview's two bars are thicker than the rest, because they carry
+     their own caption rather than pointing at one somewhere else. 21px holds
+     12px type with a little air; anything under about 18 and the descenders
+     sit on the edge of the track.
+
+     Named "thick" and not "lg", which is taken: .lg is the chart legend, and
+     it sets display:inline-flex. A .btrack that picked that up collapsed to
+     zero width the moment its row stopped being a grid — which only happens
+     below 430px, so it looked correct on every desktop measurement. */
+  .btrack.thick{ height:21px; border-radius:3px; overflow:hidden; }
+  .btrack.thick .bfill{ border-radius:3px 4px 4px 3px; }
+  /* Full strength under text. The .85 was there to soften a bare bar; with a
+     caption on it, it drops white-on-mint to 4.4:1 in the light theme, which
+     is under the floor for 12px type. Opaque, it is 5.3:1. */
+  .btrack.thick .bfill.in{ opacity:1; }
+
+  /* The caption, printed twice.
+   *
+   * A single string cannot be one colour: it runs from the filled part of the
+   * bar onto the empty part, and those are opposite tones. So it is set once
+   * in the ink that reads on the track, and once more in the ink that reads on
+   * the fill, inside a box clipped to exactly the fill width. Both copies are
+   * absolutely positioned at the same offset, so the glyphs land on top of
+   * each other and the colour changes precisely at the fill edge. */
+  .bcap{ position:absolute; left:9px; top:0; height:100%; display:flex;
+         align-items:center; white-space:nowrap; pointer-events:none;
+         font-family:var(--font-num); font-size:12px; letter-spacing:.01em;
+         color:var(--ink); }
+  .bcap.on{ left:0; overflow:hidden; }
+  .bcap.on span{ position:absolute; left:9px; top:0; height:100%;
+                 display:flex; align-items:center; color:var(--on-fill); }
+  /* The thin track lets its mark overhang top and bottom, which is how a 3px
+     line stays findable on something 10px tall. The thick track clips — it has
+     to, or a caption longer than the bar would spill across the card — so the
+     mark runs its full height instead. At 21px that is tall enough to see
+     without needing to escape. */
+  .btrack.thick .meter-tick{ top:0; bottom:0; box-shadow:0 0 0 1px var(--card-safe); }
+  /* The 74px label column is a quarter of a small phone. Below this the label
+     goes above its bar instead, which hands the track the full width of the
+     card — enough for the caption, which would otherwise start losing the
+     budget off its right-hand end at around a 300px card. */
+  @media (max-width:430px){
+    .brow{ display:block; }
+    .blabel{ display:block; margin-bottom:5px; }
+  }
+
   .meter-legend{ display:flex; justify-content:space-between; gap:12px; margin-top:9px;
                  font-size:12px; color:var(--muted); }
   .meter-legend .mono{ font-family:var(--font-num); color:var(--ink-soft); }
@@ -459,13 +524,12 @@
   /* Safe-to-spend is the one figure the page is built around, so it gets its
      own ground rather than the same card as everything else. */
   #ov-safe{ background:var(--card-safe); }
-  /* The title of the card and the two amounts against its bars.
-     Both were sized as captions when they are neither: the title names the
-     whole card, and the amounts are the figures the bars are drawing. Scoped
-     here rather than to .eyebrow and .bamt at large, so the eyebrows on Trend
-     and the Tracker keep the size they were given. */
+  /* The title of the card. It was sized as a caption when it is not one — it
+     names the whole card. (The amounts it used to share this rule with are
+     inside the bars now and take .bcap's size.) Scoped
+     here rather than to .eyebrow at large, so the eyebrows on Trend and the
+     Tracker keep the size they were given. */
   #ov-safe .eyebrow{ font-size:14px; font-weight:600; letter-spacing:.1em; }
-  #ov-safe .bamt{ font-size:15.5px; }
 
   .t-label{ font-size:12.5px; color:var(--ink-soft); }
   .t-value{ font-size:25px; font-weight:600; letter-spacing:-.015em; margin-top:2px; }
@@ -2059,22 +2123,75 @@ async function renderOverview() {
   // Capped at 100 so an overspent month does not draw a bar past the card, but
   // the overspend is still stated in words below rather than hidden by the cap.
   const overspent = t.expense > t.income && t.income > 0;
-  const spentPct = t.income ? Math.min(100, (t.expense / t.income) * 100) : (t.expense ? 100 : 0);
 
-  /* The mark on the OUT bar is where the budget ran out, and it appears only
-     once it has — the same rule the Tracker uses, so a line means one thing
-     across the app. It used to be a pace line, marking how far through the
-     period you were, which looked identical and meant something else entirely
-     — and assumed spending arrives evenly, which it does not when rent lands on
-     the 1st. The badge on the right reported the same assumption and was
-     changed with it.
+  /* The two plans, and how each bar is drawn against its own.
+   *
+   * ── What the track is ────────────────────────────────────────────────────
+   * The full width of a track is that row's budget. A fill is therefore the
+   * fraction of the plan that has actually happened, and the empty remainder
+   * is what is left of it — a reading anyone can take without a second number.
+   *
+   * ── When the actual passes the plan ──────────────────────────────────────
+   * The track cannot hold it, so the track stretches to the actual and the
+   * plan becomes a mark inside the bar. Everything past the mark is the amount
+   * by which the plan was beaten: overspend on the OUT bar, surplus on the IN
+   * bar. Same mark, and the same rule the Tracker uses, so a line means one
+   * thing across the app. It used to be a pace line, marking how far through
+   * the period you were, which looked identical and meant something else
+   * entirely — and assumed spending arrives evenly, which it does not when
+   * rent lands on the 1st.
+   *
+   * ── With no plan at all ──────────────────────────────────────────────────
+   * A new account has no history to plan from. Both rows fall back to one
+   * shared scale, the larger of the two totals, which is the only comparison
+   * left when there is nothing to compare against. The caption drops its
+   * "of ..." clause rather than inventing a budget of zero.
+   */
+  const inPlan  = (s.budget && s.budget.available && s.budget.income  > 0) ? s.budget.income  : 0;
+  const outPlan = (s.budget && s.budget.available && s.budget.expense > 0) ? s.budget.expense : 0;
+  const noPlanScale = Math.max(t.income, t.expense);
 
-     Positioned against whatever the track is measuring: income where there is
-     income, the spend itself where there is not. */
-  const plan = (s.budget && s.budget.available && s.budget.expense > 0) ? s.budget.expense : 0;
-  const scale = t.income || t.expense;
-  const overBudget = plan > 0 && t.expense > plan;
-  const budgetPct = overBudget && scale ? Math.min(100, (plan / scale) * 100) : null;
+  const meter = (actual, planned) => {
+    const scale = planned > 0 ? Math.max(actual, planned) : noPlanScale;
+    return {
+      planned,
+      over: planned > 0 && actual > planned,
+      fillPct: scale > 0 ? (actual / scale) * 100 : 0,
+      // Only once the plan has been passed. Below it the end of the track is
+      // the plan already, and a mark sitting on the end marks nothing.
+      markPct: planned > 0 && actual > planned ? (planned / scale) * 100 : null,
+    };
+  };
+
+  const inBar  = meter(t.income,  inPlan);
+  const outBar = meter(t.expense, outPlan);
+
+  /* Rounded to the dollar. Cents on a budget comparison are noise — the plan
+     is a shaped estimate, so quoting it to the penny claims a precision it
+     does not have. The exact figures, cents and all, are in the tiles below. */
+  const cap = (actual, planned, verb) =>
+    money0(actual) + ' ' + verb + (planned > 0 ? ' of ' + money0(planned) : '');
+  const inCap  = cap(t.income,  inPlan,  'earned');
+  const outCap = cap(t.expense, outPlan, 'spent');
+
+  /* The caption twice over: once on the track, once clipped to the fill, so
+     the ink changes exactly where the colour under it does. See .bcap. */
+  const capHtml = (text, pct) =>
+    '<span class="bcap">' + escapeHtml(text) + '</span>' +
+    '<span class="bcap on" style="width:' + pct.toFixed(2) + '%"><span>' +
+    escapeHtml(text) + '</span></span>';
+
+  const markHtml = (bar, label, note) =>
+    bar.markPct === null ? '' :
+    '<div class="meter-tick" style="left:' + bar.markPct.toFixed(2) + '%" ' +
+    'data-tip="1" data-tip-label="' + escapeHtml(label) + '"' +
+    ' data-tip-month="' + escapeHtml(s.range.label) + '"' +
+    ' data-tip-amount="' + bar.planned + '"' +
+    ' data-tip-note="' + escapeHtml(note) + '"></div>';
+
+  // Still read by the badge and the legend below, which speak about spending.
+  const plan = outPlan;
+  const overBudget = outBar.over;
 
   /* The card was named after the figure at the top of it, but it has long
      since grown two bars, a budget mark and a verdict — the safe-to-spend
@@ -2103,31 +2220,34 @@ async function renderOverview() {
     '<div class="bars">' +
       '<div class="brow">' +
         '<span class="blabel">Income</span>' +
-        '<div class="btrack"><div class="bfill in" style="width:100%"></div></div>' +
-        '<span class="bamt">' + money(t.income) + '</span>' +
+        '<div class="btrack thick">' +
+          '<div class="bfill in" style="width:' + inBar.fillPct.toFixed(2) + '%"></div>' +
+          capHtml(inCap, inBar.fillPct) +
+          markHtml(inBar, 'Income budget',
+            money(t.income - inPlan) + ' has come in past this point — more than ' +
+            s.range.label.toLowerCase() + ' was planned to earn.') +
+        '</div>' +
       '</div>' +
       '<div class="brow">' +
         '<span class="blabel">Expenses</span>' +
-        '<div class="btrack">' +
-          '<div class="bfill out" style="width:' + spentPct.toFixed(1) + '%"></div>' +
-          (budgetPct !== null
-            ? '<div class="meter-tick" style="left:' + budgetPct.toFixed(1) + '%" ' +
-              'data-tip="1" data-tip-label="Budget ran out here"' +
-              ' data-tip-month="' + escapeHtml(s.range.label) + '"' +
-              ' data-tip-amount="' + plan + '"' +
-              ' data-tip-note="' + escapeHtml(money(t.expense - plan) + ' has gone out past this point. ' +
-                'Everything to the right of the mark is over what was planned for ' +
-                s.range.label.toLowerCase() + '.') + '"></div>'
-            : '') +
+        '<div class="btrack thick">' +
+          '<div class="bfill out" style="width:' + outBar.fillPct.toFixed(2) + '%"></div>' +
+          capHtml(outCap, outBar.fillPct) +
+          markHtml(outBar, 'Budget ran out here',
+            money(t.expense - outPlan) + ' has gone out past this point. ' +
+            'Everything to the right of the mark is over what was planned for ' +
+            s.range.label.toLowerCase() + '.') +
         '</div>' +
-        '<span class="bamt out">' + money(t.expense) + '</span>' +
       '</div>' +
     '</div>' +
+    /* This read "$3,753.74 spent of $7,632.00" — spending against income, a
+       third comparison sitting under two bars that each make their own. Both
+       of its figures are printed inside the bars now, so what is left here is
+       the one thing neither bar shows: the difference between them. */
     '<div class="meter-legend"><span class="mono">' +
     (overspent
       ? money(t.expense - t.income) + ' more went out than came in'
-      : money(safe.spent) + ' spent of ' + money(safe.budget) +
-        (t.income > 0 ? ' · the gap is ' + money(t.income - t.expense) + ' kept' : '')) + '</span>' +
+      : (t.income > 0 ? 'The gap is ' + money(t.income - t.expense) + ' kept' : '')) + '</span>' +
     /* This said "on pace", from the same straight-line assumption the marker
        used to draw: income times the fraction of the period elapsed. Bills do
        not arrive evenly. Rent clears on the 1st and the badge cried wolf for a
