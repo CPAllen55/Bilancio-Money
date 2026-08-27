@@ -1419,10 +1419,26 @@
    * below instead, which is the honest place for it: below that the card
    * scrolls rather than each column quietly shrinking past legibility. */
   #tx-list table.data{ table-layout:fixed; }
-  #tx-list col.c-date{ width:14%; }
-  #tx-list col.c-desc{ width:29%; }
-  #tx-list col.c-sub{ width:16%; }
-  #tx-list col.c-cat{ width:25%; }
+  #tx-list col.c-date{ width:12%; }
+  #tx-list col.c-desc{ width:25%; }
+  /* Sized by its heading, not by its contents.
+     Measured: the select needs 197px for "RECURRING FIXED EXPENSES" and its
+     caret, 225 with the cell's padding, against the 119 "SUBSCRIPTION" wanted.
+     Arrived at by measuring, and the measuring corrected itself twice.
+     A select ellipsises its own text rather than overflowing, so scrollWidth
+     never exceeds clientWidth and the obvious check reports "fits" however
+     badly it does not — the text has to be measured against the box.
+     And a select with no width shrink-wraps to its widest option, capped at
+     max-width:100%. So this column does not need to be as wide as the
+     heading; it needs to be wide enough that the cap never bites. What was
+     actually clipping the name was the table floor below, not this number.
+     The dark theme is the binding case either way: its numeric face is a
+     monospace and wants four more pixels than the light one for the same
+     words.
+     The mark underneath is a small pill and would be happy in half of this.
+     A column whose own name does not fit is worse than a column with air. */
+  #tx-list col.c-sub{ width:25%; }
+  #tx-list col.c-cat{ width:22%; }
   #tx-list col.c-amt{ width:16%; }
 
   /* One line, always.
@@ -1448,12 +1464,16 @@
                                              text-overflow:ellipsis; }
 
   /* Below this the five columns stop being readable, so the card scrolls
-     sideways rather than crushing them. 800 is set by the widest thing on the
-     row that cannot shrink: the amount column has to hold a six-figure total
-     in the dark theme, whose numeric face is a monospace and needs about a
-     sixth more room than the light one, and 16% of 800 is that. */
+     sideways rather than crushing them.
+     It was 800, set by the amount column needing to hold a six-figure total in
+     the dark theme's monospace. The recurring heading is the wider constraint
+     now. 1000 is where 27% of the table still clears the heading with room to
+     spare; below it the table scrolls, which is the honest thing — every
+     column stays whole down to the floor and nothing is quietly truncated on
+     the way there. In practice that means a sideways scrollbar on windows
+     narrower than about 1050. */
   #tx-list{ overflow-x:auto; }
-  #tx-list table.data{ min-width:800px; }
+  #tx-list table.data{ min-width:1000px; }
 
   /* A date is not a quantity: nothing lines up underneath it that wants its
      units stacked, so it takes the left edge like the text it is. */
@@ -2900,15 +2920,25 @@ async function renderTransactions() {
   const cols = '<colgroup><col class="c-date"><col class="c-desc">' +
     '<col class="c-sub"><col class="c-cat"><col class="c-amt"></colgroup>';
 
-  /* Subscription sits between the description and the category, which is what
-     pushes the category right. It filters like the rest now: the verdict is
-     worked out across every merchant in the period rather than just the ones
-     on the page, so the count, the totals and the paging all agree with it. */
+  /* "Recurring Fixed Expenses", not "Subscription".
+   *
+   * The column was never only subscriptions: rent, insurance and the storage
+   * unit all satisfy the rule, and calling them subscriptions was the label
+   * disagreeing with what the rule actually finds. The longer name is what the
+   * column has always meant.
+   *
+   * It costs width — three times the heading, and the column is sized by its
+   * heading rather than by the small mark underneath it. See c-sub below.
+   *
+   * It sits between the description and the category, which is what pushes the
+   * category right. It filters like the rest: the verdict is worked out across
+   * every merchant in the period rather than just the ones on the page, so the
+   * count, the totals and the paging all agree with it. */
   const head = '<thead><tr>' +
     '<th>' + txHeaderSelect('f-date', 'Date', txFilters.period, txMonthOptions(txFilters.period)) + '</th>' +
     '<th>' + txHeaderInput('f-desc', 'Description', txFilters.merchant, r.merchants) + '</th>' +
-    '<th>' + txHeaderSelect('f-sub', 'Subscription', txFilters.subscription,
-      '<option value="yes"' + (txFilters.subscription === 'yes' ? ' selected' : '') + '>Subscriptions only</option>' +
+    '<th>' + txHeaderSelect('f-sub', 'Recurring Fixed Expenses', txFilters.subscription,
+      '<option value="yes"' + (txFilters.subscription === 'yes' ? ' selected' : '') + '>Recurring only</option>' +
       '<option value="no"' + (txFilters.subscription === 'no' ? ' selected' : '') + '>Everything else</option>') + '</th>' +
     '<th>' + txHeaderSelect('f-cat', 'Category', txFilters.category, txCategoryOptions(txFilters.category)) + '</th>' +
     '<th style="text-align:right">' +
