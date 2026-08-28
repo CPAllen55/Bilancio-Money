@@ -63,8 +63,6 @@
        themes. Mint here is #00F0A8, so this one goes dark. */
     --on-fill:#08131C;
     --field:var(--bg-panel);              /* a menu you can press */
-    /* The face every figure and label is set in. Monospace is what gives the
-       dark theme its terminal look, and that look is the point there. */
     /* Three roles, so a theme can change its typography in one place rather
        than in the nine rules that used to name a family outright.
 
@@ -72,7 +70,11 @@
          --font-display  the big headings
          --font-num      figures, labels and small caps
 
-       The dark theme keeps what it always had. */
+       Declared here because this block comes first, not because they are the
+       dark theme's. Body and display are the same in both themes and have
+       always been; the light theme overrides only --font-num, and the reason
+       is written there. Monospace is what gives the dark theme its terminal
+       look, and that look is the point there. */
     --font-body:'IBM Plex Sans', sans-serif;
     --font-display:'Space Grotesk', sans-serif;
     --font-num:'IBM Plex Mono', monospace;
@@ -188,28 +190,25 @@
      * 7.4:1 on the card — well past the 4.5 floor, so it is quiet by choice
      * rather than by accident. */
     --ink-quiet:#5E4820;
-    /* Times New Roman, throughout.
-     *
-     * The light theme used to run IBM Plex Sans in all three roles, on the
-     * reasoning that a cream page with monospace figures reads as a terminal
-     * someone painted. That reasoning survives — this is a further step in the
-     * same direction, and a serif on cream reads as a printed statement rather
-     * than as an interface.
-     *
-     * The whole of it, not just the body: a serif page with sans-serif figures
-     * in the tables would be two documents stapled together.
-     *
-     * Times, then serif, after the full name — the full name is what Windows
-     * and macOS carry, Times is what older systems call it, and generic serif
-     * is what a Linux or Android reader falls back to. The one thing that must
-     * not happen is a silent fall through to sans, which would leave the light
-     * theme looking untouched on the machines least likely to be checked.
-     *
-     * The wordmark is deliberately not included. A logotype is not "the font";
-     * it is a mark, and it keeps Space Grotesk in both themes. */
-    --font-body:'Times New Roman', Times, serif;
-    --font-display:'Times New Roman', Times, serif;
-    --font-num:'Times New Roman', Times, serif;
+    /* And is exactly what the light theme should not have. A cream page with
+       monospace figures reads as a terminal someone painted; the same numbers
+       in the text face read as a document. Tabular figures below keep the
+       columns lining up without the typewriter.
+
+       Only --font-num is overridden. --font-body and --font-display take the
+       values above, which are the shared ones rather than the dark theme's
+       own — the body face and the heading face have never differed between
+       themes, and only the figures ever have.
+
+       Times New Roman was tried here and taken out again. Recorded because
+       the two reasons it did not work are properties of the face rather than
+       matters of taste, and they apply to any serif considered next: its
+       x-height is 87% of Plex Sans at the same pixel size, so every size in
+       the theme reads about an eighth smaller; and it ships two weights, so
+       400 and 500 render identically and so do 600 and 700 — which flattens
+       the tabs, where weight is the only thing separating them from the
+       text beside them. */
+    --font-num:'IBM Plex Sans', sans-serif;
     --bg-veil:rgba(249,244,228,.90);
     /* The same sweep a tenth of the way down. The stops above climb into
        near-white, which is a highlight on a black page and the page itself on
@@ -590,6 +589,23 @@
          align-items:center; white-space:nowrap; pointer-events:none;
          font-family:var(--font-num); font-size:12.5px; font-weight:600;
          letter-spacing:.01em; color:var(--ink); }
+  /* The figures inside a bar are the one thing set in Times in the light
+     theme. They are a stated amount against a stated plan — the most
+     document-like thing on the page — and a serif suits that in a way it did
+     not suit the interface around it.
+     Both copies take it, and they must: they are layered at the same offset
+     so the ink changes exactly at the fill edge, and two faces would drift
+     apart glyph by glyph and show a seam.
+     Larger, because Times has an x-height 87% of Plex Sans and the same pixel
+     size would read an eighth smaller. 14.5 against 12.5 puts the apparent
+     size back where it was. Weight 600 renders bold in Times, which is what
+     it was already doing in Plex. */
+  :root[data-theme="light"] .bcap,
+  :root[data-theme="light"] .bcap.on span{
+    font-family:'Times New Roman', Times, serif; font-size:14.5px; }
+  :root[data-theme="light"] .bv-kid .bcap,
+  :root[data-theme="light"] .bv-kid .bcap.on span{ font-size:13.5px; }
+
   .bcap.on{ left:0; overflow:hidden; }
   .bcap.on span{ position:absolute; left:9px; top:0; height:100%;
                  display:flex; align-items:center; color:var(--on-fill); }
