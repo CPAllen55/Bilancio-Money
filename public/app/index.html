@@ -30,15 +30,14 @@
      * lighter green at a glance. This is orange-yellow, which is unmistakably
      * on the way to red.
      *
-     * --on-near exists because the bar is light in both themes and the caption
-     * sits on top of it. The card's usual --on-fill is white in the light
-     * theme, and white on #F5A623 is 2.0:1 — not faint, unreadable. Dark ink
-     * on it is 7.6:1.
+     * --near-ink is the warning used as text on the card rather than as a
+     * bar, which is the opposite problem: a colour light enough to print on
+     * is too light to print with. #F5A623 on cream is 1.7:1.
      *
-     * --near-ink is the same warning used as text on the card rather than on
-     * the bar, which is the opposite problem: #F5A623 on cream is 1.7:1. The
-     * dark theme can use one colour for both; the light theme cannot. */
-    --near:#F59023; --on-near:#0B1520; --near-ink:#F59023;
+     * (There was an --on-near here too, for dark ink on a light amber bar.
+     * The bar is not light any more — see --bar-near — so every fill takes
+     * the same white --on-fill and that token is gone.) */
+    --near-ink:#F59023;                   /* the warning as text, on the card */
     --surface:#0F171F; --grid:#1B2630;
     /* The ledger's own two surfaces: the band the headings sit on, and the
        stripe on every other row. Both are a step off the card rather than a
@@ -58,10 +57,43 @@
     --on-mint:#04120C;                    /* text on a mint button */
     --tab-line:var(--mint);               /* under the tab you are on */
     --tick:#FFFFFF;                       /* where a budget ran out */
-    /* Text printed on top of a filled bar. It cannot be --ink: --ink is chosen
-       to read on the card, and a bar is the opposite tone to the card in both
-       themes. Mint here is #00F0A8, so this one goes dark. */
-    --on-fill:#08131C;
+    /* Text printed on top of a filled bar, and the fills it is printed on.
+     *
+     * These belong together, because one decides the other. The caption was
+     * near-black here, which is what #00F0A8 demands: white on that green is
+     * 1.30:1, which is not low contrast, it is an invisible caption. White was
+     * asked for, so the fills came down far enough to carry it.
+     *
+     * Only the bars that hold a caption take these — the Overview's two and
+     * the Tracker's. --mint, --coral and --near keep their brightness
+     * everywhere else, in every chart, key and verdict, because nothing is
+     * printed on top of them there.
+     *
+     * Chosen against two floors at once, and the two pull opposite ways: the
+     * fill has to be dark enough for white text (4.5:1) and light enough to
+     * be told from the track behind it (3:1). Against the dark theme's
+     * #1B2630 track that leaves a luminance window of roughly 0.15 to 0.18 —
+     * narrow, and the first pass sat just under it at 2.7 to 2.9 against the
+     * track. These are inside it.
+     *
+     * The same three values serve the light theme, which is why they are not
+     * repeated there. Its bar mint and coral were already these; only its
+     * amber was different, and that one was wrong — see --bar-near. One ink
+     * and three fills now, identical in both themes, which is also why there
+     * is no --on-near any more: white on every one of them. */
+    --on-fill:#FFFFFF;
+    --bar-mint:#0B8259; --bar-coral:#C93B52;
+    /* Not the bright #F5A623 the light theme was drawing.
+     *
+     * That was chosen by measuring white against it and stopping there. The
+     * other half of the question is whether the bar can be told from the track
+     * behind it, and a light amber on a cream track is 1.39:1 — a warning
+     * state that mostly disappears in the theme it was designed in. Caught by
+     * measuring bar-against-card while doing something else entirely.
+     *
+     * This clears 3.3:1 on the cream track and 3.7:1 on the dark card, and
+     * carries white at 4.9:1. */
+    --bar-near:#A85F0A;
     --field:var(--bg-panel);              /* a menu you can press */
     /* Three roles, so a theme can change its typography in one place rather
        than in the nine rules that used to name a family outright.
@@ -149,7 +181,8 @@
     --mint:#0B7A55; --mint-dim:#0A6B4B;
     --mint-glow:rgba(11,122,85,0.25); --mint-bg:rgba(11,122,85,0.12);
     --coral:#C3354B; --warning:#8D6300;
-    --near:#F5A623; --on-near:#12253F; --near-ink:#8F3F05;   /* see the dark block */
+    --near-ink:#8F3F05;                   /* the warning as text; see the dark block */
+
     --grid:#E2D5B0;
     --on-mint:#FFFFFF; --mint-hot:#0A6B4B;
     /* The dark gold out of the owl's own line work — #A07026 is the commonest
@@ -548,8 +581,8 @@
            text-transform:uppercase; color:var(--muted); }
   .btrack{ position:relative; height:10px; border-radius:2px; background:var(--grid); }
   .bfill{ position:absolute; inset:0 auto 0 0; border-radius:2px 4px 4px 2px; }
-  .bfill.in{ background:var(--mint); opacity:.85; }
-  .bfill.out{ background:var(--coral); }
+  .bfill.in{ background:var(--bar-mint); opacity:.85; }
+  .bfill.out{ background:var(--bar-coral); }
 
   /* The Overview's two bars are thicker than the rest, because they carry
      their own caption rather than pointing at one somewhere else. 21px holds
@@ -6110,10 +6143,11 @@ function budgetPair(label, colour, actual, budget, expand, opts) {
 
      The caption's ink travels with the fill: the amber is light in both themes
      and the white that reads on mint and coral would vanish on it. */
-  const fill = (over && !income) ? 'var(--coral)'
-             : near ? 'var(--near)'
-             : 'var(--mint)';
-  const capInk = near ? 'var(--on-near)' : 'var(--on-fill)';
+  const fill = (over && !income) ? 'var(--bar-coral)'
+             : near ? 'var(--bar-near)'
+             : 'var(--bar-mint)';
+  // One ink for every fill now that all three are dark enough to carry it.
+  const capInk = 'var(--on-fill)';
 
   /* The figures move off the heading and into the bar, the way the Overview's
      did. They were sitting a bar's width away from the measurement they
