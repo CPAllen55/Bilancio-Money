@@ -755,6 +755,37 @@
                                 font-size:15px; font-weight:600;
                                 color:var(--ink); letter-spacing:-.01em; }
 
+  /* ---------- admin ---------- */
+  /* Four figures across the top, because the four questions asked of this
+     page are all counts: how many are waiting, how many have been written to,
+     how many came, and how many bank connections that adds up to — the last
+     being the one that costs money and meets the Plaid ceiling. */
+  .ad-totals{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+              gap:12px; margin-bottom:16px; }
+  .ad-tot{ background:var(--surface); border:1px solid var(--hair);
+           border-radius:6px; padding:14px 16px; }
+  .ad-tot b{ display:block; font-family:var(--font-num); font-size:24px;
+             color:var(--ink); letter-spacing:-.01em; }
+  .ad-tot span{ font-family:var(--font-num); font-size:10.5px; letter-spacing:.1em;
+                text-transform:uppercase; color:var(--muted); }
+  .ad-row{ display:flex; align-items:center; gap:12px; padding:9px 0;
+           border-top:1px solid var(--hair); font-size:13.5px; }
+  .ad-row:first-child{ border-top:0; }
+  .ad-em{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
+          white-space:nowrap; }
+  .ad-when{ font-family:var(--font-num); font-size:11.5px; color:var(--muted);
+            flex:none; }
+  .ad-tag{ font-family:var(--font-num); font-size:10.5px; letter-spacing:.06em;
+           text-transform:uppercase; border:1px solid var(--hair-strong);
+           border-radius:99px; padding:2px 9px; color:var(--ink-soft); flex:none; }
+  .ad-tag.on{ color:var(--mint); border-color:var(--mint-dim); }
+  .ad-tag.warn{ color:var(--near-ink); border-color:var(--near-ink); }
+  .ad-row select, .ad-row button{ flex:none; }
+  @media (max-width:760px){
+    .ad-totals{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .ad-row{ flex-wrap:wrap; }
+  }
+
   /* ---------- trend chart ---------- */
   .bar-right{ display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
   .zoomctl{ display:inline-flex; align-items:center; gap:8px; }
@@ -1936,6 +1967,12 @@
       <button class="tab" data-view="assets">Net Worth</button>
       <button class="tab" data-view="transactions">Transactions</button>
       <button class="tab" data-view="banks">Banks</button>
+      <!-- Hidden until /api/admin/overview answers, which it only does for the
+           one Clerk id in ADMIN_CLERK_USER_ID. Everybody else gets a 404 and
+           never sees the tab. This is presentation, not security — the routes
+           refuse on their own and would refuse just as firmly if somebody
+           unhid this button by hand. -->
+      <button class="tab" data-view="admin" id="tab-admin" hidden>Admin</button>
     </div>
 
     <!-- The Tracker's pair, for the same reason it has them: one menu of fixed
@@ -2071,6 +2108,17 @@
       <h2 class="view">Every line</h2>
       <p class="lede">Amounts read the way you think about them: money in is positive. These filters are the tab's own — the period at the top of the page drives the other views.</p>
       <div class="card" id="tx-list"></div>
+    </section>
+
+    <section class="panel" id="v-admin">
+      <h2 class="view">Who is waiting, and who is in</h2>
+      <p class="lede">The waitlist as it stands, and what every account has been
+        promised. Marking somebody invited records that you wrote to them — the
+        invitation itself is sent from Clerk.</p>
+      <div class="ad-totals" id="ad-totals"></div>
+      <div class="card"><p class="eyebrow">Waitlist</p><div id="ad-waitlist"></div></div>
+      <div class="card" style="margin-top:16px"><p class="eyebrow">Accounts</p><div id="ad-users"></div></div>
+      <p class="msg" id="ad-msg"></p>
     </section>
 
     <section class="panel" id="v-banks">
@@ -2281,6 +2329,9 @@ async function boot() {
   refresh();
   // After refresh: this reopens Link, and Link belongs on top of a drawn page.
   resumePlaidOAuth();
+  /* Not awaited. The answer is 404 for everybody but one person, and nobody
+     should wait on a request whose usual outcome is "no tab for you". */
+  probeAdmin();
 }
 
 async function authed(path, options) {
@@ -2395,7 +2446,7 @@ async function refresh() {
     // nothing to draw and a grid of $0.00 would read as a statement about
     // somebody's finances rather than about an empty account. The Banks tab
     // says it in its own words, and is where the button lives.
-    if (view !== 'banks' && view !== 'budgeting') {
+    if (view !== 'banks' && view !== 'budgeting' && view !== 'admin') {
       // Categories may be looking at a month of its own; asking about the page
       // range here as well would thrash a cache that only holds one range.
       const s = await summaryFor(view === 'tracker' ? budgetRange() : range());
@@ -2404,6 +2455,7 @@ async function refresh() {
     }
     clearFirstRun();
 
+    if (view === 'admin')        await renderAdmin();
     if (view === 'overview')     await renderOverview();
     if (view === 'trend')        await renderTrend();
     if (view === 'net')          await renderNet();
@@ -7280,6 +7332,120 @@ $('sync-now').addEventListener('click', async () => {
 
 /* ---------------------------------------------------------------- wiring -- */
 
+/* ------------------------------------------------------------------ admin -- */
+
+/**
+ * The one-person back office.
+ *
+ * Everything here is gated at the API, which answers 404 to anybody who is not
+ * the Clerk id in ADMIN_CLERK_USER_ID. This code only decides whether to show
+ * the tab — unhiding the button by hand gets you a tab that loads nothing.
+ */
+
+let adminData = null;
+
+/* Probed once, on boot, rather than on every tab click. A 404 is the ordinary
+   answer for everybody except one person, so it is not logged and not shown —
+   it simply means the tab stays hidden. */
+async function probeAdmin() {
+  try {
+    await authed('/api/admin/overview');
+    $('tab-admin').hidden = false;
+  } catch (e) { /* not an admin, or no ADMIN_CLERK_USER_ID set */ }
+}
+
+/** A date as a person reads it, or a dash where there is none. */
+const adDate = (s) => {
+  if (!s) return '—';
+  const d = new Date(s);
+  return MONTH_NAMES[d.getUTCMonth()].slice(0, 3) + ' ' + d.getUTCDate() +
+         ' \u00b7 ' + d.getUTCFullYear();
+};
+
+async function renderAdmin() {
+  const r = await authed('/api/admin/overview');
+  adminData = r;
+
+  const tot = (n, label) => '<div class="ad-tot"><b>' + n + '</b><span>' + label + '</span></div>';
+  $('ad-totals').innerHTML =
+    tot(r.totals.waiting, 'waiting') +
+    tot(r.totals.invited, 'invited') +
+    tot(r.totals.converted, 'signed up') +
+    /* The one that costs money. Plaid bills per connection per month, so this
+       is the number that meets the ceiling, not the account count. */
+    tot(r.totals.items, 'bank connections');
+
+  $('ad-waitlist').innerHTML = r.waitlist.length
+    ? r.waitlist.map(w =>
+        '<div class="ad-row">' +
+          '<span class="ad-em">' + escapeHtml(w.email) + '</span>' +
+          '<span class="ad-when">' + adDate(w.createdAt) + '</span>' +
+          (w.userId ? '<span class="ad-tag on">signed up</span>'
+            : w.invitedAt ? '<span class="ad-tag warn">invited</span>'
+            : '<button type="button" data-invite="' + escapeHtml(w.id) + '">Mark invited</button>') +
+        '</div>').join('')
+    : '<p class="hint">Nobody on the list yet.</p>';
+
+  /* The plan menu and the note are the whole point of this page: they are how
+     a promise made at the moment of inviting somebody gets written down. */
+  const planOpts = (sel) => ['trial', 'active', 'free', 'lapsed']
+    .map(p => '<option value="' + p + '"' + (p === sel ? ' selected' : '') + '>' + p + '</option>')
+    .join('');
+
+  $('ad-users').innerHTML = r.users.length
+    ? r.users.map(u =>
+        '<div class="ad-row"' + (u.deletedAt ? ' style="opacity:.5"' : '') + '>' +
+          '<span class="ad-em">' + escapeHtml(u.email) + '</span>' +
+          '<span class="ad-when">' + u.itemCount + ' bank' + (u.itemCount === 1 ? '' : 's') + '</span>' +
+          '<span class="ad-when">' +
+            (u.plan === 'free' ? 'no expiry'
+             : u.planUntil ? 'until ' + adDate(u.planUntil)
+             : 'not started') + '</span>' +
+          (u.planNote ? '<span class="ad-tag">' + escapeHtml(u.planNote) + '</span>' : '') +
+          '<select data-plan-for="' + escapeHtml(u.id) + '">' + planOpts(u.plan) + '</select>' +
+        '</div>').join('')
+    : '<p class="hint">No accounts yet.</p>';
+}
+
+$('v-admin').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-invite]');
+  if (!btn) return;
+  btn.disabled = true;
+  try {
+    await authed('/api/admin/waitlist/' + encodeURIComponent(btn.dataset.invite) + '/invited',
+                 { method: 'POST' });
+    await renderAdmin();
+    say($('ad-msg'), 'Marked as invited.', 'good');
+  } catch (err) {
+    btn.disabled = false;
+    say($('ad-msg'), err.message, 'bad');
+  }
+});
+
+$('v-admin').addEventListener('change', async (e) => {
+  const sel = e.target.closest('[data-plan-for]');
+  if (!sel) return;
+  const plan = sel.value;
+  /* Asked for rather than inferred. "Why is this person free" is the question
+     this page exists to answer six months from now, and a blank answer is the
+     failure it exists to prevent. Cancelling the prompt still sets the plan —
+     the note is a nicety, the entitlement is not. */
+  const note = plan === 'free' || plan === 'active'
+    ? (prompt('Why? (waitlist, founder, friend…)') || '').trim()
+    : '';
+  try {
+    await authed('/api/admin/users/' + encodeURIComponent(sel.dataset.planFor) + '/plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(note ? { plan: plan, note: note } : { plan: plan })
+    });
+    await renderAdmin();
+    say($('ad-msg'), 'Plan updated.', 'good');
+  } catch (err) {
+    await renderAdmin();
+    say($('ad-msg'), err.message, 'bad');
+  }
+});
 $('tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.tab');
   if (!btn) return;
