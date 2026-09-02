@@ -1571,16 +1571,77 @@
                                              text-overflow:ellipsis; }
 
   /* Below this the five columns stop being readable, so the card scrolls
-     sideways rather than crushing them.
-     It was 800, set by the amount column needing to hold a six-figure total in
-     the dark theme's monospace. The recurring heading is the wider constraint
-     now. 1000 is where 27% of the table still clears the heading with room to
-     spare; below it the table scrolls, which is the honest thing — every
-     column stays whole down to the floor and nothing is quietly truncated on
-     the way there. In practice that means a sideways scrollbar on windows
-     narrower than about 1050. */
+     sideways rather than crushing them. 1000 is where the recurring heading
+     still clears with room to spare.
+
+     On a desktop window that means a scrollbar. On a phone it meant 69% of
+     the table off-screen — including the amount column, which is the one
+     thing anybody opens a ledger to see. A scrollbar is a cost a reader can
+     pay; a hidden amount column is the table not working.
+
+     So the floor only applies where there is a window to scroll. Below it,
+     columns are dropped instead, cheapest first. */
   #tx-list{ overflow-x:auto; }
   #tx-list table.data{ min-width:1000px; }
+
+  /* ---- the same ledger, on a phone ----
+
+     Two columns go, in the order of what a phone is actually for. Recurring
+     goes first: it is a small pill under the longest heading on the row, so
+     it costs the most width and carries the least. Category goes next, at a
+     width where the remaining three would otherwise start truncating — it is
+     a control for changing something, and changing things is a desk task.
+
+     What survives to the narrowest screen is what the ledger is for: when,
+     what, and how much. */
+  @media (max-width:760px){
+    #tx-list table.data{ min-width:0; }
+    #tx-list table.data th:nth-child(3),
+    #tx-list table.data tbody td:nth-child(3){ display:none; }
+    /* display:none on the col, not width:0. A zero-width column whose cells
+       are also hidden left the fixed layout unable to place the ones after it
+       — measured, the amount column came out 0px wide with its figure spilling
+       outside the table. Removing the column outright leaves four, and four
+       percentages that add to 100. */
+    #tx-list col.c-sub{ display:none; }
+    #tx-list col.c-date{ width:24%; }
+    #tx-list col.c-desc{ width:34%; }
+    #tx-list col.c-cat{ width:24%; }
+    #tx-list col.c-amt{ width:18%; }
+    /* The row margin is a luxury at this width; the columns need it more. */
+    #tx-list table.data th,
+    #tx-list table.data td{ padding:10px 8px; }
+    #tx-list table.data th:first-child,
+    #tx-list table.data td:first-child{ padding-left:10px; }
+    #tx-list table.data th:last-child,
+    #tx-list table.data td:last-child{ padding-right:10px; }
+
+    /* The footer says colspan="4" in the markup, and CSS cannot change an
+       attribute. With two columns gone that span covers the whole table and
+       pushes the total to zero width, where it spills out of the card and
+       makes the whole thing scroll sideways again.
+       Laying the footer row out as flex takes it out of the column model
+       entirely, so the colspan stops mattering: label on the left, total on
+       the right, which is what it looked like anyway. */
+    #tx-list table.data tfoot tr{ display:flex; align-items:baseline;
+                                  justify-content:space-between; gap:10px; }
+    #tx-list table.data tfoot td{ display:block; width:auto; }
+  }
+  @media (max-width:560px){
+    #tx-list table.data th:nth-child(4),
+    #tx-list table.data tbody td:nth-child(4){ display:none; }
+    #tx-list col.c-cat{ display:none; }
+    /* A point smaller, which is what makes the date fit. "2026-08-25" wants
+       99px at 13.5 and had 85 — measured, and clipped. At 12.5 it wants 92,
+       and 35% of the table is 99. */
+    #tx-list table.data{ font-size:12.5px; }
+    #tx-list col.c-date{ width:35%; }
+    #tx-list col.c-desc{ width:39%; }
+    #tx-list col.c-amt{ width:26%; }
+    /* The avatar is identity at a glance on a wide screen and a squeeze on a
+       narrow one, where the name it sits beside is the identity. */
+    #tx-list .ava{ display:none; }
+  }
 
   /* A date is not a quantity: nothing lines up underneath it that wants its
      units stacked, so it takes the left edge like the text it is. */
