@@ -263,6 +263,34 @@
   .cards h3{ font-size:19px; margin:12px 0 10px; }
   .cards p{ font-size:14.5px; color:var(--body); margin:0; }
 
+  /* --------------------------------------------------------------- pricing */
+  /* Two plans, not three. A third tier exists to make the middle one look
+     reasonable, and there is nothing here to tier — everybody gets the whole
+     product. Same card as .cards so the page does not acquire a second idea
+     of what a card is; wider, because two of them share the row. */
+  .pricing{ padding:86px 0; }
+  /* Centred, because .sec-head is. The trust cards above span the whole wrap
+     so a centred heading sits over them correctly; two cards capped at 760
+     do not, and left-aligning them under a centred heading reads as a mistake
+     rather than as a choice. */
+  .plans{ display:grid; grid-template-columns:repeat(2,1fr); gap:22px;
+          margin:44px auto 0; max-width:760px; }
+  .plans article{
+    background:var(--card); border:1px solid var(--hair-strong); border-radius:11px;
+    padding:26px 26px 28px;
+  }
+  /* The annual card carries the gold edge. It is the one that is better for
+     both sides — cheaper for the reader, paid up front for us — and saying so
+     with a border is quieter than a "most popular" ribbon nobody believes. */
+  .plans article.pick{ border-color:var(--gold); }
+  .price{ font-family:var(--display); margin:14px 0 10px; letter-spacing:-.02em; }
+  .price b{ font-size:40px; font-weight:700; }
+  .price span{ font:400 15px/1 var(--sans); color:var(--body-soft); margin-left:4px; }
+  .plans p:last-child{ font-size:14.5px; color:var(--body); margin:0; }
+  .plan-note{ margin:26px auto 0; font-size:14.5px; color:var(--body);
+              max-width:62ch; text-align:center; }
+  @media (max-width:760px){ .plans{ grid-template-columns:1fr; } }
+
   /* ------------------------------------------------------------------ dark */
   .dark{ background:var(--dark); color:var(--dark-ink); padding:86px 0; }
   .dark .eyebrow{ color:var(--dark-gold); }
@@ -358,6 +386,7 @@
       <a href="#views">The dashboards</a>
       <a href="#budget">How it works</a>
       <a href="#trust">Your data</a>
+      <a href="#pricing">Pricing</a>
       <!-- Somebody who already has an account is looking for this word and no
            other. The handoff put "See the demo" here; the same destination
            under a different name is not a way in for a reader who has one. -->
@@ -378,7 +407,12 @@
       <input type="email" placeholder="you@example.com" required aria-label="Email address">
       <button type="submit" class="btn">Join the waitlist</button>
     </form>
-    <p class="fine" data-fine>Invitation-only while we open it to a first group. One email, when it opens.</p>
+    <!-- The price belongs here as well as in the pricing section. This form is
+         above the fold and is where most people will actually sign up; asking
+         for an address without saying what it leads to is the sort of thing a
+         reader forgives once. -->
+    <p class="fine" data-fine>Invitation-only while we open it to a first group. One email,
+      when it opens. Free for a month, then $4.99.</p>
     <p class="sign-err" data-error role="alert" hidden></p>
 
     <div class="done" data-done>
@@ -614,6 +648,34 @@
   </div>
 </section>
 
+<!-- Before the waitlist form, deliberately. Somebody about to leave an email
+     address should know what it will cost before they leave it, not after. -->
+<section class="pricing" id="pricing">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Pricing</span>
+      <h2>One price. Your first month free.</h2>
+    </div>
+
+    <div class="plans">
+      <article>
+        <span class="num">MONTHLY</span>
+        <p class="price"><b>$4.99</b><span>/month</span></p>
+        <p>Billed every month. Stop whenever you like.</p>
+      </article>
+      <article class="pick">
+        <span class="num">ANNUAL · SAVE $12</span>
+        <p class="price"><b>$3.99</b><span>/month</span></p>
+        <p>$47.88 billed once a year.</p>
+      </article>
+    </div>
+
+    <p class="plan-note">Every account starts with a free month, and there is no
+      limit on how many banks you connect — the price is the same whether you hold
+      one account or ten. No advertising, no upsell, and nothing sold on.</p>
+  </div>
+</section>
+
 <section class="join" id="join">
   <div class="wrap">
     <span class="eyebrow">Early access</span>
@@ -625,7 +687,8 @@
       <input type="email" placeholder="you@example.com" required aria-label="Email address">
       <button type="submit" class="btn">Join the waitlist</button>
     </form>
-    <p class="fine" data-fine>We will email you once, when the ledger opens.</p>
+    <p class="fine" data-fine>We will email you once, when the ledger opens.
+      Your first month is free, then $4.99 — or $3.99 a month billed annually.</p>
     <p class="sign-err" data-error role="alert" hidden></p>
 
     <div class="done" data-done>
