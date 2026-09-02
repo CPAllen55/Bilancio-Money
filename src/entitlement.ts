@@ -43,32 +43,37 @@ export interface Entitled {
 export const TRIAL_MONTHS = 1;
 
 /**
- * When a trial starting now should end.
+ * A date n calendar months on, clamped to the end of the target month.
  *
- * Calendar months rather than a day count, so a trial beginning on the 31st of
- * January ends on the 28th of February.
- *
- * JavaScript does NOT do this for you, which is what the first version of this
- * function assumed. setUTCMonth on the 31st of January produces the 31st of
+ * JavaScript does NOT do this for you, which is what the first version of
+ * trialEnd assumed. setUTCMonth on the 31st of January produces the 31st of
  * February, which overflows to the 3rd of March — a month later than intended
  * and, once this date anchors real billing, a date that drifts further every
- * cycle. Clamping to the last day of the target month is what Stripe does and
- * what anybody reading "a month" expects.
+ * cycle. Clamping is what Stripe does and what "a month" means.
  *
  * The dance is: move to the 1st before shifting the month, so the shift cannot
  * overflow; then set the day back, capped at what the target month actually
  * has. Time of day is left alone.
+ *
+ * Exported because the admin route grants free periods too, and had its own
+ * three-line version carrying the identical bug. One implementation, so a
+ * date arrived at by two paths is the same date.
  */
-export function trialEnd(from: Date): Date {
+export function addMonths(from: Date, months: number): Date {
   const end = new Date(from);
   const day = end.getUTCDate();
   end.setUTCDate(1);
-  end.setUTCMonth(end.getUTCMonth() + TRIAL_MONTHS);
+  end.setUTCMonth(end.getUTCMonth() + months);
   const lastOfMonth = new Date(
     Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + 1, 0),
   ).getUTCDate();
   end.setUTCDate(Math.min(day, lastOfMonth));
   return end;
+}
+
+/** When a trial starting at `from` should end. */
+export function trialEnd(from: Date): Date {
+  return addMonths(from, TRIAL_MONTHS);
 }
 
 /**

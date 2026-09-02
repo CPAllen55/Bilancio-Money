@@ -28,7 +28,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
 import { users, waitlist, items } from "./db/schema";
 import { requireUser } from "./auth";
-import { trialEnd, type Plan } from "./entitlement";
+import { addMonths, type Plan } from "./entitlement";
 
 const admin = new Hono<{ Bindings: Env }>();
 
@@ -43,11 +43,17 @@ const PLANS: Plan[] = ["trial", "active", "free", "lapsed"];
  * Clerk's own account settings and a Clerk id cannot.
  */
 async function requireAdmin(c: any, db: ReturnType<typeof getDb>["db"]) {
-  const allowed = c.env.ADMIN_CLERK_USER_ID;
+  /* Trimmed, because the value arrives by being pasted into a terminal and a
+     trailing newline is the commonest way this check fails. The comparison is
+     exact, so an id with a stray newline on the end is a different string from
+     the same id without one — and nothing on any screen shows you which you
+     have. An id has no meaningful surrounding whitespace, so there is nothing
+     to lose by removing it. */
+  const allowed = (c.env.ADMIN_CLERK_USER_ID ?? "").trim();
   if (!allowed) return null;
   const auth = await requireUser(c, db);
   if (!auth.ok) return null;
-  return auth.user.clerkUserId === allowed ? auth.user : null;
+  return auth.user.clerkUserId.trim() === allowed ? auth.user : null;
 }
 
 /* ------------------------------------------------------------- the list -- */
@@ -182,9 +188,10 @@ admin.post("/users/:id/plan", async (c) => {
     if (plan === "free") {
       planUntil = null;
     } else if (typeof body.months === "number" && body.months > 0) {
-      const end = new Date();
-      end.setUTCMonth(end.getUTCMonth() + Math.floor(body.months));
-      planUntil = end;
+      // addMonths, not setUTCMonth: this had its own copy of the overflow bug
+      // that trialEnd was fixed for, so granting three months on the 31st of
+      // January ended on the 3rd of May rather than the 30th of April.
+      planUntil = addMonths(new Date(), Math.floor(body.months));
     } else if (plan === "trial") {
       // Unstarted: let the first connection start it.
       planUntil = null;
@@ -216,4 +223,3 @@ admin.post("/users/:id/plan", async (c) => {
 });
 
 export default admin;
-export { trialEnd };
