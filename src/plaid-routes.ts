@@ -9,8 +9,9 @@
 import { Hono } from "hono";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
-import { accounts, items, transactions } from "./db/schema";
+import { accounts, items, transactions, users } from "./db/schema";
 import { requireUser } from "./auth";
+import { trialEnd } from "./entitlement";
 import { openToken, sealToken } from "./crypto";
 import {
   updateItemWebhook,
@@ -170,6 +171,26 @@ plaid.post("/exchange", async (c) => {
       .returning();
 
     await upsertAccounts(db, item.id, accountsRes.accounts);
+
+    /* The free month starts here, on the first bank ever connected.
+     *
+     * Not at sign-up: somebody invited on a Tuesday who links a bank at the
+     * weekend would lose five days of it to waiting, and somebody who signs up
+     * during a week when the app is broken would lose all of it. The product
+     * begins working when there is data in it.
+     *
+     * Guarded on planUntil being null rather than on the item count, so that
+     * disconnecting every bank and linking a new one does not hand out a
+     * second free month. Only ever set once; nothing here can move it.
+     *
+     * A comped account is left alone — it is on "free" with no expiry, and
+     * starting a trial clock on it would eventually take the comp away.
+     */
+    if (auth.user.plan === "trial" && auth.user.planUntil === null) {
+      const until = trialEnd(new Date());
+      await db.update(users).set({ planUntil: until }).where(eq(users.id, auth.user.id));
+      console.log(`trial started for user ${auth.user.id}, ends ${until.toISOString()}`);
+    }
 
     return c.json({
       ok: true,

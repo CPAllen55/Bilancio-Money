@@ -8,6 +8,26 @@ export const itemStatus = pgEnum("item_status", [
   "good", "login_required", "pending_expiration", "pending_disconnect", "revoked",
 ]);
 
+/**
+ * What a person is entitled to, and why.
+ *
+ * Written before there is any billing to enforce it, on purpose. The states
+ * are promises made at the moment of invitation — "you get a free month",
+ * "you are comped" — and a promise that lives only in the inviter's memory is
+ * one nobody can honour eighty users later. Recording it costs a column;
+ * reconstructing it from invite dates does not work at all.
+ *
+ *   trial   the free month. planUntil is when it ends.
+ *   active  paying. planUntil is the end of the paid period.
+ *   free    comped, permanently. planUntil is null and stays null.
+ *   lapsed  was paying or trialling, is not now. Read-only.
+ *
+ * Nothing sets "lapsed" yet. There is no billing, so nothing can observe a
+ * payment failing — it exists so the read-only path can be written and tested
+ * before it is ever reachable, rather than added under pressure later.
+ */
+export const userPlan = pgEnum("user_plan", ["trial", "active", "free", "lapsed"]);
+
 // 1. Users - local mirror of Clerk identity. Everything else hangs off this.
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -15,6 +35,21 @@ export const users = pgTable("users", {
   email: text("email").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
+
+  plan: userPlan("plan").notNull().default("trial"),
+  /* When the current state runs out. NULL means it does not — which is what a
+     comped account looks like, and also what a trial looks like before it has
+     started.
+
+     The trial clock starts on the first bank connection, not at sign-up. That
+     is the moment the product begins working for somebody; starting it at
+     sign-up would spend their free month while they waited for an invitation,
+     or while we were still fixing things. See plaid-routes. */
+  planUntil: timestamp("plan_until", { withTimezone: true }),
+  /* Why this person is on this plan, in a word: "waitlist", "founder",
+     "friend". Free-form because the reasons are a business matter and will
+     change faster than a migration can keep up. */
+  planNote: text("plan_note"),
 });
 
 // 1b. Waitlist - people who left an email on the landing page, before any
