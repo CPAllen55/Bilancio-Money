@@ -1440,18 +1440,15 @@
   /* The gap between the two cards, with the control centred in it. The spacing
      that used to be a margin on the lower card now comes from here, so the
      control reads as belonging to neither and moving between them. */
-  .pie-switch{ display:flex; justify-content:center; margin:18px 0; }
-  .pie-nav{ display:flex; align-items:center; gap:4px; flex:none;
-            background:var(--surface); border:1px solid var(--hair);
-            border-radius:999px; padding:4px 6px; }
-  .pie-arrow{ width:28px; height:28px; padding:0; font-size:16px; line-height:1;
-              border-radius:999px; border-color:transparent;
-              display:inline-flex; align-items:center; justify-content:center; }
-  /* The name between the arrows says which of the two you are on — without it
-     the arrows point at nothing in particular. */
-  .pie-viewname{ min-width:250px; text-align:center; font-family:var(--font-num);
-                 font-size:12px; color:var(--mint); }
-  @media (max-width:560px){ .pie-viewname{ min-width:0; font-size:11px; } }
+
+  /* The vendor mark in this list. Smaller than the one on the Transactions tab
+     — the column is narrow and the name beside it is doing most of the work —
+     but the same shape, so it reads as the same thing. */
+  .pie-table .ava{ width:22px; height:22px; border-radius:5px; margin-right:9px;
+                   font-size:10px; vertical-align:-6px; }
+  .pie-table .tx-name{ display:inline-block; max-width:calc(100% - 34px);
+                       overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                       vertical-align:middle; }
   
   .pie-wrap{ display:flex; gap:24px; align-items:flex-start; }
   .pie-chart{ flex:0 0 auto; max-width:100%; }
@@ -2490,7 +2487,6 @@
         </div>
         <div id="trend-chart"></div>
       </div>
-      <div class="pie-switch" id="pie-switch"></div>
       <div class="card" id="trend-pie"></div>
       <div class="card trend-below" id="forecast-box" hidden></div>
     </section>
@@ -7921,13 +7917,6 @@ $('bud-list').addEventListener('click', (e) => {
    it shows the parents themselves. Two places to say "Food" would be one place
    too many. */
 let pieSel = null;      // the slice whose transactions are listed
-/* 'bars' first: how a category moves month to month is the more useful first
-   look, and its share is a step away rather than the other way round. */
-const PIE_VIEWS = [
-  { id: 'bars', label: 'Trend by Subcategory' },
-  { id: 'pie', label: 'Pie Chart by Subcategory w/ Transactions' },
-];
-let pieView = 'bars';
 let pieTxCache = {};
 
 /* Only months that happened. A projection has no transactions behind it, and a
@@ -7958,12 +7947,14 @@ function pieWindow() {
   const from = trendOffset, to = trendOffset + trendVisible;
   const months = trendData.all.slice(from, to).filter(m => !m.projected);
 
-  // A month selected in the chart narrows the share view to that month alone.
-  // The by-month view keeps the whole window: its axis is months, and scoping
-  // it to one would leave a bar chart with a single bar.
-  const scoped = (pieView !== 'bars' && trendSel && trendSel.month)
-    ? months.filter(m => m.month === trendSel.month)
-    : months;
+  /* A month picked on the chart above narrows this to that month alone.
+
+     It reads trendMonth rather than trendSel.month, which is the difference
+     between "a month is being looked at" and "a segment happens to have a
+     month attached". They coincide when a segment is clicked, because that now
+     picks its month too — but picking a month by clicking the column has no
+     segment in it, and this used to ignore that entirely. */
+  const scoped = trendMonth ? months.filter(m => m.month === trendMonth) : months;
 
   const cat = pieParent();
   const kids = cat ? categoryList.filter(c => c.parentSlug === cat).map(c => c.slug) : null;
@@ -7990,58 +7981,11 @@ function pieWindow() {
     : scoped.length ? monthLabel(scoped[0].month) + ' – ' + monthLabel(scoped[scoped.length - 1].month)
     : 'nothing in view';
 
-  // Per month as well as totalled: the donut wants the sum, the bars want the
-  // shape over time, and both are the same set of categories.
-  // The same month a year earlier, for the dashed line. priorSeries is indexed
-  // against the actual months, so each scoped month is looked up by its position
-  // in the full series rather than by counting.
-  const priorOf = (month) => {
-    const idx = trendData.all.findIndex(x => x.month === month);
-    const row = idx > -1 ? trendData.prior[idx] : null;
-    if (!row) return null;
-    const at = row.month;
-    const cat = pieParent();
-    const kids = cat ? categoryList.filter(c => c.parentSlug === cat).map(c => c.slug) : null;
-    if (!kids) return { month: at, amount: row.expense || 0 };
-    let sum = (row.byCategory || {})[cat] || 0;
-    for (const slug of kids) sum += (row.byCategory || {})[slug] || 0;
-    return { month: at, amount: sum };
-  };
-
-  const perMonth = scoped.map(m => {
-    const row = {};
-    if (kids) {
-      for (const slug of kids) { const v = (m.byCategory || {})[slug] || 0; if (v > 0) row[slug] = v; }
-      const direct = (m.byCategory || {})[cat] || 0;
-      if (direct > 0) row[cat] = direct;
-    } else {
-      for (const [slug, v] of Object.entries(m.byParent || {})) if (v > 0) row[slug] = v;
-    }
-    const pr = priorOf(m.month);
-    return { month: m.month, row, prior: pr ? pr.amount : null,
-             priorMonth: pr ? pr.month : null };
-  });
-
-  /* The same rollup a year earlier, by category, so this key can carry the
-     change column the one above it carries. Same source, same shape. */
-  const priorByCat = {};
-  for (const m of scoped) {
-    const idx = trendData.all.findIndex(x => x.month === m.month);
-    const row = idx > -1 ? trendData.prior[idx] : null;
-    if (!row) continue;
-    if (kids) {
-      for (const slug of kids.concat([cat])) {
-        const v = (row.byCategory || {})[slug] || 0;
-        if (v > 0) priorByCat[slug] = (priorByCat[slug] || 0) + v;
-      }
-    } else {
-      for (const [slug, v] of Object.entries(row.byParent || {})) {
-        if (v > 0) priorByCat[slug] = (priorByCat[slug] || 0) + v;
-      }
-    }
-  }
-
-  return { months: scoped, perMonth, byCat, priorByCat,
+  /* Totals only. The per-month rollup and the year-ago one were the bar
+     chart's, and a donut asks neither question — it wants the sum and the
+     share of it. Left in place they would have been recomputed on every draw
+     for nobody. */
+  return { months: scoped, byCat,
            title: cat ? labelOfSlug(cat) : 'Everything', label,
            level: cat ? 'children' : 'parents' };
 }
@@ -8090,133 +8034,6 @@ function arcPath(cx, cy, r, a0, a1) {
  * places means two ways to open the same list and a selection that has to mean
  * something in a view that cannot show it.
  */
-function pieBarsSvg(entries, w) {
-  const months = w.perMonth;
-  if (!months.length) return '<p class="empty">Nothing in these months.</p>';
-
-  // The top chart's arithmetic, exactly — including sizing its type to the
-  // column rather than to a number written here.
-  const W = 880, PL = 66, PR = 14, PT = 20, plotH = 346;
-  const plotW = W - PL - PR;
-  const band = plotW / months.length;
-  const type = chartType($('trend-pie'), band);
-  const showTable = band >= 46;
-  const PB = 34 + type.month + (showTable ? type.step * 3 + 10 : 0);
-  const H = PT + plotH + PB;
-
-  /* Summed over the categories this chart was handed, not over everything in
-     the row — otherwise a switched-off category still sets the scale and still
-     shows in the figure above the bar. */
-  const order = entries.map(e => e[0]);
-  const totals = months.map(m => order.reduce((s, slug) => s + (m.row[slug] || 0), 0));
-  const peak = Math.max.apply(null, totals.concat([0])) || 1;
-  const mag = Math.pow(10, Math.floor(Math.log10(peak / 4)));
-  const stepMul = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].filter(x => x * mag >= peak / 4)[0] || 10;
-  const yMax = stepMul * mag * 4;
-  const y = v => PT + plotH - (v / yMax) * plotH;
-  // The same rule as above, to the number. A bar half the width of the same bar
-  // higher up the page is exactly the kind of difference that makes two charts
-  // look unrelated.
-  const barW = barWidth(band, 0.45, 34);
-  const every = Math.ceil(months.length / 12);
-
-  // No height attribute, for the same reason as above: it scales to the width
-  // of its column instead of drawing at 880 and letterboxing inside a wider one.
-  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" ' +
-    'style="height:auto;display:block" ' +
-    'preserveAspectRatio="xMidYMid meet" role="img" aria-label="' +
-    escapeHtml(w.title) + ' by month">' +
-    reliefDefs('sub', order.map(colourOf));
-
-  for (let k = 0; k <= 4; k++) {
-    const v = (yMax / 4) * k, yy = y(v);
-    svg += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + yy + '" y2="' + yy +
-      '" stroke="var(--grid)" stroke-width="1"/>' +
-      '<text x="' + (PL - 9) + '" y="' + (yy + type.axis * 0.36) + '" text-anchor="end" ' +
-      'font-size="' + type.axis + '" fill="var(--muted)">' + money0(v) + '</text>';
-  }
-
-  // Stacked in the legend's order, so the colour at the bottom of every bar is
-  // the same category and the stack can be read across months.
-  months.forEach((m, idx) => {
-    const cx = PL + band * idx + band / 2;
-    const monthTotal = totals[idx];
-    let acc = 0;
-    for (const slug of order) {
-      const v = m.row[slug] || 0;
-      if (!(v > 0)) continue;
-      /* Rounded here rather than on the way out, so a segment's top is the
-         same number as the one below it and the two meet exactly. Rounding
-         y and height separately left a tenth of a unit between them — nothing
-         at this scale, but it is a seam waiting for a zoom level. */
-      const top = +y(acc + v).toFixed(1), bot = +y(acc).toFixed(1);
-      svg += '<rect class="seg noclick" ' + tipAttrs(labelOfSlug(slug), m.month, v, monthTotal) +
-        ' x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
-        '" width="' + barW.toFixed(1) + '" height="' + Math.max(0.5, bot - top).toFixed(1) +
-        '" fill="' + relief('sub', colourOf(slug)) +
-        '" style="color:' + colourOf(slug) + '"></rect>';
-      acc += v;
-    }
-
-    if (idx % every === 0 || idx === months.length - 1) {
-      const parts = m.month.split('-');
-      const label = MONTH_NAMES[Number(parts[1]) - 1] +
-        (parts[1] === '01' || idx === 0 ? " '" + parts[0].slice(2) : '');
-      svg += '<text x="' + cx.toFixed(1) + '" y="' + (PT + plotH + type.month + 12) +
-        '" text-anchor="middle" font-size="' + type.month +
-        '" fill="var(--muted)">' + label + '</text>';
-    }
-  });
-
-  /* This year, last year and the difference, in rows under the axis — the same
-     three the chart above has, drawn at the same offsets and suppressed on the
-     same rule, so the two read as one page rather than as two charts that
-     happen to be stacked. */
-  if (showTable) {
-    const rowTop = PT + plotH + type.month + 30 + type.fig;
-    const rows = [
-      ['THIS YR', (m, i) => money0(totals[i]), 'var(--ink)'],
-      ['LAST YR', (m) => (m.prior === null ? '' : money0(m.prior)), 'var(--muted)'],
-      ['CHANGE', (m, i) => {
-        if (m.prior === null) return '';
-        const d = totals[i] - m.prior;
-        return (d >= 0 ? '+' : '\u2212') + money0(Math.abs(d));
-      }, null]
-    ];
-    rows.forEach((row, r) => {
-      const yy = rowTop + r * type.step;
-      svg += '<text x="' + (PL - 9) + '" y="' + yy + '" text-anchor="end" ' +
-        'font-size="' + type.lab + '" letter-spacing=".08em" fill="var(--muted)">' +
-        row[0] + '</text>';
-      months.forEach((m, i) => {
-        const txt = row[1](m, i);
-        if (!txt) return;
-        const fill = row[2] || (m.prior !== null && totals[i] - m.prior >= 0
-          ? 'var(--coral)' : 'var(--mint-dim)');
-        svg += '<text x="' + (PL + band * i + band / 2).toFixed(1) + '" y="' + yy +
-          '" text-anchor="middle" font-size="' + type.fig + '" fill="' + fill +
-          '">' + txt + '</text>';
-      });
-    });
-  }
-
-  // The same month a year earlier, on the same axis, drawn exactly as above.
-  const priorPts = months.filter(m => m.prior !== null);
-  if (priorPts.length > 1) {
-    const pts = months.map((m, idx) => m.prior === null ? null
-      : (PL + band * idx + band / 2).toFixed(1) + ',' + y(m.prior).toFixed(1)).filter(Boolean);
-    svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--ink)" ' +
-      'stroke-width="2" stroke-dasharray="5 4" opacity=".78"/>';
-    months.forEach((m, idx) => {
-      if (m.prior === null) return;
-      svg += priorDot((PL + band * idx + band / 2).toFixed(1), y(m.prior).toFixed(1),
-        w.title + ', a year earlier', m.priorMonth, m.prior, false);
-    });
-  }
-
-  return svg + '</svg>';
-}
-
 function drawPie() {
   const host = $('trend-pie');
   if (!host) return;
@@ -8257,70 +8074,56 @@ function drawPie() {
       ' (' + ((v / total) * 100).toFixed(1) + '%)</title></path>';
   }).join('');
 
-  // In the bar view the key is a key and nothing more: there is no selection to
-  // make when the chart cannot show one.
-  const priorByCat = w.priorByCat || {};
-  const changeOf = (slug) => {
-    const was = priorByCat[slug];
-    if (!was) return null;
-    return Math.round(((w.byCat[slug] - was) / was) * 100);
-  };
-
+  /* Every row is pickable, and every figure is a share. There used to be a
+     second shape here for a view that could not be selected into; with that
+     view gone the branches were three ways of writing the same thing. */
   const legend = keyList(entries.map(([slug, v]) => ({
     slug, label: labelOfSlug(slug), colour: colourOf(slug), amount: v,
-    amount_text: pieView === 'bars' ? money0(v) : ((v / total) * 100).toFixed(0) + '%',
-    change: pieView === 'bars' ? changeOf(slug) : null,
-    pick: pieView === 'bars' ? null : 'data-slice="' + escapeHtml(slug) + '"',
+    amount_text: ((v / total) * 100).toFixed(0) + '%',
+    change: null,
+    pick: 'data-slice="' + escapeHtml(slug) + '"',
     selected: pieSel === slug,
-  })), pieOff, 'pie', 'Total', pieView === 'bars'
-    ? { bars: true, totalAtBottom: true, title: 'Where it went',
-        count: entries.filter(([s]) => !pieOff.has(s)).length + ' of ' + entries.length + ' shown',
-        notes: (w.perMonth.some(m => m.prior !== null)
-          ? '<div class="kitem static"><span class="kswatch dash"></span>' +
-            '<span class="klabel">Same month, last year</span></div>'
-          : '') }
-    : undefined);
+  })), pieOff, 'pie', 'Total');
 
+  /* The hole in the middle answers for whatever is chosen.
+
+     Nothing chosen, it is the total, as it always was. A slice chosen, it is
+     that slice: its figure where the total was and its name where the word
+     'total' was. The alternative is a reader holding a colour in their head
+     while they look down a key for it — the middle of a donut is the one place
+     on it that is not competing to be read.
+
+     The name is cut to what fits inside a 136px hole rather than being allowed
+     to run out over the slices, and carries its full text for hovering. */
+  const chosen = pieSel && w.byCat[pieSel] > 0 ? pieSel : null;
+  const midName = chosen ? labelOfSlug(chosen) : 'total';
+  const midShort = midName.length > 18 ? midName.slice(0, 17) + '…' : midName;
   const donut =
     '<svg viewBox="0 0 300 300" width="300" height="300" role="img" ' +
     'aria-label="Share of spending by category">' + slices +
     '<circle cx="' + CX + '" cy="' + CY + '" r="68" fill="var(--surface)"/>' +
     '<text x="' + CX + '" y="' + (CY - 5) + '" text-anchor="middle" ' +
-      'font-size="17" fill="var(--ink)">' + money0(total) + '</text>' +
+      'font-size="17" fill="' + (chosen ? colourOf(chosen) : 'var(--ink)') + '">' +
+      money0(chosen ? w.byCat[chosen] : total) + '</text>' +
     '<text x="' + CX + '" y="' + (CY + 15) + '" text-anchor="middle" ' +
-      'font-size="11" fill="var(--muted)">total</text>' +
+      'font-size="11" fill="var(--muted)">' + escapeHtml(midShort) +
+      /* Only when it was cut. A title repeating text that is already on
+         screen is noise a screen reader reads twice. */
+      (midShort !== midName ? '<title>' + escapeHtml(midName) + '</title>' : '') + '</text>' +
     '</svg>';
 
-  // Two views, so either arrow goes to the other one. Kept as a pair anyway —
-  // a single button would not say that there is something on both sides.
-  // Drawn into the gap between the two cards: it belongs to neither and moves
-  // between them, so it sits where that reads.
-  const at = PIE_VIEWS.findIndex(v => v.id === pieView);
-  $('pie-switch').innerHTML = '<div class="pie-nav">' +
-    '<button type="button" class="pie-arrow" data-pie-step="-1" aria-label="Previous view">‹</button>' +
-    '<span class="pie-viewname">' + escapeHtml(PIE_VIEWS[at].label) + '</span>' +
-    '<button type="button" class="pie-arrow" data-pie-step="1" aria-label="Next view">›</button>' +
-    '</div>';
 
   /* Said where the reader is looking when they wonder how this thing changed,
      which is at the name it is showing — not in a caption further down. */
   const note = 'Click a category in the chart above to bring it down here.' +
-    (pieView === 'bars' ? '' : ' Pick a slice for the transactions behind it.');
+    ' Pick a slice for the transactions behind it.';
 
-  // Bars borrow the layout of the chart above as well as its shape: full width
-  // with the key down the side. The share view keeps its own, because a donut
-  // beside a list of transactions is the whole point of it.
-  const body = pieView === 'bars'
-    ? '<div class="trend-wrap">' +
-        '<div class="trend-plot">' + pieBarsSvg(shown, w) + '</div>' +
-        '<div class="trend-side">' +
-          '<div class="trend-key panel-box">' + legend + '</div>' +
-        '</div>' +
-      '</div>'
-    : '<div class="pie-wrap">' +
-        '<div class="pie-chart">' + donut + '<div class="pie-key">' + legend + '</div></div>' +
-        '<div class="pie-tx" id="pie-tx"></div>' +
-      '</div>';
+  // A donut beside a list of the transactions behind whatever is picked from
+  // it, which is the whole point of this panel.
+  const body = '<div class="pie-wrap">' +
+    '<div class="pie-chart">' + donut + '<div class="pie-key">' + legend + '</div></div>' +
+    '<div class="pie-tx" id="pie-tx"></div>' +
+  '</div>';
 
   host.innerHTML =
     '<div class="pie-head">' +
@@ -8336,15 +8139,14 @@ function drawPie() {
         '<p class="fc-method" style="margin:5px 0 0;width:100%">' + note + '</p></div>' +
     '</div>' + body;
 
-  if (pieView === 'pie') drawPieTx();
+  drawPieTx();
 }
 
 async function drawPieTx() {
   const box = $('pie-tx');
   if (!box) return;
   if (!pieSel) {
-    box.innerHTML = '<p class="hint">Pick a ' + (pieView === 'bars' ? 'bar' : 'slice') +
-      ' to see the transactions behind it.</p>';
+    box.innerHTML = '<p class="hint">Pick a slice to see the transactions behind it.</p>';
     return;
   }
 
@@ -8370,9 +8172,13 @@ async function drawPieTx() {
       '<p class="eyebrow">' + escapeHtml(labelOfSlug(pieSel)) + ' · ' + r.total + ' transaction' +
         (r.total === 1 ? '' : 's') + '</p>' +
       '<table class="data pie-table"><tbody>' +
+      /* The same mark the Transactions tab uses, from the same function, so a
+         vendor looks like itself wherever it appears. The list is short and
+         the names are the only thing in it that has to be recognised. */
       r.transactions.map(t =>
         '<tr><td class="num date">' + t.date + '</td>' +
-        '<td>' + escapeHtml(t.name) + '</td>' +
+        '<td>' + avatar(t) + '<span class="tx-name" title="' + escapeHtml(t.name) +
+          '">' + escapeHtml(t.name) + '</span></td>' +
         '<td class="num' + (t.amount > 0 ? ' in' : '') + '">' +
           (t.amount > 0 ? '+' : '') + money(t.amount) + '</td></tr>').join('') +
       '</tbody></table>' +
@@ -8384,16 +8190,6 @@ async function drawPieTx() {
   }
 }
 
-function stepPieView(by) {
-  const at = PIE_VIEWS.findIndex(v => v.id === pieView);
-  pieView = PIE_VIEWS[(at + by + PIE_VIEWS.length) % PIE_VIEWS.length].id;
-  drawPie();
-}
-
-$('pie-switch').addEventListener('click', (e) => {
-  const arrow = e.target.closest('[data-pie-step]');
-  if (arrow) stepPieView(Number(arrow.dataset.pieStep));
-});
 
 $('trend-pie').addEventListener('click', (e) => {
   if (keyBoxClick(e)) return;
@@ -8403,25 +8199,6 @@ $('trend-pie').addEventListener('click', (e) => {
   drawPie();
 });
 
-/* Swiping across the panel switches views, because on a phone the two tabs are
-   small and the gesture is the obvious one. Horizontal only, and only past a
-   distance that cannot be a scroll. */
-(() => {
-  let x0 = null, y0 = null;
-  const host = $('trend-pie');
-  host.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1) { x0 = null; return; }
-    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
-  }, { passive: true });
-  host.addEventListener('touchend', (e) => {
-    if (x0 === null || !e.changedTouches.length) return;
-    const dx = e.changedTouches[0].clientX - x0;
-    const dy = e.changedTouches[0].clientY - y0;
-    x0 = null;
-    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    stepPieView(dx < 0 ? 1 : -1);
-  }, { passive: true });
-})();
 
 $('trend-pie').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
