@@ -1096,6 +1096,27 @@
   .seg:hover, .seg:focus-visible, .seg.sel{ transform:scaleX(1.24); }
   .seg.sel{ filter:brightness(1.45) drop-shadow(0 0 10px currentColor); }
   .seg.dim{ opacity:.2; }
+
+  /* ── a month, picked ──
+
+     The target covers the whole column so a short month is as easy to hit as a
+     tall one. It sits UNDER the bars rather than over them, so a segment click
+     still reaches its segment and the band is what you get when you miss one —
+     which is most of the column, most of the time. */
+  .mpick{ cursor:pointer; pointer-events:all; }
+  .seg{ pointer-events:all; }
+  /* The light itself does not take clicks: it sits under the bars and would
+     otherwise eat them. */
+  .mglow, .mpane{ pointer-events:none; }
+  .mpane{ opacity:.55; }
+  /* It arrives rather than appearing. A tenth of a second of fade is the
+     difference between a chart that responds and a chart that flickers. */
+  .mglow, .mpane, .mlab{ transition:opacity .18s ease; }
+  /* The month name is inside the column target but drawn after it, so on its
+     own it would take the click and do nothing with it — the name is the most
+     obvious thing to click and it was the one dead spot in the band. */
+  .mlab{ pointer-events:none; }
+  .mlab.lit{ font-weight:600; letter-spacing:.02em; }
   /* Glows on hover like any other segment, but is not a button: the bar chart
      below shows a shape, and the way into the transactions is the share view. */
   .seg.noclick{ cursor:default; }
@@ -4557,6 +4578,20 @@ const trendOff = new Set();
 let trendFocus = null;
 const trendOpen = new Set();
 
+/**
+ * One month, picked off the chart.
+ *
+ * A third question, and independent of the other two: trendFocus is which
+ * level you are looking at, trendSel is which category is lit, and this is
+ * which month the key is answering for. Set, "Where it went" is that month
+ * rather than the window; clear, it is the window as before.
+ *
+ * The chart itself does not change — every month stays drawn, because the
+ * point of picking one is to read it against the others. What changes is what
+ * the panel beside it is totalling.
+ */
+let trendMonth = null;
+
 /* The leaves under a parent, in the order the category list holds them. A
    parent with none is a leaf itself and cannot be drilled into.
 
@@ -4949,6 +4984,7 @@ async function renderTrend() {
   trendOffset = 0;
   trendSel = null;
   trendFocus = null;
+  trendMonth = null;
   trendOpen.clear();
   pieSel = null;
 
@@ -4963,6 +4999,14 @@ function clampTrendView() {
   const n = trendData ? trendData.all.length : 0;
   trendVisible = Math.max(MIN_VISIBLE, Math.min(n, Math.round(trendVisible)));
   trendOffset = Math.max(0, Math.min(n - trendVisible, Math.round(trendOffset)));
+
+  /* Zooming or panning can carry the picked month off the edge. Left set, the
+     key would go on answering for a month with no column on screen and no way
+     to put it down — a state you can enter and not leave. */
+  if (trendMonth && trendData) {
+    const shown = trendData.all.slice(trendOffset, trendOffset + trendVisible);
+    if (!shown.some(m => m.month === trendMonth)) trendMonth = null;
+  }
 }
 
 function drawTrend() {
@@ -5063,7 +5107,12 @@ function drawTrend() {
      Computed before anything is drawn, because the ramp is keyed to position
      in this list and the bars need their colours. */
   const totals = {};
-  all.forEach(m => { const seg = trendSegments(m); Object.keys(seg).forEach(id => {
+  /* The months the panel is totalling, which is the whole window unless one
+     month has been picked off the chart. Everything the key shows — the rows,
+     the total, the child totals, what counts as present — comes from this one
+     list, so picking a month cannot move one of them and leave another. */
+  const counted = trendMonth ? all.filter(m => m.month === trendMonth) : all;
+  counted.forEach(m => { const seg = trendSegments(m); Object.keys(seg).forEach(id => {
     if (seg[id] > 0) totals[id] = (totals[id] || 0) + seg[id];
   }); });
   const present = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
@@ -5074,13 +5123,16 @@ function drawTrend() {
      in memory, and the alternative is recomputing inside a render that runs on
      every zoom, pan and click. */
   const childTotals = {};
-  all.forEach(m => {
+  counted.forEach(m => {
     const by = m.byCategory || {};
     for (const k of Object.keys(by)) if (by[k] > 0) childTotals[k] = (childTotals[k] || 0) + by[k];
   });
 
   const priorTotals = {};
-  prior.forEach(m => { const seg = trendSegments(m); Object.keys(seg).forEach(id => {
+  const countedPrior = trendMonth
+    ? prior.filter((p, i) => all[i] && all[i].month === trendMonth)
+    : prior;
+  countedPrior.forEach(m => { const seg = trendSegments(m); Object.keys(seg).forEach(id => {
     if (seg[id] > 0) priorTotals[id] = (priorTotals[id] || 0) + seg[id];
   }); });
 
@@ -5125,6 +5177,19 @@ function drawTrend() {
            'font-size="10.5" fill="var(--mint)" letter-spacing=".08em">budget</text>';
   }
 
+  /* Declared once, used by whichever column is lit. Mint, because that is what
+     this app uses to mean "this is the thing you chose" everywhere else. */
+  svg += '<defs>' +
+    '<linearGradient id="tr-lit" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0" stop-color="var(--mint)" stop-opacity="0"/>' +
+      '<stop offset=".45" stop-color="var(--mint)" stop-opacity=".10"/>' +
+      '<stop offset="1" stop-color="var(--mint)" stop-opacity=".30"/>' +
+    '</linearGradient>' +
+    '<filter id="tr-blur" x="-50%" y="-20%" width="200%" height="140%">' +
+      '<feGaussianBlur stdDeviation="9"/>' +
+    '</filter>' +
+  '</defs>';
+
   for (let i = 0; i <= 4; i++) {
     const v = (yMax / 4) * i, yy = y(v);
     svg += '<line x1="' + PL + '" x2="' + (W - PR) + '" y1="' + yy + '" y2="' + yy + '" stroke="var(--grid)" stroke-width="1"/>' +
@@ -5132,8 +5197,48 @@ function drawTrend() {
            'font-size="' + type.axis + '" fill="var(--muted)">' + money0(v) + '</text>';
   }
 
+  /* The light behind a picked month.
+
+     A column of light rather than an outline: an outline says "this one is
+     ringed" and light says "this one is lit", and the second is the thing a
+     reader should want to do again. It is drawn under the bars, brightest at
+     the axis and fading upward, so the bar keeps its own colours and sits in
+     the glow rather than being tinted by it — a stacked column is nine colours
+     that mean nine things and washing them is not free.
+
+     Two layers: a soft blurred wash for the light itself and a crisp rounded
+     pane over it for an edge to hold the shape. The blur is a filter rather
+     than a fat stroke so it reads as light at any zoom. */
   all.forEach((m, i) => {
     const cx = PL + band * i + band / 2;
+    const lit = trendMonth === m.month;
+    if (lit) {
+      const gx = cx - band / 2 + 2, gw = band - 4;
+      svg += '<rect class="mglow" x="' + gx.toFixed(1) + '" y="' + (PT - 6) +
+        '" width="' + gw.toFixed(1) + '" height="' + (plotH + 10) +
+        '" rx="12" fill="url(#tr-lit)" filter="url(#tr-blur)"/>' +
+        '<rect class="mpane" x="' + gx.toFixed(1) + '" y="' + (PT - 6) +
+        '" width="' + gw.toFixed(1) + '" height="' + (plotH + 10) +
+        '" rx="12" fill="url(#tr-lit)"/>';
+    }
+    /* The whole column is the target, drawn BEFORE the bars so they sit on top
+       of it. Hit-testing takes the topmost element under the pointer, so a
+       click on a segment reaches the segment and a click anywhere else in the
+       band — the empty air above a short bar, the month underneath it — falls
+       through to this. Drawn after the bars it swallowed every segment click,
+       and the per-segment selection stopped working: a comment claiming it let
+       clicks through does not make it so, and elementFromPoint said otherwise.
+
+       It reaches past the axis to include the month label, because the label is
+       the thing that names what you are picking. */
+    svg += '<rect class="mpick" data-pick-month="' + escapeHtml(m.month) + '"' +
+      ' x="' + (cx - band / 2).toFixed(1) + '" y="' + PT +
+      '" width="' + band.toFixed(1) + '" height="' + (plotH + type.month + 16) +
+      '" fill="transparent">' +
+      '<title>' + escapeHtml(monthLabel(m.month)) +
+      (trendMonth === m.month ? ' — showing this month' : ' — show just this month') +
+      '</title></rect>';
+
     let acc = 0;
     // Stacked by parent, not leaf: nine segments read as a shape, twenty-two
     // read as noise.
@@ -5177,9 +5282,14 @@ function drawTrend() {
       const parts = m.month.split('-');
       const label = MONTH_NAMES[Number(parts[1]) - 1] +
         (parts[1] === '01' || i === 0 ? " '" + parts[0].slice(2) : '');
-      svg += '<text x="' + cx + '" y="' + (PT + plotH + type.month + 12) + '" text-anchor="middle" ' +
-             'font-size="' + type.month + '" fill="' +
-             (m.projected ? 'var(--mint-dim)' : 'var(--muted)') + '">' + label + '</text>';
+      /* Louder when it is the one being read: mint, heavier, and a shade
+         larger. The month is the only label the picked column has, so it
+         carries the state rather than leaving the glow to say it alone. */
+      svg += '<text class="mlab' + (lit ? ' lit' : '') + '" x="' + cx +
+             '" y="' + (PT + plotH + type.month + 12) + '" text-anchor="middle" ' +
+             'font-size="' + (lit ? type.month + 1.5 : type.month) + '" fill="' +
+             (lit ? 'var(--mint)' : m.projected ? 'var(--mint-dim)' : 'var(--muted)') +
+             '">' + label + '</text>';
     }
   });
 
@@ -5385,7 +5495,7 @@ function drawTrend() {
      is no budget, and the bar says so rather than inventing one. */
   const planned = new Set();
   if (trendData.budget) {
-    for (const m of all) {
+    for (const m of counted) {
       const b = trendData.budget[m.month];
       const lived = trendData.currentMonth && m.month < trendData.currentMonth;
       const src = lived ? m.byParent : (b ? b.byParent : null);
@@ -5472,7 +5582,11 @@ function drawTrend() {
 
   const key = keyList(keyRows, trendOff, 'trend', 'Total', {
     bars: true, totalAtBottom: true,
-    title: trendFocus ? 'Inside ' + labelOfSlug(trendFocus) : 'Where it went',
+    /* The heading carries the month, because a panel showing one month's
+       figures under a heading that says nothing about time is a panel that
+       will be read as the whole window. */
+    title: (trendFocus ? 'Inside ' + labelOfSlug(trendFocus) : 'Where it went') +
+      (trendMonth ? ' · ' + monthLabel(trendMonth) : ''),
     count: present.filter(id => !trendOff.has(id)).length + ' of ' + present.length + ' shown',
     notes: dashNote + extras,
   });
@@ -5731,6 +5845,17 @@ $('trend-chart').addEventListener('click', (e) => {
 
   const seg = e.target.closest('.seg');
   if (seg) { setTrendSel({ cat: seg.dataset.cat, month: seg.dataset.month }); return; }
+
+  /* The column, which is anywhere in the month's band that is not a segment.
+     Picking the same one again puts it down, the way every other choice on
+     this chart works. */
+  const col = e.target.closest('[data-pick-month]');
+  if (col) {
+    const m = col.dataset.pickMonth;
+    trendMonth = trendMonth === m ? null : m;
+    drawTrend();
+    return;
+  }
 
   const item = e.target.closest('[data-cat]');
   if (item) { pickTrendCategory(item.dataset.cat); return; }
