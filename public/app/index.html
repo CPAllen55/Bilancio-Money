@@ -971,6 +971,38 @@
           background:none; padding:3px 5px; color:inherit; cursor:pointer;
           font-family:inherit; font-size:inherit; }
   .kpick.static{ cursor:default; }
+
+  /* ── two levels in one key ──
+
+     The disclosure. Sized and coloured like the switch beside it so the pair
+     reads as one set of controls rather than a button and a widget, and given
+     a hollow twin on rows that have nothing under them — the alternative is a
+     ragged column where the switch moves left and right down the list
+     depending on whether its category happens to have children. */
+  .kexp{ flex:none; width:18px; height:18px; padding:0; display:inline-flex;
+         align-items:center; justify-content:center; border:1px solid transparent;
+         border-radius:5px; background:none; color:var(--muted); cursor:pointer;
+         line-height:1; transition:color .12s, border-color .12s; }
+  .kexp:hover{ color:var(--ink); border-color:var(--hair); }
+  .kexp svg{ width:10px; height:10px; transition:transform .14s ease; }
+  .kexp.open svg{ transform:rotate(180deg); }
+  .kexp.hollow{ visibility:hidden; cursor:default; }
+
+  /* A child, which is the same row one step in. The rule down its left is what
+     says it belongs to the line above rather than being one more category in a
+     flat list — indentation alone is too easily read as a coincidence. */
+  .kitem.kchild{ padding-left:14px; position:relative; }
+  .kitem.kchild::before{ content:""; position:absolute; left:6px; top:3px; bottom:3px;
+                         width:1px; background:var(--hair); }
+  .kitem.kchild .klabel{ font-size:12px; }
+
+  /* The category you are inside. It is not selected — nothing is dimmed
+     against it — it is the heading of what is being shown, so it takes a rule
+     under it and the mint that means "this is the thing". */
+  .kitem.inside{ border-bottom:1px solid var(--hair); padding-bottom:6px;
+                 margin-bottom:4px; }
+  .kitem.inside .klabel{ color:var(--mint); font-weight:600; }
+  .kitem.inside .kexp{ color:var(--mint); border-color:var(--mint-dim); }
   .kitem:hover .kpick:not(.static){ background:var(--bg-panel); color:var(--ink);
                                     border-color:var(--hair); }
   .kitem.sel .kpick{ background:var(--bg-panel); color:var(--ink);
@@ -4481,6 +4513,92 @@ let trendVisible = 0;      // months in view
    upper one lists parents and the lower one lists children, and turning off
    "Food and Dining" upstairs should not empty the chart downstairs. */
 const trendOff = new Set();
+
+/**
+ * Drilling into a category.
+ *
+ * trendFocus is the parent the chart is currently inside. Null is the ordinary
+ * view, where a column is made of parents; set, a column is made of that
+ * parent's children and nothing else is drawn. It is one level deep on purpose
+ * — the categories are two deep, so a second step would have nowhere to go.
+ *
+ * trendOpen is a different question, and deliberately not the same set: which
+ * parents are showing their children in the list without the chart changing at
+ * all. Reading a breakdown and drilling into one are separate things to want,
+ * and conflating them means you cannot compare two categories' children
+ * without leaving the view that lets you see both.
+ */
+let trendFocus = null;
+const trendOpen = new Set();
+
+/* The leaves under a parent, in the order the category list holds them. A
+   parent with none is a leaf itself and cannot be drilled into.
+
+   Indexed once per category list rather than filtered per call: this is asked
+   for every parent of every month on every render, and a render happens on
+   each zoom, pan and click. */
+let _kidsOf = null, _kidsFrom = null;
+function childrenOf(parentSlug) {
+  if (_kidsFrom !== categoryList) {
+    _kidsFrom = categoryList;
+    _kidsOf = new Map();
+    for (const c of categoryList || []) {
+      if (!c.parentSlug) continue;
+      if (!_kidsOf.has(c.parentSlug)) _kidsOf.set(c.parentSlug, []);
+      _kidsOf.get(c.parentSlug).push(c.slug);
+    }
+  }
+  return _kidsOf.get(parentSlug) || [];
+}
+
+/**
+ * What one column is made of.
+ *
+ * Every figure on this page goes through here — the stack, the axis ceiling,
+ * the key, the year-on-year headline and the detail panel — so "a segment"
+ * means one thing on the page rather than one thing per caller. Unfocused it
+ * hands back the parents unchanged, which is why turning this on changed no
+ * number in the ordinary view.
+ */
+function trendSegments(m) {
+  if (!trendFocus) {
+    const by = m.byParent || {};
+    /* Switching a child off has to take it out of the bar its parent draws,
+       or the switch is a control that changes a row in a list and nothing the
+       list describes. The parent's own switch still hides the parent whole;
+       this is the same idea one level down, which is what makes opening a
+       category and switching one of its parts off mean something.
+
+       Only when something is actually off, so the ordinary case does no work
+       and hands back exactly what it was given. */
+    if (!trendOff.size) return by;
+    const out = {};
+    for (const p of Object.keys(by)) {
+      let v = by[p];
+      for (const kid of childrenOf(p)) {
+        if (trendOff.has(kid)) v -= ((m.byCategory || {})[kid] || 0);
+      }
+      if (v > 0) out[p] = v;
+    }
+    return out;
+  }
+  const out = {};
+  let any = false;
+  for (const slug of childrenOf(trendFocus)) {
+    const v = (m.byCategory || {})[slug];
+    if (v > 0) { out[slug] = v; any = true; }
+  }
+  /* A projected month has no leaf breakdown: the forecast is made per parent,
+     because that is the level a budget is set at. Rather than leave a hole in
+     the middle of the series where the months ahead should be, the parent's
+     own projected figure stands as a single segment — which is exactly what is
+     known about it, and it is already drawn dimmed and dashed as a projection. */
+  if (!any && m.projected) {
+    const v = (m.byParent || {})[trendFocus];
+    if (v > 0) out[trendFocus] = v;
+  }
+  return out;
+}
 /* The two things on this chart that are not categories: the income line and
    the year-ago line. They get their own set rather than joining trendOff,
    which holds category slugs and is asked `has(id)` for every one of them —
@@ -4509,11 +4627,31 @@ function shownTotal(byWhat, off) {
  * set aside to see what the rest are doing. The box beside the total puts
  * everything back — quicker than hunting for the two things you switched off.
  */
+/* The disclosure mark, drawn so it is the same at every size and in every
+   font the app might be set in. It points down, and turns when it is open. */
+const KEY_CHEVRON =
+  '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+    '<path d="M3 6l5 5 5-5" stroke="currentColor" stroke-width="2" ' +
+      'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 function keyList(rows, off, scope, totalLabel, opts) {
   opts = opts || {};
-  const total = rows.reduce((s, r) => off.has(r.slug) ? s : s + r.amount, 0);
+  /* A heading row is the sum of the rows under it, so it is not one of them.
+     Counted in the total it doubles the answer — $4,020 of food came out as
+     $8,040 — and allowed to set the widest it scales every child against the
+     parent, so the largest child never fills its bar. It is excluded from both
+     for the same reason: it is not an entry in this list, it is what the list
+     adds up to. */
+  /* Detail rows are the same exclusion one level out: a child listed under an
+     opened parent is already inside that parent's figure, so counting it again
+     reported \$6,045 of spending as \$6,870. A row counts towards the total when
+     it is one of the things the chart is drawing; the rest are there to be
+     read. anyOff still looks at every row, because a hidden child is genuinely
+     hidden and the button that puts everything back has to know. */
+  const entries = rows.filter(r => !r.heading && !r.detail);
+  const total = entries.reduce((s, r) => off.has(r.slug) ? s : s + r.amount, 0);
   const anyOff = rows.some(r => off.has(r.slug));
-  const widest = rows.reduce((m, r) => Math.max(m, r.amount), 0) || 1;
+  const widest = entries.reduce((m, r) => Math.max(m, r.amount), 0) || 1;
 
   /* A titled header, for the key that is a panel rather than a list beside a
      chart. Everything else calls this without opts and is untouched. */
@@ -4544,7 +4682,11 @@ function keyList(rows, off, scope, totalLabel, opts) {
     /* With bars on, the row above gets its own line and a share bar runs under
        it — the figure says how much and the bar says how much of the whole,
        which is the question a key beside a stacked chart is actually asked. */
-    const inner = opts.bars
+    /* A row that is the heading of the list rather than one of its entries
+       gets no share bar. The bar says how much of the whole this row is, and
+       for the category everything else is inside, the answer is all of it —
+       a full-width bar over a list of the parts it is made of. */
+    const inner = opts.bars && !r.heading
       ? '<span class="krow1">' + plain + '</span>' +
         '<span class="kbar"><i style="width:' +
           Math.max(2, Math.round((r.amount / widest) * 100)) + '%;background:' +
@@ -4567,9 +4709,21 @@ function keyList(rows, off, scope, totalLabel, opts) {
        plan. Compared strictly, every category comes out a fraction over and
        the whole list turns red, which says nothing and reads as an alarm. */
     const over = r.budget > 0 && r.amount > r.budget * 1.01;
+    /* The disclosure sits between the row and its switch: it belongs to the
+       category, and the switch is the last thing on the line everywhere else
+       in this key. Only rows with something under them get one, so a chevron
+       always means there is more. */
+    const disc = r.expandable
+      ? '<button type="button" class="kexp' + (r.expanded ? ' open' : '') + '"' +
+        ' data-key-open="' + escapeHtml(r.slug) + '"' +
+        ' aria-expanded="' + (r.expanded ? 'true' : 'false') + '"' +
+        ' aria-label="' + (r.expanded ? 'Hide what is inside ' : 'Show what is inside ') +
+        escapeHtml(r.label) + '">' + KEY_CHEVRON + '</button>'
+      : (r.indent ? '' : '<span class="kexp hollow" aria-hidden="true"></span>');
     return '<div class="kitem' + (isOff ? ' off' : '') + (r.selected ? ' sel' : '') +
-      (over ? ' over' : '') + '">' +
-      body +
+      (over ? ' over' : '') + (r.indent ? ' kchild' : '') +
+      (r.inside ? ' inside' : '') + '">' +
+      body + disc +
       '<button type="button" class="kbox' + (isOff ? '' : ' on') + '" data-key-off="' +
         escapeHtml(r.slug) + '" data-key-scope="' + escapeHtml(scope) + '"' +
         ' aria-pressed="' + (!isOff) + '" aria-label="' + (isOff ? 'Show ' : 'Hide ') +
@@ -4738,6 +4892,8 @@ async function renderTrend() {
   trendVisible = all.length;
   trendOffset = 0;
   trendSel = null;
+  trendFocus = null;
+  trendOpen.clear();
   pieSel = null;
 
   drawTrend();
@@ -4806,7 +4962,7 @@ function drawTrend() {
    * Categories already work this way through shownTotal and trendOff. This is
    * the same rule applied to the other two things on the chart. */
   const windowPeak = Math.max(
-    highest(all.map(m => shownTotal(m.byParent, trendOff))),
+    highest(all.map(m => shownTotal(trendSegments(m), trendOff))),
     layerOn('income') ? highest(all.map(m => m.income)) : 0,
     layerOn('prior') ? highest(prior.map(m => m.expense)) : 0
   );
@@ -4838,16 +4994,26 @@ function drawTrend() {
      Computed before anything is drawn, because the ramp is keyed to position
      in this list and the bars need their colours. */
   const totals = {};
-  all.forEach(m => Object.keys(m.byParent).forEach(id => {
-    if (m.byParent[id] > 0) totals[id] = (totals[id] || 0) + m.byParent[id];
-  }));
+  all.forEach(m => { const seg = trendSegments(m); Object.keys(seg).forEach(id => {
+    if (seg[id] > 0) totals[id] = (totals[id] || 0) + seg[id];
+  }); });
   const present = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
   // The same rollup for the year-ago window, so the key can carry a change
   // column instead of leaving the reader to compare two charts.
+  /* Leaf totals across the window, for the rows an opened parent reveals.
+     Computed unconditionally and cheaply: it is one pass over months already
+     in memory, and the alternative is recomputing inside a render that runs on
+     every zoom, pan and click. */
+  const childTotals = {};
+  all.forEach(m => {
+    const by = m.byCategory || {};
+    for (const k of Object.keys(by)) if (by[k] > 0) childTotals[k] = (childTotals[k] || 0) + by[k];
+  });
+
   const priorTotals = {};
-  prior.forEach(m => Object.keys(m.byParent || {}).forEach(id => {
-    if (m.byParent[id] > 0) priorTotals[id] = (priorTotals[id] || 0) + m.byParent[id];
-  }));
+  prior.forEach(m => { const seg = trendSegments(m); Object.keys(seg).forEach(id => {
+    if (seg[id] > 0) priorTotals[id] = (priorTotals[id] || 0) + seg[id];
+  }); });
 
   /* No height attribute, so the drawing scales to whatever width the column
      gives it instead of rendering at 880 and letterboxing inside a wider one.
@@ -4902,9 +5068,10 @@ function drawTrend() {
     let acc = 0;
     // Stacked by parent, not leaf: nine segments read as a shape, twenty-two
     // read as noise.
-    const stackSum = shownTotal(m.byParent, trendOff);
-    Object.keys(m.byParent).forEach(id => {
-      const v = m.byParent[id];
+    const stackSum = shownTotal(trendSegments(m), trendOff);
+    const seg = trendSegments(m);
+    Object.keys(seg).forEach(id => {
+      const v = seg[id];
       // A category that took back more than it spent this month has nothing to
       // stack. The total above the bar still counts it.
       if (!(v > 0) || trendOff.has(id)) return;
@@ -5017,7 +5184,7 @@ function drawTrend() {
      three rows of figures, and a row of overlapping numbers is worse than none. */
   if (showTable) {
     const rowTop = PT + plotH + type.month + 30 + type.fig;
-    const shown = (m) => shownTotal(m.byParent, trendOff);
+    const shown = (m) => shownTotal(trendSegments(m), trendOff);
     /* What the plan says a month should cost, and how the month did against
        it.
        ── The rule for months already lived ─────────────────────────────────
@@ -5140,19 +5307,77 @@ function drawTrend() {
     }
   }
 
-  const key = keyList(present.map(id => ({
+  /* One row, at whatever level it belongs to. The figures are the same
+     arithmetic for a parent and for a child, because by the time they get here
+     both are just a slug with a total against it — which is the whole reason
+     drilling in was a change to what a segment IS rather than a second chart. */
+  const keyRow = (id, opts2) => ({
     // The stack and its own key have to agree, so both take the ramp. Nothing
     // else does — identity colours stay the source of truth everywhere else.
     slug: id, label: labelOfSlug(id), colour: colourOf(id),
-    amount: totals[id], amount_text: money0(totals[id]),
+    amount: totals[id] || 0, amount_text: money0(totals[id] || 0),
     budget: budgetTotals[id] || 0,
     change: priorTotals[id]
-      ? Math.round(((totals[id] - priorTotals[id]) / priorTotals[id]) * 100)
+      ? Math.round((((totals[id] || 0) - priorTotals[id]) / priorTotals[id]) * 100)
       : null,
     pick: 'data-cat="' + escapeHtml(id) + '"',
     selected: !!(trendSel && trendSel.cat === id),
-  })), trendOff, 'trend', 'Total', {
-    bars: true, totalAtBottom: true, title: 'Where it went',
+    expandable: !!(opts2 && opts2.expandable),
+    expanded: !!(opts2 && opts2.expanded),
+    indent: !!(opts2 && opts2.indent),
+    inside: !!(opts2 && opts2.inside),
+  });
+
+  /* Inside a category, the key is that category and the things under it.
+     Everything else is gone rather than dimmed, because the chart it describes
+     no longer contains anything else — a key listing rows the chart has stopped
+     drawing is a key that has to be ignored. The parent stays at the top,
+     marked, and clicking it is the way back out. */
+  let keyRows;
+  if (trendFocus) {
+    /* The heading's own figure, which is the parts added up rather than a
+       lookup: totals holds the children now, so totals[trendFocus] is nothing
+       at all — and a heading reading $0 above a list adding to $4,020 is the
+       kind of contradiction that costs a reader their trust in both numbers.
+       Its change is against the same months a year ago, summed the same way. */
+    const insideNow = Object.values(totals).reduce((s, v) => s + v, 0);
+    const insideWas = Object.values(priorTotals).reduce((s, v) => s + v, 0);
+    const head = keyRow(trendFocus, { expandable: true, expanded: true, inside: true });
+    head.amount = insideNow;
+    head.amount_text = money0(insideNow);
+    head.change = insideWas ? Math.round(((insideNow - insideWas) / insideWas) * 100) : null;
+    head.budget = 0;
+    head.heading = true;
+    keyRows = [head]
+      .concat(present.filter(id => id !== trendFocus).map(id => keyRow(id, { indent: true })));
+  } else {
+    /* Outside, every parent that has children can show them where they are,
+       without moving the chart. Reading a breakdown and drilling into one are
+       different things to want, and only one of them should cost you the view
+       of everything else. */
+    keyRows = [];
+    for (const id of present) {
+      const kids = childrenOf(id);
+      const open = trendOpen.has(id);
+      keyRows.push(keyRow(id, { expandable: kids.length > 0, expanded: open }));
+      if (!open) continue;
+      for (const kid of kids) {
+        if (!(childTotals[kid] > 0)) continue;
+        keyRows.push({
+          slug: kid, label: labelOfSlug(kid), colour: colourOf(kid),
+          amount: childTotals[kid], amount_text: money0(childTotals[kid]),
+          budget: 0, change: null,
+          pick: 'data-cat="' + escapeHtml(kid) + '"',
+          selected: !!(trendSel && trendSel.cat === kid),
+          indent: true, detail: true,
+        });
+      }
+    }
+  }
+
+  const key = keyList(keyRows, trendOff, 'trend', 'Total', {
+    bars: true, totalAtBottom: true,
+    title: trendFocus ? 'Inside ' + labelOfSlug(trendFocus) : 'Where it went',
     count: present.filter(id => !trendOff.has(id)).length + ' of ' + present.length + ' shown',
     notes: dashNote + extras,
   });
@@ -5174,8 +5399,8 @@ function drawTrend() {
     const cmp = Math.min(all.length, prior.length);
     let nowSum = 0, wasSum = 0;
     for (let i = 0; i < cmp; i++) {
-      nowSum += shownTotal(all[i].byParent, trendOff);
-      wasSum += shownTotal(prior[i].byParent, trendOff);
+      nowSum += shownTotal(trendSegments(all[i]), trendOff);
+      wasSum += shownTotal(trendSegments(prior[i]), trendOff);
     }
     if (!cmp) kpi.hidden = true;
     else {
@@ -5232,7 +5457,7 @@ function detailHtml(all, totals) {
 
   if (!trendSel.month) {
     const total = totals[cat] || 0;
-    const months = all.filter(m => (m.byParent[cat] || 0) > 0).length;
+    const months = all.filter(m => (trendSegments(m)[cat] || 0) > 0).length;
     return '<div class="dt"><span class="dswatch" style="background:' + colourOf(cat) + '"></span>' +
       '<b>' + escapeHtml(label) + '</b><span class="dsub">across ' + all.length + ' months on screen</span></div>' +
       '<div class="dfacts">' +
@@ -5244,9 +5469,9 @@ function detailHtml(all, totals) {
 
   const m = all.find(x => x.month === trendSel.month);
   if (!m) return '<span class="hint">That month is no longer in view.</span>';
-  const v = m.byParent[cat] || 0;
+  const v = trendSegments(m)[cat] || 0;
   const i = all.indexOf(m);
-  const before = i > 0 ? (all[i - 1].byParent[cat] || 0) : null;
+  const before = i > 0 ? (trendSegments(all[i - 1])[cat] || 0) : null;
   const change = before ? Math.round(((v - before) / before) * 100) : null;
 
   return '<div class="dt"><span class="dswatch" style="background:' + colourOf(cat) + '"></span>' +
@@ -5263,6 +5488,39 @@ function detailHtml(all, totals) {
 function fact(value, label) {
   return '<div class="dfact"><div class="dvalue">' + value + '</div>' +
          '<div class="dlabel">' + escapeHtml(label) + '</div></div>';
+}
+
+/**
+ * Clicking a category in the key.
+ *
+ * A parent goes in: the chart becomes that category broken into its own
+ * subcategories, and the key becomes that category and the things under it.
+ * Clicking it again comes back out. That is the whole gesture — in and out on
+ * the same click, in the same place, with no separate control to find.
+ *
+ * Anything with nothing under it — a leaf, or a parent that never had
+ * children — cannot be gone into, so it selects instead, which is what a click
+ * on this key has always done. So the click means "show me this", and the
+ * depth of the thing decides what showing it can mean.
+ *
+ * Going in clears the selection rather than keeping it. The selection dims
+ * every segment that is not it; arriving inside a category with its own parent
+ * selected would dim the whole chart you just asked to see.
+ */
+function pickTrendCategory(slug) {
+  if (trendFocus) {
+    // Inside: the parent is the way out, a child is just a selection.
+    if (slug === trendFocus) { trendFocus = null; trendSel = null; drawTrend(); return; }
+    setTrendSel({ cat: slug, month: null });
+    return;
+  }
+  if (childrenOf(slug).length) {
+    trendFocus = slug;
+    trendSel = null;
+    drawTrend();
+    return;
+  }
+  setTrendSel({ cat: slug, month: null });
 }
 
 function setTrendSel(next) {
@@ -5343,6 +5601,20 @@ function keyBoxClick(e) {
     }
     return true;
   }
+  /* The disclosure, which changes the list and nothing else. Checked before
+     the row's own click because it sits inside the row, and a chevron that
+     also drilled in would leave no way to look at two categories' children at
+     once — which is most of the reason to have a breakdown in a list. */
+  const open = e.target.closest('[data-key-open]');
+  if (open) {
+    const slug = open.dataset.keyOpen;
+    if (trendFocus) { trendFocus = null; }
+    else if (trendOpen.has(slug)) trendOpen.delete(slug);
+    else trendOpen.add(slug);
+    drawTrend();
+    return true;
+  }
+
   const one = e.target.closest('[data-key-off]');
   if (one) {
     const scope = one.dataset.keyScope;
@@ -5366,7 +5638,7 @@ $('trend-chart').addEventListener('click', (e) => {
   if (seg) { setTrendSel({ cat: seg.dataset.cat, month: seg.dataset.month }); return; }
 
   const item = e.target.closest('[data-cat]');
-  if (item) { setTrendSel({ cat: item.dataset.cat, month: null }); return; }
+  if (item) { pickTrendCategory(item.dataset.cat); return; }
 
   // A click on the background is how you put a selection down.
   if (!e.target.closest('.trend-detail') && !e.target.closest('.panner')) setTrendSel(null);
