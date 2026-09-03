@@ -1340,46 +1340,43 @@
      seeing, but it is not worth celebrating. */
   .bg-vs-candle{ pointer-events:all; cursor:default;
                  transition:filter .14s ease, opacity .14s ease; }
-  .bg-vs-candle .cbody{ stroke-width:1.6; }
-  /* The ends, heavier than the sides: those two lines are the actual figures,
-     and the body between them is the distance. */
-  .bg-vs-candle .ccap{ stroke-width:2; stroke-linecap:round; }
+  /* The floor and the ceiling are the two figures, so they are the heavier
+     of the three; the stem is the distance between them and only has to be
+     followed, not read. */
+  .bg-vs-candle .ccap{ stroke-width:2.5; stroke-linecap:round; }
+  .bg-vs-candle .cstem{ stroke-width:1.75; stroke-linecap:butt; }
+  /* The spine that catches the pointer. Invisible, and never in front of the
+     bar's own hover: it is inside the group, which is drawn over the bars,
+     but it is only as wide as the measure plus a few pixels either side. */
+  .bg-vs-candle .chit{ fill:transparent; }
 
-  .bg-vs-candle.up .cbody{ fill:url(#cand-up); stroke:var(--cand-up); }
-  .bg-vs-candle.up .ccap{ stroke:var(--cand-up); }
-  .bg-vs-candle.up{ filter:drop-shadow(0 0 4px var(--cand-up-glow))
-                           drop-shadow(0 0 13px var(--cand-up-glow)); }
+  .bg-vs-candle.up .ccap, .bg-vs-candle.up .cstem{ stroke:var(--cand-up); }
+  /* Turned up from where it was under a filled body. Three thin lines put
+     far less colour on the page than a filled rectangle did, so the same
+     shadow reads as much less light; the glow is now most of what makes the
+     measure feel lit rather than merely drawn. */
+  .bg-vs-candle.up{ filter:drop-shadow(0 0 3px var(--cand-up-glow))
+                           drop-shadow(0 0 8px var(--cand-up-glow))
+                           drop-shadow(0 0 16px var(--cand-up-glow)); }
 
-  .bg-vs-candle.down .cbody{ fill:url(#cand-dn); stroke:var(--cand-dn); }
-  .bg-vs-candle.down .ccap{ stroke:var(--cand-dn); }
-  .bg-vs-candle.down{ filter:drop-shadow(0 0 3px var(--cand-dn-glow))
-                             drop-shadow(0 0 9px var(--cand-dn-glow)); }
+  .bg-vs-candle.down .ccap, .bg-vs-candle.down .cstem{ stroke:var(--cand-dn); }
+  .bg-vs-candle.down{ filter:drop-shadow(0 0 2px var(--cand-dn-glow))
+                             drop-shadow(0 0 6px var(--cand-dn-glow))
+                             drop-shadow(0 0 12px var(--cand-dn-glow)); }
 
   /* Hovering lifts it the way a segment lifts anywhere else on the page. */
-  .bg-vs-candle.up:hover{ filter:brightness(1.15) drop-shadow(0 0 6px var(--cand-up-glow))
-                                 drop-shadow(0 0 18px var(--cand-up-glow)); }
-  .bg-vs-candle.down:hover{ filter:brightness(1.15) drop-shadow(0 0 5px var(--cand-dn-glow))
-                                   drop-shadow(0 0 14px var(--cand-dn-glow)); }
+  .bg-vs-candle.up:hover{ filter:brightness(1.2) drop-shadow(0 0 4px var(--cand-up-glow))
+                                 drop-shadow(0 0 11px var(--cand-up-glow))
+                                 drop-shadow(0 0 22px var(--cand-up-glow)); }
+  .bg-vs-candle.down:hover{ filter:brightness(1.2) drop-shadow(0 0 3px var(--cand-dn-glow))
+                                   drop-shadow(0 0 8px var(--cand-dn-glow))
+                                   drop-shadow(0 0 17px var(--cand-dn-glow)); }
 
   /* A month that has happened keeps its shape and gives up its glow. The
      light is for a number you can still do something about. */
   .bg-vs-candle.past{ opacity:.42; filter:none; }
   .bg-vs-candle.past:hover{ filter:none; }
 
-  /* Nearly hollow.
-
-     These started at half opacity and the green candle disappeared into the
-     green bar it stands against — same hue, similar density, touching. A body
-     this light against solid bars is unmistakably a different kind of object,
-     and the shape then comes from the edge and the caps, which is where a
-     candle's shape comes from anyway.
-
-     Both directions take the same numbers: the two differ in colour, not in
-     how solid they are. */
-  .cu0{ stop-color:var(--cand-up); stop-opacity:.28; }
-  .cu1{ stop-color:var(--cand-up); stop-opacity:.05; }
-  .cd0{ stop-color:var(--cand-dn); stop-opacity:.28; }
-  .cd1{ stop-color:var(--cand-dn); stop-opacity:.05; }
   .bg-svg-vs{ display:block; width:100%; margin-top:6px; overflow:visible; }
 
   /* The three figures for each month, under the month.
@@ -6856,7 +6853,9 @@ function drawBudgeting() {
             { slug: '__spend', colour: null, label: 'Everything planned below' },
           ]) +
           '<div class="bg-cap">Drag an income block up or down to change that month' +
-          ' — hold Alt for dollar-by-dollar. Arrow keys work too. The candle between each pair is what that month keeps, green, or goes under by, red.' +
+          ' — hold Alt for dollar-by-dollar. Arrow keys work too. The measure' +
+          ' between each pair is what that month keeps, green, or goes under' +
+          ' by, red.' +
           ' Months left of' +
           ' the dashed line have already happened and are fixed. Spending is the' +
           ' sum of the plans below and moves when they do.</div>' +
@@ -7076,17 +7075,21 @@ function bgVsGeom(i) {
 function bgVsCandle(g, ih, oh, base) {
   const top = base - Math.max(ih, oh);
   const bot = base - Math.min(ih, oh);
-  /* Whichever bar is shorter is the one the candle stands on. Ties go to the
-     income side, which is also the side a zero-height month sits on. */
+  /* Whichever bar is shorter is the one it stands on. Ties go to the income
+     side, which is also the side a zero-height month sits on. */
   const onIncome = ih <= oh;
-  return {
-    x: onIncome ? g.xIn : g.xOut - 4,
-    w: g.barW + 4,
-    y: top,
-    h: Math.max(0, bot - top),
-    top: top,
-    bot: bot,
-  };
+  const cx = (onIncome ? g.xIn : g.xOut) + g.barW / 2;
+  /* Narrower than the bar underneath, and centred on it.
+
+     A measure has to be narrower than the thing it measures or it stops
+     reading as a measure and starts reading as part of the bar. The floor
+     never quite reaches the bar's own edges, so the bar's top corners stay
+     visible on both sides and you can see what is being measured from.
+
+     Clamped at both ends: a proportion alone would give a two-pixel rule on a
+     narrow card, and a fixed width would overhang the bar on one. */
+  const hw = Math.max(2.5, Math.min(g.barW / 2 - 1.5, g.barW * 0.31));
+  return { cx: cx, hw: hw, top: top, bot: bot, h: Math.max(0, bot - top) };
 }
 
 function bgVsChart() {
@@ -7108,7 +7111,7 @@ function bgVsChart() {
   let svg = '<svg class="bg-svg-vs" viewBox="0 0 ' + BG_W + ' ' + BG_VS_H +
     '" width="100%" height="' + BG_VS_H + '" preserveAspectRatio="none" ' +
     'data-parent="income" data-kids="income" data-hi="' + hi.toFixed(2) + '">' +
-    reliefDefs('vs', [incColour, outColour]) + CANDLE_DEFS;
+    reliefDefs('vs', [incColour, outColour]);
 
   /* Collected as they are worked out and appended after every bar, so no
      candle is painted under a bar drawn later in the same loop. */
@@ -7122,34 +7125,43 @@ function bgVsChart() {
     const oh = ov > 0 ? Math.max(BG_MIN_SEG, (ov / hi) * BG_PLOT) : BG_MIN_SEG;
     const kept = t.savings[m];
 
-    /* The difference, drawn as a candle.
+    /* The difference, measured.
 
-       Held back until after the bars rather than drawn before them. The old
-       band spanned the whole pair and relied on the taller bar covering its
-       own half, which meant it could only ever be a flat wash — an outline
-       drawn behind a bar is an outline with a side missing. Standing on the
-       shorter bar instead, it overlaps neither, so it can carry an edge, a
-       cap at each end and a glow that is allowed to spill. */
+       A stem between a floor and a ceiling, standing on the shorter bar and
+       reaching the top of the taller one. The floor is the height that bar
+       has, the ceiling is the height it is being compared against, and the
+       stem is the distance — which is the number this whole chart is for.
+
+       It was a filled body before, the width of the bar and touching it. At
+       that width a green measure against a green bar is a taller bar, and
+       filling it made the difference look like a quantity sitting on top of
+       the month rather than the space between two heights. Three lines say
+       the same thing without ever being mistaken for one.
+
+       Held back until after the bars either way: this is drawn over the bar
+       it measures from, and non-scaling-stroke keeps all three the same
+       weight however wide the card stretches the plot. */
     const c = bgVsCandle(g, ih, oh, base);
     if (c.h > 0.5) {
+      const rule = (y) => '<line class="ccap" vector-effect="non-scaling-stroke" x1="' +
+        (c.cx - c.hw).toFixed(1) + '" y1="' + y.toFixed(1) + '" x2="' +
+        (c.cx + c.hw).toFixed(1) + '" y2="' + y.toFixed(1) + '"/>';
       candles +=
         '<g class="bg-vs-candle ' + (kept >= 0 ? 'up' : 'down') +
           (past ? ' past' : '') + '" data-vsgap="' + m + '" ' +
           tipAttrs(kept >= 0 ? 'Kept' : 'Over by', m, Math.abs(kept), 0,
             kept >= 0 ? 'income above everything planned'
                       : 'planned to spend more than comes in') + '>' +
-          '<rect class="cbody" vector-effect="non-scaling-stroke" rx="1.5" x="' +
-            c.x.toFixed(1) + '" y="' + c.y.toFixed(1) + '" width="' + c.w.toFixed(1) +
+          /* A wider invisible spine, so the thing can be pointed at. Three
+             two-pixel lines are a hard target for a mouse and an impossible
+             one for a finger. */
+          '<rect class="chit" x="' + (c.cx - c.hw - 3).toFixed(1) + '" y="' +
+            c.top.toFixed(1) + '" width="' + (c.hw * 2 + 6).toFixed(1) +
             '" height="' + c.h.toFixed(1) + '"/>' +
-          /* The two ends said plainly. The top is the level being reached for
-             and the bottom is the one reached, and a body without them is a
-             smear whose ends are wherever the fade happens to give out. */
-          '<line class="ccap" vector-effect="non-scaling-stroke" x1="' + c.x.toFixed(1) +
-            '" y1="' + c.top.toFixed(1) + '" x2="' + (c.x + c.w).toFixed(1) +
-            '" y2="' + c.top.toFixed(1) + '"/>' +
-          '<line class="ccap" vector-effect="non-scaling-stroke" x1="' + c.x.toFixed(1) +
-            '" y1="' + c.bot.toFixed(1) + '" x2="' + (c.x + c.w).toFixed(1) +
+          '<line class="cstem" vector-effect="non-scaling-stroke" x1="' + c.cx.toFixed(1) +
+            '" y1="' + c.top.toFixed(1) + '" x2="' + c.cx.toFixed(1) +
             '" y2="' + c.bot.toFixed(1) + '"/>' +
+          rule(c.top) + rule(c.bot) +
         '</g>';
     }
 
@@ -7276,19 +7288,26 @@ function bgVsFit(svg) {
          which bar it stands on as well as which colour it is — so the side
          has to be recomputed here, not just the height. */
       const c = bgVsCandle(bgVsGeom(i), ih, oh, base);
-      const body = gap.querySelector('.cbody');
+      const stem = gap.querySelector('.cstem');
+      const hit = gap.querySelector('.chit');
       const caps = gap.querySelectorAll('.ccap');
-      if (body) {
-        body.setAttribute('x', c.x.toFixed(1));
-        body.setAttribute('width', c.w.toFixed(1));
-        body.setAttribute('y', c.y.toFixed(1));
-        body.setAttribute('height', c.h.toFixed(1));
+      if (stem) {
+        stem.setAttribute('x1', c.cx.toFixed(1));
+        stem.setAttribute('x2', c.cx.toFixed(1));
+        stem.setAttribute('y1', c.top.toFixed(1));
+        stem.setAttribute('y2', c.bot.toFixed(1));
+      }
+      if (hit) {
+        hit.setAttribute('x', (c.cx - c.hw - 3).toFixed(1));
+        hit.setAttribute('width', (c.hw * 2 + 6).toFixed(1));
+        hit.setAttribute('y', c.top.toFixed(1));
+        hit.setAttribute('height', c.h.toFixed(1));
       }
       [c.top, c.bot].forEach((yy, k) => {
         const ln = caps[k];
         if (!ln) return;
-        ln.setAttribute('x1', c.x.toFixed(1));
-        ln.setAttribute('x2', (c.x + c.w).toFixed(1));
+        ln.setAttribute('x1', (c.cx - c.hw).toFixed(1));
+        ln.setAttribute('x2', (c.cx + c.hw).toFixed(1));
         ln.setAttribute('y1', yy.toFixed(1));
         ln.setAttribute('y2', yy.toFixed(1));
       });
@@ -7569,22 +7588,6 @@ const reliefId = (prefix, hex) => prefix + "-" + hex.replace(/[^0-9a-fA-F]/g, ""
  * a bleached patch over cream, so the strengths live with the other things
  * that differ by theme rather than in this string.
  */
-/* The two candle bodies.
- *
- * Dense at the top of the body and thinning downward in both directions,
- * because the top edge is the answer either way — the height income reached
- * over spending, or the height spending reached over income. The stops carry
- * classes and no colour, so the theme decides how far each one travels.
- */
-const CANDLE_DEFS =
-  '<defs>' +
-    '<linearGradient id="cand-up" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop class="cu0" offset="0%"/><stop class="cu1" offset="100%"/>' +
-    '</linearGradient>' +
-    '<linearGradient id="cand-dn" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop class="cd0" offset="0%"/><stop class="cd1" offset="100%"/>' +
-    '</linearGradient>' +
-  '</defs>';
 
 const PIE_SHEEN =
   '<defs>' +
