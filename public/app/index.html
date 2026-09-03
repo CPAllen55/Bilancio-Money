@@ -1642,8 +1642,17 @@
             font-weight:600; }
   .ct-month{ margin-left:auto; font-family:var(--font-num); font-size:11px;
              color:var(--muted); font-weight:400; }
+  /* A row rather than a line, so a mark can sit at the far end of it.
+     Baseline-aligned rather than centred: the glyph and the figure then sit on
+     the same line the way two words would, instead of the mark floating at the
+     middle of a 21px number. */
   .ct-amount{ font-family:var(--font-num); font-size:21px; color:var(--ink);
-              letter-spacing:-.02em; margin-top:6px; }
+              letter-spacing:-.02em; margin-top:6px;
+              display:flex; align-items:baseline; justify-content:space-between;
+              gap:12px; }
+  /* Its own size, not the figure's: at 21px the mark competes with the number
+     it is commenting on. Line-height 1 so it cannot stretch the row. */
+  .ct-verdict{ font-size:17px; line-height:1; flex:0 0 auto; }
   .ct-share{ font-size:11.5px; color:var(--ink-soft); margin-top:3px; }
   .ct-note{ font-size:11.5px; color:var(--ink-soft); margin-top:5px;
             padding-top:5px; border-top:1px solid var(--hair); max-width:230px;
@@ -6196,6 +6205,18 @@ function setTrendSel(next) {
   tip.hidden = true;
   document.body.appendChild(tip);
 
+  /* The verdict, for the two tones that are one.
+ *
+ * tone-up and tone-down are not "money in" and "money out" — those are
+ * tone-in and tone-out, and they get no mark, because money leaving is not
+ * bad news, it is just Tuesday. These two are the measure between the bars
+ * saying whether the month came out ahead, which is the one figure on this
+ * page there is something to feel about.
+ *
+ * Nothing for any other tone, and nothing when there is no tone at all.
+ */
+  const VERDICT = { up: '🎉', down: '📉' };
+
   const show = (el, x, y) => {
     /* Reset every time, not just when a tone is present: the box is one
        element reused by every chart on the page, so a tone left on it from
@@ -6210,7 +6231,14 @@ function setTrendSel(next) {
           ? '<span class="ct-month">' + escapeHtml(el.dataset.tipMonth) + '</span>' : '') +
         '</div>' +
       (isFinite(amount) && el.dataset.tipAmount !== undefined
-        ? '<div class="ct-amount">' + money(amount) + '</div>' : '') +
+        ? '<div class="ct-amount">' + money(amount) +
+          /* aria-hidden, because the row above already says "Kept" or "Over
+             by" in words. A screen reader announcing "party popper" after it
+             is repeating the sentiment without adding the fact. */
+          (VERDICT[el.dataset.tipTone]
+            ? '<span class="ct-verdict" aria-hidden="true">' +
+              VERDICT[el.dataset.tipTone] + '</span>' : '') +
+          '</div>' : '') +
       (of > 0 ? '<div class="ct-share">' + ((amount / of) * 100).toFixed(1) +
         '% of that month</div>' : '') +
       (note ? '<div class="ct-note">' + escapeHtml(note) + '</div>' : '');
