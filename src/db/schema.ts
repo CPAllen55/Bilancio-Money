@@ -206,6 +206,49 @@ export const transactionOverrides = pgTable("transaction_overrides", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * 8b. Transaction splits - parts of one transaction filed somewhere else.
+ *
+ * A merchant rule says where Central Market goes: Groceries, every time. That
+ * is right for the merchant and wrong for the visit where a third of the trolley
+ * was a birthday present. A split carves that third off without arguing with the
+ * rule — the rule still governs the merchant, and this one visit is divided.
+ *
+ * ── Only the carved-off parts are stored ───────────────────────────────────
+ *
+ * The remainder is computed, never written. A $388.01 shop with a $50 split to
+ * Gifts is one row here, and the $338.01 left over stays wherever the merchant
+ * rule put it. Storing both halves would mean two rows that have to agree, and
+ * two rows that have to agree eventually do not: an edit that updates one and
+ * not the other leaves a transaction that no longer sums to itself.
+ *
+ * Reclassifying the whole thing is the same mechanism with the full amount, so
+ * there is no second concept for "move all of it" — the remainder simply
+ * becomes zero and the original category drops out of the totals.
+ *
+ * ── The sign ───────────────────────────────────────────────────────────────
+ *
+ * cents follows Plaid, like transactions.amount: POSITIVE means money leaving.
+ * The same convention as the column it is carved from, so the arithmetic that
+ * checks a split against its transaction never has to flip anything.
+ */
+export const transactionSplits = pgTable("transaction_splits", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  transactionId: uuid("transaction_id").notNull()
+    .references(() => transactions.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  categoryId: uuid("category_id").notNull()
+    .references(() => categories.id, { onDelete: "cascade" }),
+  cents: bigint("cents", { mode: "bigint" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("tx_splits_tx_idx").on(t.transactionId),
+  /* One row per category per transaction. Splitting the same visit to Gifts
+     twice is not two facts, it is one number entered badly — the write path
+     merges into the existing row rather than adding beside it. */
+  uniqueIndex("tx_splits_tx_cat_idx").on(t.transactionId, t.categoryId),
+]);
+
 // 9. Budget plans - how each category's budget is arrived at.
 //
 // One row per category the user has expressed an opinion about. No row means
