@@ -1677,6 +1677,27 @@
      The label stays in plain ink throughout. "Over by" written in red inside a
      red box is the same fact three times; the money is the part worth
      colouring. */
+  /* The box wearing the colour of the thing that raised it.
+
+     A tint of it behind the text and a stronger line around the edge, so a
+     box raised by the blue category is recognisably that category's box
+     before a word of it is read. --tip-hue arrives from the element as an rgb
+     triplet rather than a finished colour, which is what lets the stylesheet
+     put its own alpha on it here and a different one on the border.
+
+     The figures stay in --ink. A category colour is whatever the category
+     happens to be — some of them are dark, some are pale — and text in an
+     arbitrary hue on a tint of that same hue is the one combination that
+     cannot be checked in advance. The tint is light enough that ink reads on
+     it whatever colour it is made of; the hue does its work as a surface and
+     an edge, which is where colour is safe. */
+  .charttip.hued{ background-color:var(--bg-panel);
+    background-image:linear-gradient(rgb(var(--tip-hue) / .18), rgb(var(--tip-hue) / .18));
+    border-color:rgb(var(--tip-hue) / .55);
+    box-shadow:0 10px 28px var(--shadow), 0 0 0 1px rgb(var(--tip-hue) / .22),
+               0 0 18px rgb(var(--tip-hue) / .20); }
+  .charttip.hued .ct-note{ border-top-color:rgb(var(--tip-hue) / .30); }
+
   .charttip.tone-in,  .charttip.tone-up{ background:var(--tip-in); }
   .charttip.tone-out, .charttip.tone-down{ background:var(--tip-out); }
   .charttip.tone-in .ct-amount,
@@ -4779,10 +4800,12 @@ function drawAssetChart(a) {
     svg +=
       '<rect x="' + x.toFixed(1) + '" y="' + topA.toFixed(1) + '" width="' + barW.toFixed(1) +
         '" height="' + Math.max(0, zero - topA).toFixed(1) + '" rx="2" fill="var(--mint)" opacity=".85" ' +
-        tipAttrs('Assets', r.month, r.assets, 0, 'What every account you own held at the end of ' + r.label + '.') + '/>' +
+        tipAttrs('Assets', r.month, r.assets, 0,
+          { note: 'What every account you own held at the end of ' + r.label + '.' }) + '/>' +
       '<rect x="' + x.toFixed(1) + '" y="' + zero.toFixed(1) + '" width="' + barW.toFixed(1) +
         '" height="' + Math.max(0, topL - zero).toFixed(1) + '" rx="2" fill="var(--coral)" opacity=".85" ' +
-        tipAttrs('Liabilities', r.month, r.liabilities, 0, 'What every card and loan owed at the end of ' + r.label + '.') + '/>';
+        tipAttrs('Liabilities', r.month, r.liabilities, 0,
+          { note: 'What every card and loan owed at the end of ' + r.label + '.' }) + '/>';
   });
 
   // The line last, so it sits over the blocks it is the difference between.
@@ -4800,7 +4823,7 @@ function drawAssetChart(a) {
     svg += '<circle cx="' + pts[i][0].toFixed(1) + '" cy="' + pts[i][1].toFixed(1) +
       '" r="3.5" fill="var(--bg-panel)" stroke="var(--ink)" stroke-width="2" ' +
       tipAttrs('Net worth', r.month, r.netWorth, 0,
-        money(r.assets) + ' owned against ' + money(r.liabilities) + ' owed.') + '/>';
+        { note: money(r.assets) + ' owned against ' + money(r.liabilities) + ' owed.' }) + '/>';
   });
 
   rows.forEach((r, i) => {
@@ -4985,28 +5008,40 @@ function childrenOf(parentSlug) {
  * hands back the parents unchanged, which is why turning this on changed no
  * number in the ordinary view.
  */
-function trendSegments(m) {
-  if (!trendFocus) {
-    const by = m.byParent || {};
-    /* Switching a child off has to take it out of the bar its parent draws,
-       or the switch is a control that changes a row in a list and nothing the
-       list describes. The parent's own switch still hides the parent whole;
-       this is the same idea one level down, which is what makes opening a
-       category and switching one of its parts off mean something.
-
-       Only when something is actually off, so the ordinary case does no work
-       and hands back exactly what it was given. */
-    if (!trendOff.size) return by;
-    const out = {};
-    for (const p of Object.keys(by)) {
-      let v = by[p];
-      for (const kid of childrenOf(p)) {
-        if (trendOff.has(kid)) v -= ((m.byCategory || {})[kid] || 0);
-      }
-      if (v > 0) out[p] = v;
+/**
+ * A month's spending by parent, with switched-off children taken out of the
+ * parent that contains them.
+ *
+ * Switching a child off has to take it out of the bar its parent draws, or the
+ * switch is a control that changes a row in a list and nothing the list
+ * describes. The parent's own switch still hides the parent whole; this is the
+ * same idea one level down, which is what makes opening a category and
+ * switching one of its parts off mean something.
+ *
+ * Only when something is actually off, so the ordinary case does no work and
+ * hands back exactly what it was given.
+ *
+ * It is a function of its own because it is two things at once: what a column
+ * is made of when nothing is focused, AND what "the whole month" means
+ * wherever a share of the month is quoted — including from inside a focus,
+ * where the column is no longer the month.
+ */
+function monthParents(m) {
+  const by = m.byParent || {};
+  if (!trendOff.size) return by;
+  const out = {};
+  for (const p of Object.keys(by)) {
+    let v = by[p];
+    for (const kid of childrenOf(p)) {
+      if (trendOff.has(kid)) v -= ((m.byCategory || {})[kid] || 0);
     }
-    return out;
+    if (v > 0) out[p] = v;
   }
+  return out;
+}
+
+function trendSegments(m) {
+  if (!trendFocus) return monthParents(m);
   const out = {};
   let any = false;
   for (const slug of childrenOf(trendFocus)) {
@@ -5199,16 +5234,40 @@ const MIN_VISIBLE = 3;
 
 /* What the hover box reads, carried on the shape itself so one listener can
    serve every chart without knowing which one it is looking at. */
-function tipAttrs(label, month, amount, ofTotal, note, tone) {
+/**
+ * Everything after the amount is optional and there are now five of them, so
+ * they come in a bag rather than a queue: a call ending in three commas and a
+ * string is a call nobody can read.
+ *
+ *   note   a line of explanation under the figure
+ *   tone   'in' | 'out' | 'up' | 'down' — see the tone rules in the stylesheet
+ *   ink    a six-digit hex; the box takes a shade of it
+ *   of     what the share is a share OF, e.g. 'of Home'. Defaults to the month,
+ *          which is what it is nearly everywhere.
+ *   when   a period label for something that is not one month
+ */
+function tipAttrs(label, month, amount, ofTotal, opts) {
+  const o = opts || {};
+  const when = o.when || (month ? monthLabel(month) : '');
   return 'data-tip="1"' +
     /* Carried by the element rather than worked out in the box, because only
-       the thing being hovered knows whether its own number is good news. */
-    (tone ? ' data-tip-tone="' + escapeHtml(tone) + '"' : '') +
+       the thing being hovered knows what its own number means. */
+    (o.tone ? ' data-tip-tone="' + escapeHtml(o.tone) + '"' : '') +
+    (o.ink ? ' data-tip-ink="' + escapeHtml(rgbTriplet(o.ink)) + '"' : '') +
     ' data-tip-label="' + escapeHtml(label) + '"' +
-    ' data-tip-month="' + escapeHtml(monthLabel(month)) + '"' +
+    (when ? ' data-tip-month="' + escapeHtml(when) + '"' : '') +
     ' data-tip-amount="' + amount + '"' +
     ' data-tip-of="' + (ofTotal || 0) + '"' +
-    (note ? ' data-tip-note="' + escapeHtml(note) + '"' : '');
+    (o.of ? ' data-tip-oflabel="' + escapeHtml(o.of) + '"' : '') +
+    (o.note ? ' data-tip-note="' + escapeHtml(o.note) + '"' : '');
+}
+
+/* "#00F0A8" to "0 240 168", so the stylesheet can put its own alpha on it.
+   A colour that is not a six-digit hex gets nothing, and the box then just
+   does not take a hue — better than a border painted rgb(NaN NaN NaN). */
+function rgbTriplet(hex) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return '';
+  return [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)).join(' ');
 }
 
 /* The year-ago marker, in both charts.
@@ -5661,7 +5720,16 @@ function drawTrend() {
     let acc = 0;
     // Stacked by parent, not leaf: nine segments read as a shape, twenty-two
     // read as noise.
-    const stackSum = shownTotal(trendSegments(m), trendOff);
+    /* The share is quoted as "of that month", so the denominator has to be
+       the month.
+
+       It was the column, which is the same thing until a category is opened.
+       Inside one, the column is that category's children and the box went on
+       claiming its figures were shares of the month — a subcategory worth a
+       fifth of its parent reading as a fifth of everything spent. The pie
+       below is where the share-of-category question is answered, and it now
+       says so in as many words. */
+    const monthSum = shownTotal(monthParents(m), trendOff);
     const seg = trendSegments(m);
     Object.keys(seg).forEach(id => {
       const v = seg[id];
@@ -5696,7 +5764,7 @@ function drawTrend() {
       const face = relief('tr', colour);
       svg += '<rect class="seg' + (on ? ' sel' : '') + (off ? ' dim' : '') + '"' +
              ' data-cat="' + escapeHtml(id) + '" data-month="' + escapeHtml(m.month) + '"' +
-             ' ' + tipAttrs(labelOfSlug(id), m.month, v, stackSum) +
+             ' ' + tipAttrs(labelOfSlug(id), m.month, v, monthSum, { ink: colour }) +
              ' tabindex="0" role="button"' +
              ' x="' + (cx - barW / 2).toFixed(1) + '" y="' + top.toFixed(1) +
              '" width="' + barW.toFixed(1) + '" height="' + (Math.max(0.5, bot - top) + seam).toFixed(1) +
@@ -6221,7 +6289,14 @@ function setTrendSel(next) {
     /* Reset every time, not just when a tone is present: the box is one
        element reused by every chart on the page, so a tone left on it from
        the last thing hovered would colour the next thing's figure. */
-    tip.className = 'charttip' + (el.dataset.tipTone ? ' tone-' + el.dataset.tipTone : '');
+    /* A hue and a tone are alternatives, not a stack. The tone is a verdict —
+       green good, red bad — and the hue is an identity: this is the colour of
+       the thing under the cursor. Painting a category's own blue over "good"
+       green would say neither. */
+    const hue = el.dataset.tipInk;
+    tip.className = 'charttip' +
+      (hue ? ' hued' : el.dataset.tipTone ? ' tone-' + el.dataset.tipTone : '');
+    tip.style.setProperty('--tip-hue', hue || '');
     const amount = Number(el.dataset.tipAmount);
     const of = Number(el.dataset.tipOf);
     const note = el.dataset.tipNote;
@@ -6239,8 +6314,11 @@ function setTrendSel(next) {
             ? '<span class="ct-verdict" aria-hidden="true">' +
               VERDICT[el.dataset.tipTone] + '</span>' : '') +
           '</div>' : '') +
+      /* What the share is a share of, said rather than assumed. It used to be
+         hard-coded to "of that month", which was true for most of the charts
+         and quietly false for the two where the stack is not the month. */
       (of > 0 ? '<div class="ct-share">' + ((amount / of) * 100).toFixed(1) +
-        '% of that month</div>' : '') +
+        '% ' + escapeHtml(el.dataset.tipOflabel || 'of that month') + '</div>' : '') +
       (note ? '<div class="ct-note">' + escapeHtml(note) + '</div>' : '');
     tip.hidden = false;
 
@@ -6646,9 +6724,9 @@ function drawNet() {
     svg += '<g class="netdot"' + (r.projected ? ' opacity=".55"' : '') + ' ' +
       tipAttrs(r.projected ? 'Running total (projected)' : 'Running total',
         r.month, r.cumulative, 0,
-        (r.projected ? 'budgeted to ' + (kept ? 'keep ' : 'be down ')
-                     : (kept ? 'kept ' : 'down ')) +
-        money(Math.abs(r.net)) + ' in ' + monthLabel(r.month)) + '>' +
+        { note: (r.projected ? 'budgeted to ' + (kept ? 'keep ' : 'be down ')
+                             : (kept ? 'kept ' : 'down ')) +
+                money(Math.abs(r.net)) + ' in ' + monthLabel(r.month) }) + '>' +
       '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) +
         '" r="11" fill="transparent"></circle>' +
       '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) +
@@ -7303,10 +7381,10 @@ function bgVsChart() {
       candles +=
         '<g class="bg-vs-candle ' + (kept >= 0 ? 'up' : 'down') +
           (past ? ' past' : '') + '" data-vsgap="' + m + '" ' +
-          tipAttrs(kept >= 0 ? 'Kept' : 'Over by', m, Math.abs(kept), 0,
-            kept >= 0 ? 'income above everything planned'
-                      : 'planned to spend more than comes in',
-            kept >= 0 ? 'up' : 'down') + '>' +
+          tipAttrs(kept >= 0 ? 'Kept' : 'Over by', m, Math.abs(kept), 0, {
+            note: kept >= 0 ? 'income above everything planned'
+                            : 'planned to spend more than comes in',
+            tone: kept >= 0 ? 'up' : 'down' }) + '>' +
           /* A wider invisible spine, so the thing can be pointed at. Three
              two-pixel lines are a hard target for a mouse and an impossible
              one for a finger. */
@@ -7345,7 +7423,7 @@ function bgVsChart() {
         '" height="' + oh.toFixed(1) + '" rx="1.5" ' +
         'fill="' + relief('vs', outColour) + '" style="--seg:' + outColour + '" ' +
         tipAttrs('Everything planned', m, ov, iv + ov,
-          'the sum of the plans below', 'out') +
+          { note: 'the sum of the plans below', tone: 'out' }) +
         ' data-vsout="' + m + '"></rect>';
   });
 
@@ -8821,6 +8899,10 @@ function drawPie() {
   const sliceColours = shown.map(([slug]) => colourOf(slug));
   const defs = reliefDefs('pie', sliceColours, [CY - R, CY + R]) + PIE_SHEEN;
 
+  /* Named rather than "of that month": this donut totals a range, and what it
+     totals is one category's parts, not the month's. */
+  const shareOf = pieParent() ? 'of ' + labelOfSlug(pieParent()) : 'of everything shown';
+
   let angle = -Math.PI / 2;
 
   const slices = shown.map(([slug, v]) => {
@@ -8831,9 +8913,19 @@ function drawPie() {
     return '<path class="slice' + (on ? ' sel' : '') + (pieSel && !on ? ' dim' : '') + '" ' +
       'd="' + arcPath(CX, CY, R, a0, a1) + '" fill="' + relief('pie', colourOf(slug)) + '" ' +
       'style="color:' + colourOf(slug) + '" data-slice="' + escapeHtml(slug) + '" ' +
-      'tabindex="0" role="button">' +
-      '<title>' + escapeHtml(labelOfSlug(slug)) + ': ' + money(v) +
-      ' (' + ((v / total) * 100).toFixed(1) + '%)</title></path>';
+      /* The app's own box, not the browser's. It was a <title>: a system-grey
+         panel that arrives after a delay and cannot be styled, on the one
+         chart sitting directly under a chart that had the good one.
+
+         And the share it quotes is the share of the CATEGORY, which is this
+         donut's whole reason for existing — the bars above answer the share
+         of the month, so between them the two questions are each answered
+         once, by the panel that is actually shaped to answer it. */
+      tipAttrs(labelOfSlug(slug), null, v, total, {
+        when: w.label,
+        of: shareOf,
+        ink: colourOf(slug),
+      }) + ' tabindex="0" role="button"></path>';
   }).join('');
 
   /* Every row is pickable, and every figure is a share. There used to be a
