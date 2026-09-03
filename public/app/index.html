@@ -1252,6 +1252,22 @@
   .bg-side{ display:flex; gap:34px; margin-left:auto; }
 
   /* The savings year. Full width of the hero, under the figures. */
+  /* The spending bar. Coral because that is what this app draws money going
+     out in everywhere else; the income bar keeps the income category's own
+     colour, so the pair reads the same way the Overview does.
+
+     Not a .bg-seg, so it takes no pointer: the only thing draggable in this
+     chart is the half of it that can be planned here. */
+  .bg-vs-out{ fill:var(--coral); opacity:.85; pointer-events:none; }
+  .bg-vs-out.past{ opacity:.5; }
+  /* What is kept, over each pair. It is the gap between the two bars said as a
+     number, because a gap is easy to see and hard to read. */
+  .bg-vs-kept{ font-family:var(--font-num); font-size:10.5px; font-weight:600;
+               pointer-events:none; }
+  .bg-vs-mlab{ font-family:var(--font-num); font-size:10.5px; fill:var(--muted);
+               pointer-events:none; }
+  .bg-svg-vs{ display:block; width:100%; margin-top:6px; overflow:visible; }
+
   .bg-save{ flex:1 0 100%; margin-top:14px; padding-top:14px;
             border-top:1px solid var(--hair); }
   .bg-save-head{ display:flex; align-items:baseline; gap:10px; margin-bottom:2px; }
@@ -6527,8 +6543,7 @@ function drawBudgeting() {
         '<div class="bg-fig">' + money(t.incomeYear) + '</div></div>' +
       '<div><div class="t-label">Spending planned</div>' +
         '<div class="bg-fig out">' + money(t.spendYear) + '</div></div>' +
-    '</div>' +
-    bgSaveChart();
+    '</div>';
 
   const parents = categoryList.filter(c => !c.parentSlug && c.kind === 'spend');
   const host = $('bg-list');
@@ -6564,6 +6579,7 @@ function drawBudgeting() {
     const inc = bgData.income;
     if (!inc) return '';
     const year = bgYearOf([inc]);
+    const t = bgTotals();
     /* An account with nothing in it should say so, not show an Income card
        reading zero and swallow the message that explains why. Income at zero
        is still drawn where there is spending to budget against — somebody has
@@ -6578,18 +6594,22 @@ function drawBudgeting() {
         'aria-expanded="' + open + '">' +
         '<span class="bg-chev" aria-hidden="true">' + (open ? '▾' : '▸') + '</span>' +
         '<span class="swatch" style="background:' + colour + '"></span>' +
-        '<b>Income</b>' +
+        '<b>Income and spending</b>' +
         (open || !perMonth.some(v => v > 0) ? ''
           : '<span class="bg-mini">' + sparkline(perMonth, colour) + '</span>') +
-        '<span class="bg-annual">' + money(year) + ' a year</span>' +
-        (open ? '' : '<span class="bg-avg">' + money0(year / 12) + ' a month</span>') +
+        '<span class="bg-annual">' + money(year) + ' in, ' + money(t.spendYear) + ' out</span>' +
+        (open ? '' : '<span class="bg-avg">' + money0((year - t.spendYear) / 12) +
+          ' a month kept</span>') +
       '</button>' +
       (open
-        ? (year > 0
-            ? bgChart([inc], 'income') +
-              '<div class="bg-cap">Drag any block up or down to change that month' +
-              ' — hold Alt for dollar-by-dollar. Arrow keys work too.</div>'
-            : '') +
+        ? bgVsChart() +
+          bgLegend([
+            { slug: 'income', colour: bgData.income.colour, label: 'Income' },
+            { slug: '__spend', colour: null, label: 'Everything planned below' },
+          ]) +
+          '<div class="bg-cap">Drag an income block up or down to change that month' +
+          ' — hold Alt for dollar-by-dollar. Arrow keys work too. Spending is the' +
+          ' sum of the plans below and moves when they do.</div>' +
           '<div class="bg-kids">' + bgLeaf(inc) + '</div>'
         : '') +
     '</div>';
@@ -6735,6 +6755,135 @@ function bgScaleOf(rows) {
   return hi * BG_HEADROOM;
 }
 
+/**
+ * Income against everything planned against it, month by month.
+ *
+ * Two bars a month rather than one figure: what comes in, what is planned to
+ * go out, and the gap between their tops, which is what is kept. The single
+ * bar it replaces drew that gap as a height and left the reader to take on
+ * trust what it was a gap between — you could see saving fall without seeing
+ * whether income had dropped or spending had risen, which is the only
+ * question worth asking about it.
+ *
+ * The income bar is the one you can move. Spending is the sum of every plan
+ * below and cannot be edited here: it has a dozen places of its own where it
+ * can be, and a total that could be typed over would be a number arguing with
+ * the things it is made of.
+ */
+function bgVsScale() {
+  const t = bgTotals();
+  let hi = 1;
+  /* One ruler for both. Two bars measured against separate scales are two
+     pictures side by side, and every comparison a reader makes between them
+     is wrong. */
+  for (const m of bgData.months) {
+    hi = Math.max(hi, t.income[m] || 0, t.expense[m] || 0);
+  }
+  return hi * BG_HEADROOM;
+}
+
+/* Where the two bars of a month sit. Shared so the drawing and the re-fit
+   cannot drift apart — the re-fit moves what the drawing placed. */
+function bgVsGeom(i) {
+  const band = (BG_W - BG_PL * 2) / bgData.months.length;
+  const barW = Math.max(6, Math.min(19, band * 0.30));
+  const mid = BG_PL + band * i + band / 2;
+  return { band, barW, mid, xIn: mid - barW - 2, xOut: mid + 2 };
+}
+
+function bgVsChart() {
+  const t = bgTotals();
+  const hi = bgVsScale();
+  const nowIdx = bgData.months.indexOf(bgData.currentMonth);
+  const incColour = themed('income', bgData.income.colour);
+  const base = BG_PT + BG_PLOT;
+
+  /* data-kids and data-hi are what the drag reads, so the income bars here are
+     the same kind of object as the blocks in every other card: picked up,
+     dragged and typed into by machinery that does not know this chart exists. */
+  let svg = '<svg class="bg-svg-vs" viewBox="0 0 ' + BG_W + ' ' + BG_H +
+    '" width="100%" height="' + BG_H + '" preserveAspectRatio="none" ' +
+    'data-parent="income" data-kids="income" data-hi="' + hi.toFixed(2) + '">' +
+    reliefDefs('vs', [incColour]);
+
+  bgData.months.forEach((m, i) => {
+    const g = bgVsGeom(i);
+    const past = nowIdx >= 0 && i < nowIdx;
+    const iv = t.income[m], ov = t.expense[m];
+    const ih = iv > 0 ? Math.max(BG_MIN_SEG, (iv / hi) * BG_PLOT) : BG_MIN_SEG;
+    const oh = ov > 0 ? Math.max(BG_MIN_SEG, (ov / hi) * BG_PLOT) : BG_MIN_SEG;
+    const kept = t.savings[m];
+
+    svg +=
+      '<rect class="bg-seg' + (iv > 0 ? '' : ' empty') + (past ? ' past' : '') +
+        '" x="' + g.xIn.toFixed(1) + '" y="' + (base - ih).toFixed(1) +
+        '" width="' + g.barW.toFixed(1) + '" height="' + ih.toFixed(1) + '" rx="1.5" ' +
+        'fill="' + relief('vs', incColour) + '" style="--seg:' + incColour + '" ' +
+        'data-seg="income" data-month="' + m + '" ' +
+        'tabindex="' + (i === 0 ? '0' : '-1') + '" role="slider" aria-valuemin="0" ' +
+        'aria-valuenow="' + Math.round(iv / 100) + '" ' +
+        'aria-valuetext="' + escapeHtml(money(iv)) + '" ' +
+        'aria-label="Income, ' + escapeHtml(bgData.labels[i]) + '"></rect>' +
+      /* Not a .bg-seg, and deliberately: the drag finds what it can move by
+         that class, so spending is untouchable by construction rather than by
+         a guard somebody has to remember. */
+      '<rect class="bg-vs-out' + (past ? ' past' : '') + '" x="' + g.xOut.toFixed(1) +
+        '" y="' + (base - oh).toFixed(1) + '" width="' + g.barW.toFixed(1) +
+        '" height="' + oh.toFixed(1) + '" rx="1.5" data-vsout="' + m + '">' +
+        '<title>' + escapeHtml(bgData.labels[i]) + ' · ' + escapeHtml(money(ov)) +
+        ' planned to spend</title></rect>' +
+      '<text class="bg-vs-kept" data-vskept="' + m + '" x="' + g.mid.toFixed(1) +
+        '" y="' + (base - Math.max(ih, oh) - 6).toFixed(1) + '" text-anchor="middle" ' +
+        'fill="' + (kept >= 0 ? 'var(--mint)' : 'var(--coral)') + '">' +
+        escapeHtml(money0(kept)) + '</text>' +
+      '<text class="bg-vs-mlab" x="' + g.mid.toFixed(1) + '" y="' + (BG_H - 6) +
+        '" text-anchor="middle">' + escapeHtml(bgData.labels[i].slice(0, 3)) + '</text>';
+  });
+
+  return svg + '</svg>';
+}
+
+/* Geometry only, so a drag is not fighting a rebuild. Both bars and the figure
+   above them, because dragging income moves what is kept and editing any
+   category below moves the spending bar. */
+function bgVsFit(svg) {
+  const t = bgTotals();
+  const frozen = !!(bgDrag && bgDrag.svg === svg);
+  const hi = (frozen ? Number(svg.dataset.hi) : bgVsScale()) || 1;
+  if (!frozen) svg.dataset.hi = hi.toFixed(2);
+  const base = BG_PT + BG_PLOT;
+
+  bgData.months.forEach((m, i) => {
+    const g = bgVsGeom(i);
+    const iv = t.income[m], ov = t.expense[m];
+    const ih = iv > 0 ? Math.max(BG_MIN_SEG, (iv / hi) * BG_PLOT) : BG_MIN_SEG;
+    const oh = ov > 0 ? Math.max(BG_MIN_SEG, (ov / hi) * BG_PLOT) : BG_MIN_SEG;
+
+    const inBar = svg.querySelector('rect[data-seg="income"][data-month="' + m + '"]');
+    if (inBar) {
+      inBar.setAttribute('y', (base - ih).toFixed(1));
+      inBar.setAttribute('height', ih.toFixed(1));
+      inBar.setAttribute('aria-valuenow', String(Math.round(iv / 100)));
+      inBar.setAttribute('aria-valuetext', money(iv));
+      inBar.classList.toggle('empty', !(iv > 0));
+    }
+    const outBar = svg.querySelector('rect[data-vsout="' + m + '"]');
+    if (outBar) {
+      outBar.setAttribute('y', (base - oh).toFixed(1));
+      outBar.setAttribute('height', oh.toFixed(1));
+      const ttl = outBar.querySelector('title');
+      if (ttl) ttl.textContent = bgData.labels[i] + ' · ' + money(ov) + ' planned to spend';
+    }
+    const lab = svg.querySelector('text[data-vskept="' + m + '"]');
+    if (lab) {
+      const kept = t.savings[m];
+      lab.textContent = money0(kept);
+      lab.setAttribute('y', (base - Math.max(ih, oh) - 6).toFixed(1));
+      lab.setAttribute('fill', kept >= 0 ? 'var(--mint)' : 'var(--coral)');
+    }
+  });
+}
+
 function bgChart(kids, parentSlug) {
   const hi = bgScaleOf(kids);
   const band = (BG_W - BG_PL * 2) / bgData.months.length;
@@ -6795,7 +6944,11 @@ function bgChart(kids, parentSlug) {
 
 function bgLegend(kids) {
   return '<div class="bg-legend">' + kids.map(r =>
-    '<span class="bg-key"><i style="background:' + themed(r.slug, r.colour) + '"></i>' +
+    '<span class="bg-key"><i style="background:' +
+      /* A row with no colour of its own is not a category — the planned-
+         spending total is the only one — and takes the colour its bar is
+         drawn in rather than whatever themed() makes of a null. */
+      (r.colour === null ? 'var(--coral)' : themed(r.slug, r.colour)) + '"></i>' +
     escapeHtml(r.label) + '</span>').join('') + '</div>';
 }
 
@@ -6803,6 +6956,10 @@ function bgLegend(kids) {
    replace the element the pointer has captured and end the gesture, so nothing
    is rebuilt during a drag — the same rects are moved. */
 function bgFit(svg) {
+  /* The combined chart is laid out in pairs, not stacks, so the stacking fit
+     below would put its bars in the wrong place. Routed here rather than at
+     every call site, because there are three and one of them is a drag. */
+  if (svg.classList.contains('bg-svg-vs')) return bgVsFit(svg);
   /* Which block, if any, is being held right now — the handle goes on it and
      its figure steps aside to make room. */
   const held = (bgDrag && bgDrag.svg === svg)
@@ -6992,126 +7149,6 @@ const BG_AMT_MIN = 13;
  * result. The categories below are the inputs. This is the answer, and it moves
  * the moment any of them does.
  */
-const SV_W = 720, SV_H = 176, SV_PL = 2, SV_PT = 20, SV_PB = 22;
-const SV_PLOT = SV_H - SV_PT - SV_PB;
-
-function bgSavingsSeries() {
-  const t = bgTotals();
-  const nowIdx = bgData.months.indexOf(bgData.currentMonth);
-  const spentOf = (m) => bgData.categories.reduce((s, r) => s + (r.spent[m] || 0), 0);
-
-  return bgData.months.map((m, i) => {
-    /* A month counts as history only if there is income recorded against it.
-       The current month is half-lived and half-spent, so it is planned, not
-       reported — the same rule the budget engine learns by. */
-    const earned = bgData.income.spent ? bgData.income.spent[m] : undefined;
-    const past = nowIdx >= 0 && i < nowIdx && earned !== undefined;
-    return {
-      month: m, i, past,
-      value: past ? earned - spentOf(m) : t.savings[m],
-      income: past ? earned : bgPlanOf(bgData.income)[m],
-    };
-  });
-}
-
-function bgSaveScale(series) {
-  let hi = 0, lo = 0;
-  for (const s of series) { if (s.value > hi) hi = s.value; if (s.value < lo) lo = s.value; }
-  if (hi === 0 && lo === 0) hi = 1;
-  return { hi: hi * 1.18, lo: lo * 1.18 };     // headroom to drag into, both ways
-}
-
-const svY = (v, sc) => SV_PT + ((sc.hi - v) / ((sc.hi - sc.lo) || 1)) * SV_PLOT;
-
-function bgSaveChart() {
-  const series = bgSavingsSeries();
-  const sc = bgSaveScale(series);
-  const band = (SV_W - SV_PL * 2) / series.length;
-  const barW = Math.min(38, band * 0.56);
-  const zero = svY(0, sc);
-  const firstPlan = series.findIndex(s => !s.past);
-
-  let svg = '<svg class="bg-svg-save" viewBox="0 0 ' + SV_W + ' ' + SV_H + '" width="100%" ' +
-    'height="' + SV_H + '" preserveAspectRatio="none" data-hi="' + sc.hi.toFixed(2) +
-    '" data-lo="' + sc.lo.toFixed(2) + '">';
-
-  svg += '<line class="sv-zero" x1="0" x2="' + SV_W + '" y1="' + zero.toFixed(1) +
-    '" y2="' + zero.toFixed(1) + '"/>';
-
-  if (firstPlan > 0) {
-    const x = SV_PL + band * firstPlan;
-    svg += '<line class="sv-split" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) +
-      '" y1="' + SV_PT + '" y2="' + (SV_PT + SV_PLOT) + '"/>' +
-      '<text class="sv-era" x="' + (x - 6).toFixed(1) + '" y="' + (SV_PT - 8) +
-      '" text-anchor="end">actual</text>' +
-      '<text class="sv-era" x="' + (x + 6).toFixed(1) + '" y="' + (SV_PT - 8) +
-      '">planned</text>';
-  }
-
-  series.forEach((s) => {
-    const x = SV_PL + band * s.i + (band - barW) / 2;
-    const yv = svY(s.value, sc);
-    const top = Math.min(yv, zero), h = Math.max(1.5, Math.abs(yv - zero));
-    const good = s.value >= 0;
-    const fill = good ? 'var(--mint)' : 'var(--coral)';
-
-    svg += '<rect class="sv-bar ' + (s.past ? 'past' : 'plan') + '" data-sv="' + s.month + '" ' +
-      'x="' + x.toFixed(1) + '" y="' + top.toFixed(1) + '" width="' + barW.toFixed(1) +
-      '" height="' + h.toFixed(1) + '" rx="2" fill="' + fill + '" ' +
-      'opacity="' + (s.past ? '.95' : '.55') + '" ' +
-      'role="img" aria-label="' + escapeHtml(bgData.labels[s.i]) + ', ' +
-      (s.past ? 'actually kept ' : 'planned to keep ') + escapeHtml(money(s.value)) +
-      '"></rect>' +
-      '<text class="sv-val" data-svval="' + s.month + '" x="' + (x + barW / 2).toFixed(1) +
-      '" y="' + (good ? top - 4 : top + h + 9).toFixed(1) + '" text-anchor="middle" fill="' +
-      (good ? 'var(--mint)' : 'var(--coral)') + '">' + escapeHtml(money0(s.value)) + '</text>' +
-      '<text class="sv-mlab" x="' + (SV_PL + band * s.i + band / 2).toFixed(1) +
-      '" y="' + (SV_H - 6) + '" text-anchor="middle">' +
-      escapeHtml(bgData.labels[s.i].slice(0, 3)) + '</text>';
-  });
-
-  return '<div class="bg-save">' +
-    '<div class="bg-save-head"><h3>Kept, month by month</h3>' +
-    '<span class="bg-save-hint">Income less spending. Change a category below and ' +
-    'every month here follows.</span>' +
-    '</div>' + svg + '</svg></div>';
-}
-
-/* Geometry only, so a drag is not fighting a rebuild. */
-function bgSaveFit(svg) {
-  const series = bgSavingsSeries();
-  const sc = bgSaveScale(series);
-  svg.dataset.hi = sc.hi.toFixed(2);
-  svg.dataset.lo = sc.lo.toFixed(2);
-
-  const band = (SV_W - SV_PL * 2) / series.length;
-  const barW = Math.min(38, band * 0.56);
-  const zero = svY(0, sc);
-  const zl = svg.querySelector('.sv-zero');
-  if (zl) { zl.setAttribute('y1', zero.toFixed(1)); zl.setAttribute('y2', zero.toFixed(1)); }
-
-  series.forEach((s) => {
-    const bar = svg.querySelector('rect[data-sv="' + s.month + '"]');
-    const lab = svg.querySelector('text[data-svval="' + s.month + '"]');
-    if (!bar) return;
-    const yv = svY(s.value, sc);
-    const top = Math.min(yv, zero), h = Math.max(1.5, Math.abs(yv - zero));
-    const good = s.value >= 0;
-    bar.setAttribute('y', top.toFixed(1));
-    bar.setAttribute('height', h.toFixed(1));
-    bar.setAttribute('fill', good ? 'var(--mint)' : 'var(--coral)');
-    bar.setAttribute('aria-label', bgData.labels[s.i] + ', ' +
-      (s.past ? 'actually kept ' : 'planned to keep ') + money(s.value));
-    if (lab) {
-      lab.textContent = money0(s.value);
-      lab.setAttribute('y', (good ? top - 4 : top + h + 9).toFixed(1));
-      lab.setAttribute('fill', good ? 'var(--mint)' : 'var(--coral)');
-    }
-  });
-}
-
-
-
 /* The readout that follows the block being moved.
  *
  * It borrows the chart tooltip's styling so it reads as the same object as the
@@ -7282,8 +7319,11 @@ function bgLive() {
   const charts = bgDrag ? [bgDrag.svg] : $('bg-list').querySelectorAll('.bg-svg');
   for (const svg of charts) bgFit(svg);
 
-  const sv = $('bg-hero').querySelector('.bg-svg-save');
-  if (sv) bgSaveFit(sv);
+  /* The combined chart is not one of the .bg-svg cards above, and its spending
+     bar is the sum of every one of them — so it has to be re-fitted whenever
+     any of them moves, not only when it is the one being dragged. */
+  const vs = $('bg-list').querySelector('.bg-svg-vs');
+  if (vs && !(bgDrag && bgDrag.svg === vs)) bgVsFit(vs);
 
   // Each parent's annual figure, read off the card rather than off its chart,
   // because a shut card has no chart and still has a figure.
