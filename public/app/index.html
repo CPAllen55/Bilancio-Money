@@ -8662,8 +8662,28 @@ let pieTxCache = {};
  * With nothing selected above it takes the biggest one in view, which is where
  * the reader was going to look first anyway. Selecting a bar above moves it.
  */
+/**
+ * What the donut is about.
+ *
+ * The order matters, and it follows how specific each answer is.
+ *
+ * A selection first: naming one category in the key is the most direct thing
+ * a reader can say about what they want to see.
+ *
+ * Then the category being looked inside. Clicking a parent in the key focuses
+ * the chart on it AND clears the selection on purpose -- a selection dims
+ * everything that is not it, and arriving inside a category with its own
+ * parent selected would dim the whole thing you just asked to see. So focusing
+ * leaves nothing in trendSel, and reading trendSel alone left the donut behind
+ * on whatever it had been showing while every other panel moved.
+ *
+ * Only then the fallback: the biggest parent in the window. That is a guess at
+ * what somebody would want to look at before they have said, which is what a
+ * default is, and it should never outrank something they actually did say.
+ */
 function pieParent() {
   if (trendSel && trendSel.cat) return trendSel.cat;
+  if (trendFocus) return trendFocus;
   if (!trendData) return null;
   const totals = {};
   for (const m of trendData.all.slice(trendOffset, trendOffset + trendVisible)) {
