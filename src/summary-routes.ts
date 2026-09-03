@@ -455,6 +455,45 @@ async function ownedAccountIds(
     .map((r) => r.id);
 }
 
+/**
+ * The rows every figure in this file is built from.
+ *
+ * One function because the alternative was four copies of the same three
+ * conditions, and four copies of a condition are four chances to disagree —
+ * which is exactly what happened. The totals excluded pending transactions and
+ * the transactions list did not, so a September that had $793.65 in the ledger
+ * showed $184 on the Overview, and a category bar read "$0 spent" directly
+ * above the $499.19 charge it was refusing to count.
+ *
+ * ── Pending rows count ──────────────────────────────────────────────────────
+ *
+ * They are money that has left, or is leaving, and the bank already counts
+ * them: Plaid's `current` balance includes pending charges, which is why Net
+ * Worth has always included them too. Excluding them from spending meant every
+ * month was understated for as long as its newest charges took to settle —
+ * worst in the first days of a month, which is exactly when somebody is
+ * looking to see how the month is going.
+ *
+ * The objection to counting them is that a pending amount can still change: a
+ * fuel hold settles at a different figure, a restaurant adds a tip. That is
+ * real and it is much the smaller error. A figure that is briefly approximate
+ * beats one that is confidently wrong, and it self-corrects — sync replaces the
+ * pending row with the settled one and deletes the original by id, so nothing
+ * is ever counted twice.
+ *
+ * The one place that still wants settled rows only is the recurring rule, which
+ * reads amounts and dates to decide whether a charge repeats and can use
+ * neither until they are final. It says so where it asks.
+ */
+function ledgerRows(accountIds: string[], from?: Date | string, to?: Date | string) {
+  const ymdOf = (d: Date | string) => (typeof d === "string" ? d : ymd(d));
+  return and(
+    inArray(transactions.accountId, accountIds),
+    from ? gte(transactions.date, ymdOf(from)) : undefined,
+    to ? lte(transactions.date, ymdOf(to)) : undefined,
+  );
+}
+
 const rowFields = {
   id: transactions.id,
   amount: transactions.amount,
@@ -560,8 +599,12 @@ async function subscriptionsFor(
         inArray(transactions.accountId, ids),
         gte(transactions.date, ymd(from)),
         inArray(displayName, names),
-        // A charge that has not settled has neither a final amount nor a final
-        // date, and the rule reads both.
+        /* The one place in this file that excludes pending, and the only one
+           that should: this rule decides whether a charge repeats by comparing
+           amounts and the gaps between dates, and a charge that has not settled
+           has a final version of neither. It is a question about the shape of a
+           history, not a figure anybody adds up, so leaving a row out here does
+           not put a total out of step with the ledger. */
         eq(transactions.pending, false),
       ),
     )
@@ -707,13 +750,7 @@ summary.get("/summary", async (c) => {
     /* Named rather than inlined so the splits can be fetched against the very
        same predicate. Two conditions that have to select the same rows and are
        written out twice are two conditions that will one day differ. */
-    const windowWhere = (w: Window) =>
-      and(
-        inArray(transactions.accountId, ids),
-        gte(transactions.date, ymd(w.start)),
-        lte(transactions.date, ymd(w.end)),
-        eq(transactions.pending, false),
-      );
+    const windowWhere = (w: Window) => ledgerRows(ids, w.start, w.end);
 
     const inWindow = (w: Window) =>
       ids.length
@@ -821,13 +858,12 @@ summary.get("/transactions", async (c) => {
 
     // The period, and nothing else. The description menu is built from this, so
     // that choosing one name does not collapse the menu to that single name.
+    /* The same function the totals use. This list is what somebody checks a
+       total against, so "the rows on this page" and "the rows in that figure"
+       have to be one definition rather than two that look alike. */
     const inPeriod = allTime
-      ? inArray(transactions.accountId, ids)
-      : and(
-          inArray(transactions.accountId, ids),
-          gte(transactions.date, ymd(current.start)),
-          lte(transactions.date, ymd(current.end)),
-        );
+      ? ledgerRows(ids)
+      : ledgerRows(ids, current.start, current.end);
 
     /* Any part of a description, not the whole of it.
      *
@@ -1150,9 +1186,7 @@ export async function monthlyBuckets(
     )
     .where(
       and(
-        inArray(transactions.accountId, accountIds),
-        gte(transactions.date, `${span[0]}-01`),
-        eq(transactions.pending, false),
+        ledgerRows(accountIds, `${span[0]}-01`),
         /* Split transactions are held back and counted one at a time below.
            This query collapses many transactions into one row per month,
            category and merchant, and a split is a fact about a single
@@ -1210,11 +1244,7 @@ export async function monthlyBuckets(
 
   /* The second pass: the transactions held back above, counted whole rather
      than grouped, so each of their parts can go where it belongs. */
-  const splitWhere = and(
-    inArray(transactions.accountId, accountIds),
-    gte(transactions.date, `${span[0]}-01`),
-    eq(transactions.pending, false),
-  );
+  const splitWhere = ledgerRows(accountIds, `${span[0]}-01`);
   const splits = await loadSplits(db, userId, splitWhere);
 
   if (splits.size) {
