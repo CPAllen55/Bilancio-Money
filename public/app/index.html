@@ -5650,27 +5650,43 @@ function drawTrend() {
    * Compared over the months that have a counterpart a year ago and no
    * further: with the projection on, the window runs past where last year's
    * record stops, and totalling a projected month against nothing would report
-   * a saving that is really just the end of the data. */
+   * a saving that is really just the end of the data.
+   *
+   * It follows a picked month. Otherwise the card and the panel beside it
+   * would be answering for different stretches of time at the same size on the
+   * same screen — the biggest figure on the page saying "six months" while the
+   * list under it says "August" — and the reader would have to check a label
+   * to know which of the two the number in front of them belongs to. Same
+   * arithmetic either way: the months counted are the only thing that changes,
+   * which is the same rule the panel already follows. */
   const kpi = $('trend-kpi');
   if (kpi) {
-    const cmp = Math.min(all.length, prior.length);
+    const at = trendMonth ? all.findIndex(m => m.month === trendMonth) : -1;
+    /* A month with no counterpart a year ago still has a figure worth showing;
+       what it has no business showing is a comparison. wasSum stays zero and
+       the delta line is left off, exactly as it is for a window that runs past
+       the end of last year's record. */
+    const span = at >= 0 ? [at] : Array.from({ length: Math.min(all.length, prior.length) }, (_, i) => i);
     let nowSum = 0, wasSum = 0;
-    for (let i = 0; i < cmp; i++) {
+    for (const i of span) {
       nowSum += shownTotal(trendSegments(all[i]), trendOff);
-      wasSum += shownTotal(trendSegments(prior[i]), trendOff);
+      if (prior[i]) wasSum += shownTotal(trendSegments(prior[i]), trendOff);
     }
-    if (!cmp) kpi.hidden = true;
+    if (!span.length) kpi.hidden = true;
     else {
       const d = nowSum - wasSum;
+      const cmp = span.length;
       kpi.innerHTML =
-        '<div class="kpi-label">' +
-          (cmp === all.length ? 'Last ' + cmp + ' months' : cmp + ' months compared') +
+        '<div class="kpi-label">' + escapeHtml(
+          at >= 0 ? monthLabel(trendMonth)
+          : cmp === all.length ? 'Last ' + cmp + ' months'
+          : cmp + ' months compared') +
         '</div>' +
         '<div class="kpi-value">' + money0(nowSum) + '</div>' +
         (wasSum
           ? '<div class="kpi-delta ' + (d > 0 ? 'over' : d < 0 ? 'under' : 'flat') + '">' +
             (d > 0 ? '+' : d < 0 ? '\u2212' : '') + money0(Math.abs(d)) +
-            ' vs prior year</div>'
+            (at >= 0 ? ' vs a year earlier' : ' vs prior year') + '</div>'
           : '');
       kpi.hidden = false;
     }
