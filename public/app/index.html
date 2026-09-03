@@ -1258,8 +1258,24 @@
 
      Not a .bg-seg, so it takes no pointer: the only thing draggable in this
      chart is the half of it that can be planned here. */
-  .bg-vs-out{ fill:var(--coral); opacity:.85; pointer-events:none; }
+  /* The spending bar. Coral because that is what money going out is drawn in
+     everywhere else in this app, and shaded from the same gradient builder the
+     income bar uses — the fill arrives as an attribute, so no fill is set here
+     or the stylesheet would win and flatten it back.
+
+     Still not a .bg-seg: the drag finds what it can move by that class, so
+     spending stays unplannable here by construction rather than by a guard.
+     It takes the pointer all the same, because answering a question is not
+     the same as being draggable. */
+  .bg-vs-out{ opacity:.85; cursor:default; pointer-events:all;
+              transition:filter .12s ease, opacity .12s ease; }
   .bg-vs-out.past{ opacity:.5; }
+  /* Lit the way Trend lights a segment: brighter, and glowing in its own
+     colour rather than a borrowed highlight, so what lights up is recognisably
+     the thing under the cursor. A past month comes back to full while it is
+     hovered — it is dimmed for being over, not for being unreadable. */
+  .bg-vs-out:hover{ opacity:1; filter:brightness(1.28)
+                    drop-shadow(0 0 5px var(--seg)) drop-shadow(0 0 11px var(--seg)); }
   /* The difference between the two bars, filled in.
 
      Light enough that the bars stay the loud thing — it is the space between
@@ -1267,11 +1283,14 @@
      which is what the month keeps; coral where spending is, which is what it
      goes under by. Its own title carries the figure, so the band can be asked
      what it is worth without hunting for the column below. */
-  .bg-vs-gap{ pointer-events:none; }
+  /* The band takes the pointer too, so the gap can be asked what it is worth.
+     It is drawn before the bars, so they are on top of it wherever they
+     overlap and a bar is never answered for by the space beside it. */
+  .bg-vs-gap{ pointer-events:all; cursor:default;
+              transition:opacity .12s ease; }
   .bg-vs-gap.up{ fill:var(--mint); opacity:.20; }
   .bg-vs-gap.down{ fill:var(--coral); opacity:.22; }
-  .bg-vs-mlab{ font-family:var(--font-num); font-size:10.5px; fill:var(--muted);
-               pointer-events:none; }
+  .bg-vs-gap:hover{ opacity:.42; }
   .bg-svg-vs{ display:block; width:100%; margin-top:6px; overflow:visible; }
 
   /* The three figures for each month, under the month.
@@ -1287,17 +1306,47 @@
                font-family:var(--font-num); }
   .bg-vs-col{ display:flex; flex-direction:column; align-items:center; gap:1px;
               min-width:0; }
-  .bg-vs-col span{ font-size:10px; line-height:1.35; white-space:nowrap;
-                   overflow:hidden; text-overflow:ellipsis; max-width:100%; }
-  .bg-vs-col .in{ color:var(--mint); }
-  .bg-vs-col .out{ color:var(--coral); }
+  /* The month, in the muted grey every other axis label in this app uses. */
+  .bg-vs-col b{ font-size:10px; font-weight:500; color:var(--muted);
+                letter-spacing:.04em; line-height:1.5; }
+
+  /* Set the way Trend sets a figure: 500 at 12px in full ink.
+
+     These were 10px in mint and coral, which is where light mode went wrong.
+     Tinted text has to clear the page on its own, and light --mint and --coral
+     both measure 5.34:1 on a card — over the 4.5 line, but only just, and at
+     10px "just" is not a margin. Against the same card --ink is 15.42:1.
+
+     So the colour moves off the glyphs and onto a swatch, which is what Trend
+     does and what colour is good at: a solid block of it is legible at any
+     contrast, a hairline of it at 10px is not. The figures are then all ink,
+     and it is the dot that says which bar each one belongs to. */
+  .bg-vs-col span{ font:500 12px/1.3 var(--font-num); color:var(--ink);
+                   display:flex; align-items:center; justify-content:center;
+                   gap:4px; white-space:nowrap; overflow:hidden;
+                   text-overflow:ellipsis; max-width:100%; }
+  .bg-vs-col span::before{ content:""; flex:0 0 auto; width:5px; height:5px;
+                           border-radius:50%; background:var(--dot,currentColor); }
   /* What is left is the answer the other two are asked for, so it is the one
      in full ink and the one with a rule over it. */
-  .bg-vs-col .kept{ font-weight:600; margin-top:1px; padding-top:2px;
-                    border-top:1px solid var(--hair); width:100%;
-                    text-align:center; }
+  /* What is left is the answer the other two are asked for, so it carries the
+     rule and the weight — and no dot, because it is not one of the bars. */
+  .bg-vs-col .kept{ font-weight:600; margin-top:1px; padding-top:3px;
+                    border-top:1px solid var(--hair); width:100%; }
+  .bg-vs-col .kept::before{ display:none; }
   .bg-vs-col .kept.up{ color:var(--ink); }
-  .bg-vs-col .kept.down{ color:var(--coral); }
+  /* Going under is the one figure that earns a colour of its own, and it earns
+     it by being the exception rather than one of a pair. */
+  .bg-vs-col .kept.down{ color:var(--coral); font-weight:700; }
+  /* Twelve columns at twelve pixels want about 690 of card to sit in. Between
+     that and the point where they are dropped altogether they give up a little
+     size rather than ellipsizing, which is the one failure that turns a figure
+     into a wrong figure rather than an unreadable one. */
+  @media (max-width:900px){
+    .bg-vs-col span{ font-size:11px; gap:3px; }
+    .bg-vs-col span::before{ width:4px; height:4px; }
+    .bg-vs-col b{ font-size:9.5px; }
+  }
   /* Below this the twelve columns stop holding a figure each. The chart still
      says the shape; the numbers are in the month boxes under it either way. */
   @media (max-width:720px){ .bg-vs-cols{ display:none; } }
@@ -1383,8 +1432,11 @@
   .bg-seg{ cursor:ns-resize; transition:filter .12s ease; }
   .bg-seg.past{ opacity:.42; }
   .bg-seg.empty{ opacity:.16; }
-  .bg-seg:hover{ stroke:var(--ink); stroke-width:1.2;
-                 filter:drop-shadow(0 0 5px var(--seg)) drop-shadow(0 0 11px var(--seg)); }
+  /* The lift Trend gives a segment, which this chart had the glow of but not
+     the brightness: a shadow around an unchanged fill reads as an outline,
+     where a fill that also brightens reads as the thing itself responding. */
+  .bg-seg:hover{ stroke:var(--ink); stroke-width:1.2; filter:brightness(1.28)
+                 drop-shadow(0 0 5px var(--seg)) drop-shadow(0 0 11px var(--seg)); }
   .bg-seg:focus{ outline:none; stroke:var(--ink); stroke-width:1.8;
                  filter:drop-shadow(0 0 5px var(--seg)); }
   .bg-svg.dragging .bg-seg:not(.on){ opacity:.28; filter:none; }
@@ -6755,6 +6807,10 @@ function bgMonths(row, plan) {
 /* The top padding is where the monthly totals sit; the plot keeps the height
    it had rather than losing 16 pixels to them. */
 const BG_W = 720, BG_H = 250, BG_PL = 2, BG_PT = 24, BG_PB = 22;
+/* The income-and-spending plot carries no text at all, so it needs no room
+   under the baseline for a month — its months are set in HTML below it. A few
+   pixels are kept for the glow a hovered bar throws downward. */
+const BG_VS_H = BG_H - BG_PB + 4;
 const BG_PLOT = BG_H - BG_PT - BG_PB;
 /* A block has to be big enough to get hold of, so a small one is drawn at a
    floor rather than at its true height, and a month with nothing in it still
@@ -6830,15 +6886,22 @@ function bgVsChart() {
   const hi = bgVsScale();
   const nowIdx = bgData.months.indexOf(bgData.currentMonth);
   const incColour = themed('income', bgData.income.colour);
+  /* Read from the theme rather than written here, so the shade turns over with
+     everything else when the theme does. reliefDefs builds a gradient only for
+     a six-digit hex and a CSS variable is not one: passing var(--coral)
+     straight through got a flat bar beside a shaded one, which reads as a bug
+     rather than as a decision. */
+  const outColour = (getComputedStyle(document.documentElement)
+    .getPropertyValue('--coral') || '').trim() || '#C93B52';
   const base = BG_PT + BG_PLOT;
 
   /* data-kids and data-hi are what the drag reads, so the income bars here are
      the same kind of object as the blocks in every other card: picked up,
      dragged and typed into by machinery that does not know this chart exists. */
-  let svg = '<svg class="bg-svg-vs" viewBox="0 0 ' + BG_W + ' ' + BG_H +
-    '" width="100%" height="' + BG_H + '" preserveAspectRatio="none" ' +
+  let svg = '<svg class="bg-svg-vs" viewBox="0 0 ' + BG_W + ' ' + BG_VS_H +
+    '" width="100%" height="' + BG_VS_H + '" preserveAspectRatio="none" ' +
     'data-parent="income" data-kids="income" data-hi="' + hi.toFixed(2) + '">' +
-    reliefDefs('vs', [incColour]);
+    reliefDefs('vs', [incColour, outColour]);
 
   bgData.months.forEach((m, i) => {
     const g = bgVsGeom(i);
@@ -6866,9 +6929,10 @@ function bgVsChart() {
       svg += '<rect class="bg-vs-gap ' + (kept >= 0 ? 'up' : 'down') + '" ' +
         'x="' + g.xIn.toFixed(1) + '" y="' + hiTop.toFixed(1) + '" width="' +
         (g.xOut + g.barW - g.xIn).toFixed(1) + '" height="' + (loTop - hiTop).toFixed(1) +
-        '" data-vsgap="' + m + '"><title>' + escapeHtml(bgData.labels[i]) + ' · ' +
-        escapeHtml(money(Math.abs(kept))) + (kept >= 0 ? ' kept' : ' over') +
-        '</title></rect>';
+        '" data-vsgap="' + m + '" ' +
+        tipAttrs(kept >= 0 ? 'Kept' : 'Over by', m, Math.abs(kept), 0,
+          kept >= 0 ? 'income above everything planned'
+                    : 'planned to spend more than comes in') + '></rect>';
     }
 
     svg +=
@@ -6876,6 +6940,10 @@ function bgVsChart() {
         '" x="' + g.xIn.toFixed(1) + '" y="' + (base - ih).toFixed(1) +
         '" width="' + g.barW.toFixed(1) + '" height="' + ih.toFixed(1) + '" rx="1.5" ' +
         'fill="' + relief('vs', incColour) + '" style="--seg:' + incColour + '" ' +
+        /* The same box the Trend chart raises, from the same builder. A bar
+           that stays silent while the ones a tab away answer does not read as
+           a quieter bar, it reads as a broken one. */
+        tipAttrs('Income', m, iv, iv + ov, 'planned for this month') + ' ' +
         'data-seg="income" data-month="' + m + '" ' +
         'tabindex="' + (i === 0 ? '0' : '-1') + '" role="slider" aria-valuemin="0" ' +
         'aria-valuenow="' + Math.round(iv / 100) + '" ' +
@@ -6886,11 +6954,10 @@ function bgVsChart() {
          a guard somebody has to remember. */
       '<rect class="bg-vs-out' + (past ? ' past' : '') + '" x="' + g.xOut.toFixed(1) +
         '" y="' + (base - oh).toFixed(1) + '" width="' + g.barW.toFixed(1) +
-        '" height="' + oh.toFixed(1) + '" rx="1.5" data-vsout="' + m + '">' +
-        '<title>' + escapeHtml(bgData.labels[i]) + ' · ' + escapeHtml(money(ov)) +
-        ' planned to spend</title></rect>' +
-      '<text class="bg-vs-mlab" x="' + g.mid.toFixed(1) + '" y="' + (BG_H - 6) +
-        '" text-anchor="middle">' + escapeHtml(bgData.labels[i].slice(0, 3)) + '</text>';
+        '" height="' + oh.toFixed(1) + '" rx="1.5" ' +
+        'fill="' + relief('vs', outColour) + '" style="--seg:' + outColour + '" ' +
+        tipAttrs('Everything planned', m, ov, iv + ov, 'the sum of the plans below') +
+        ' data-vsout="' + m + '"></rect>';
   });
 
   return svg + '</svg>' + bgVsCols();
@@ -6911,15 +6978,35 @@ function bgVsChart() {
  */
 function bgVsCols() {
   const t = bgTotals();
+  /* The same two colours the bars are drawn in, read the same way they are.
+
+     A swatch is only worth having if it names the thing it sits beside, and
+     these nearly did not: --mint and themed('income') are the same green on
+     the dark theme and two different greens on the light one, so the dot was
+     right by accident in one theme and quietly wrong in the other. */
+  const dotIn = themed('income', bgData.income.colour);
+  const dotOut = (getComputedStyle(document.documentElement)
+    .getPropertyValue('--coral') || '').trim() || '#C93B52';
   return '<div class="bg-vs-cols" style="grid-template-columns:repeat(' +
     bgData.months.length + ',minmax(0,1fr))">' +
     bgData.months.map((m, i) => {
       const kept = t.savings[m];
       return '<div class="bg-vs-col" data-vscol="' + m + '">' +
-        '<span class="in" data-vsfin="' + m + '" title="Income planned for ' +
-          escapeHtml(bgData.labels[i]) + '">' + escapeHtml(money0(t.income[m])) + '</span>' +
-        '<span class="out" data-vsfout="' + m + '" title="Planned to spend in ' +
-          escapeHtml(bgData.labels[i]) + '">' + escapeHtml(money0(t.expense[m])) + '</span>' +
+        /* The month came out of the plot along with the figures.
+
+           This chart stretches to its card — preserveAspectRatio "none" is
+           what lets three months fill the width twelve do — and text inside it
+           stretches with it, so a label was a different shape on every window
+           width. Trend's charts fit rather than stretch and their labels are
+           the same shape everywhere; this arrives at that by taking the text
+           out rather than by changing how the plot scales. */
+        '<b>' + escapeHtml(bgData.labels[i].slice(0, 3)) + '</b>' +
+        '<span class="in" data-vsfin="' + m + '" style="--dot:' + dotIn +
+          '" title="Income planned for ' + escapeHtml(bgData.labels[i]) + '">' +
+          escapeHtml(money0(t.income[m])) + '</span>' +
+        '<span class="out" data-vsfout="' + m + '" style="--dot:' + dotOut +
+          '" title="Planned to spend in ' + escapeHtml(bgData.labels[i]) + '">' +
+          escapeHtml(money0(t.expense[m])) + '</span>' +
         '<span class="kept ' + (kept >= 0 ? 'up' : 'down') + '" data-vsfkept="' + m +
           '" title="' + (kept >= 0 ? 'Kept in ' : 'Over by, in ') +
           escapeHtml(bgData.labels[i]) + '">' + escapeHtml(money0(kept)) + '</span>' +
@@ -6967,9 +7054,21 @@ function bgVsFit(svg) {
       gap.setAttribute('height', Math.max(0, loTop - hiTop).toFixed(1));
       gap.classList.toggle('up', kept >= 0);
       gap.classList.toggle('down', kept < 0);
-      const ttl = gap.querySelector('title');
-      if (ttl) ttl.textContent = bgData.labels[i] + ' · ' + money(Math.abs(kept)) +
-        (kept >= 0 ? ' kept' : ' over');
+    }
+
+    /* The hover box reads these attributes at the moment the pointer moves,
+       and a drag moves the pointer — so a bar whose figures were not kept up
+       to date would answer with the number it had before the drag began while
+       sitting at its new height. */
+    const ibar = svg.querySelector('rect[data-seg="income"][data-month="' + m + '"]');
+    const obar = svg.querySelector('rect[data-vsout="' + m + '"]');
+    if (ibar) { ibar.dataset.tipAmount = iv; ibar.dataset.tipOf = iv + ov; }
+    if (obar) { obar.dataset.tipAmount = ov; obar.dataset.tipOf = iv + ov; }
+    if (gap) {
+      gap.dataset.tipLabel = kept >= 0 ? 'Kept' : 'Over by';
+      gap.dataset.tipAmount = Math.abs(kept);
+      gap.dataset.tipNote = kept >= 0 ? 'income above everything planned'
+                                      : 'planned to spend more than comes in';
     }
 
     /* The figures are outside the SVG, so they are found from it rather than
