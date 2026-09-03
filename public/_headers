@@ -27,19 +27,52 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
 
-# The document itself, wherever it is served from.
+# ── The documents ───────────────────────────────────────────────────────
+#
+# Three headers saying one thing, because the edge was reading the first and
+# doing as it pleased: every response for /app/ came back
+# `Cache-Control: no-store` AND `CF-Cache-Status: HIT`, which is Cloudflare
+# storing a document it was told not to store.
+#
+# They are not duplicates. Cache-Control is the instruction to the browser,
+# CDN-Cache-Control is the instruction to any intermediate cache, and
+# Cloudflare-CDN-Cache-Control is Cloudflare's own and outranks both at its
+# edge. Sending only the first left the one cache that was misbehaving as the
+# one cache that had never been addressed directly.
+#
+# Why it matters more than a stale page: edge caches are per-location. A
+# deploy can be current in one city and a week old in another, so "I can see
+# it" and "I cannot" are both true at once and neither tells you anything.
+# That is not a cache problem, it is a problem with knowing whether a change
+# shipped.
+#
+# If HIT survives this, the cause is upstream of the origin's headers — a
+# Cache Rule with Edge TTL set to ignore cache-control, which overrides all
+# three and can only be changed in the dashboard.
 /
   Cache-Control: no-store, must-revalidate
+  CDN-Cache-Control: no-store
+  Cloudflare-CDN-Cache-Control: no-store
 /index.html
   Cache-Control: no-store, must-revalidate
+  CDN-Cache-Control: no-store
+  Cloudflare-CDN-Cache-Control: no-store
 /app/
   Cache-Control: no-store, must-revalidate
+  CDN-Cache-Control: no-store
+  Cloudflare-CDN-Cache-Control: no-store
 /app/index.html
   Cache-Control: no-store, must-revalidate
+  CDN-Cache-Control: no-store
+  Cloudflare-CDN-Cache-Control: no-store
 /privacy/
   Cache-Control: no-store, must-revalidate
+  CDN-Cache-Control: no-store
+  Cloudflare-CDN-Cache-Control: no-store
 /terms/
   Cache-Control: no-store, must-revalidate
+  CDN-Cache-Control: no-store
+  Cloudflare-CDN-Cache-Control: no-store
 
 # Named assets. These are replaced by adding a file, never by editing one.
 /brand/*
