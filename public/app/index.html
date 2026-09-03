@@ -935,6 +935,10 @@
   .kbar u{ position:absolute; top:-2px; bottom:-2px; width:2px; border-radius:1px;
            background:var(--ink); opacity:.5; }
   .kitem.over .kbar u{ background:var(--coral); opacity:.95; }
+  /* A track with no plan behind it. Hollow rather than filled, so a bar that
+     answers "how much of the budget" and one that answers "how big is this
+     next to the others" are not the same object in two different meanings. */
+  .kbar.noplan{ background:none; box-shadow:inset 0 0 0 1px var(--hair); }
   .panel-box .ktotal{ padding:13px 15px; background:var(--bg-panel);
                       border-bottom:0; margin:0; }
   .panel-box .kitem.static{ padding:9px 15px; }
@@ -4699,21 +4703,46 @@ function keyList(rows, off, scope, totalLabel, opts) {
        gets no share bar. The bar says how much of the whole this row is, and
        for the category everything else is inside, the answer is all of it —
        a full-width bar over a list of the parts it is made of. */
+    /* The track is the budget and the fill is what was spent against it, which
+       is the question this list is actually asked: not "which of these is
+       biggest" — the figures beside them say that — but "how is each one
+       doing". A category at 40% of its plan and one at 95% read apart at a
+       glance even when the second is the smaller number.
+
+       Over the plan, the track becomes what was spent and the budget appears
+       as a mark inside it, so the fill visibly passes the line. Under it there
+       is no mark, because the end of the track IS the budget and drawing a
+       line there says the same thing twice.
+
+       Where there is no plan — every subcategory, since a budget is set per
+       parent, and any category nobody has budgeted — the bar falls back to
+       what it always was: this row against the largest row. The two cannot be
+       told apart by length, so the track says which it is, and the tooltip
+       says it in words. */
+    const planned = r.budget > 0;
+    const past = planned && r.amount > r.budget;
+    const fill = r.heading ? 100
+      : !planned ? Math.max(2, Math.round((r.amount / widest) * 100))
+      : past ? 100
+      : Math.max(2, Math.round((r.amount / r.budget) * 100));
+    const mark = past ? (r.budget / r.amount) * 100 : null;
+    /* A heading is neither measured against a plan nor against the largest
+       row: its bar is full because it is everything the list adds up to. It
+       must not be dressed as the no-plan case, which would have it saying
+       "no budget set" about a category that has one. */
+    const barTitle = r.heading
+      ? escapeHtml(money0(r.amount)) + ' — everything shown here'
+      : !planned
+      ? escapeHtml(r.label) + ' — no budget set, shown against the largest here'
+      : escapeHtml(money0(r.amount)) + ' of ' + escapeHtml(money0(r.budget)) +
+        (past ? ' — over by ' + escapeHtml(money0(r.amount - r.budget)) : '');
     const inner = opts.bars
       ? '<span class="krow1">' + plain + '</span>' +
-        '<span class="kbar"><i style="width:' +
-          /* A heading is everything the list under it adds up to, so its bar is
-             full. Measured against widest it would come out over 100% — it is
-             larger than the largest row by construction — and a bar wider than
-             its own track is a bar that has stopped meaning anything. */
-          (r.heading ? 100 : Math.max(2, Math.round((r.amount / widest) * 100))) + '%;background:' +
-          r.colour + '"></i>' +
-          /* Only where there is a budget to mark, and only where it lands on
-             the track — a mark past the end of it would point at nothing. */
-          (r.budget > 0 && r.budget <= widest
-            ? '<u style="left:calc(' + ((r.budget / widest) * 100).toFixed(1) +
-              '% - 1px)" title="Budget ' + escapeHtml(money0(r.budget)) + '"></u>'
-            : '') +
+        '<span class="kbar' + (planned || r.heading ? '' : ' noplan') + '" title="' + barTitle + '">' +
+        '<i style="width:' + fill + '%;background:' + r.colour + '"></i>' +
+          (mark === null ? ''
+            : '<u style="left:calc(' + mark.toFixed(1) + '% - 1px)" title="Budget ' +
+              escapeHtml(money0(r.budget)) + '"></u>') +
         '</span>'
       : plain;
     const body = r.pick
@@ -5331,17 +5360,33 @@ function drawTrend() {
      the row under the axis does: their budget was learned from them, so
      anything else compares a figure with an average of itself. */
   const budgetTotals = {};
+  /* Which categories the plan actually names.
+
+     Needed because of the rule directly above. A month already lived
+     contributes what it cost, so EVERY category ends up with a figure here,
+     including ones nobody has budgeted — and that figure is its own past
+     spending. Since its actual is that same past plus the month in progress,
+     it comes out over by exactly this month, every time. Left alone that marks
+     most of the list as overspent and the mark stops meaning anything.
+
+     A category is planned when the forecast names it for a month not yet lived
+     through. For those, the budget is what the past cost plus what this month
+     is meant to cost, which is the comparison worth making. For the rest there
+     is no budget, and the bar says so rather than inventing one. */
+  const planned = new Set();
   if (trendData.budget) {
     for (const m of all) {
       const b = trendData.budget[m.month];
       const lived = trendData.currentMonth && m.month < trendData.currentMonth;
       const src = lived ? m.byParent : (b ? b.byParent : null);
       if (!src) continue;
+      if (!lived && b) for (const id of Object.keys(b.byParent)) planned.add(id);
       for (const [id, v] of Object.entries(src)) {
         if (v > 0) budgetTotals[id] = (budgetTotals[id] || 0) + v;
       }
     }
   }
+  const budgetFor = (id) => (planned.has(id) ? budgetTotals[id] || 0 : 0);
 
   /* One row, at whatever level it belongs to. The figures are the same
      arithmetic for a parent and for a child, because by the time they get here
@@ -5352,10 +5397,14 @@ function drawTrend() {
     // else does — identity colours stay the source of truth everywhere else.
     slug: id, label: labelOfSlug(id), colour: colourOf(id),
     amount: totals[id] || 0, amount_text: money0(totals[id] || 0),
-    budget: budgetTotals[id] || 0,
-    change: priorTotals[id]
-      ? Math.round((((totals[id] || 0) - priorTotals[id]) / priorTotals[id]) * 100)
-      : null,
+    budget: budgetFor(id),
+    /* No year-on-year percentage on the row. It cost 56px of a 176px key —
+       a third of the width — to say something the LAST YR and CHANGE rows
+       under the axis already say per month, and it was squeezing the one
+       thing only this list can tell you, which is the name of the category.
+       The headline above the chart still carries the comparison for the
+       window as a whole. */
+    change: null,
     pick: 'data-cat="' + escapeHtml(id) + '"',
     selected: !!(trendSel && trendSel.cat === id),
     expandable: !!(opts2 && opts2.expandable),
@@ -5381,7 +5430,7 @@ function drawTrend() {
     const head = keyRow(trendFocus, { expandable: true, expanded: true, inside: true });
     head.amount = insideNow;
     head.amount_text = money0(insideNow);
-    head.change = insideWas ? Math.round(((insideNow - insideWas) / insideWas) * 100) : null;
+    head.change = null;
     head.budget = 0;
     head.heading = true;
     keyRows = [head]
