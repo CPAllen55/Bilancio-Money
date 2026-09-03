@@ -1260,13 +1260,47 @@
      chart is the half of it that can be planned here. */
   .bg-vs-out{ fill:var(--coral); opacity:.85; pointer-events:none; }
   .bg-vs-out.past{ opacity:.5; }
-  /* What is kept, over each pair. It is the gap between the two bars said as a
-     number, because a gap is easy to see and hard to read. */
-  .bg-vs-kept{ font-family:var(--font-num); font-size:10.5px; font-weight:600;
-               pointer-events:none; }
+  /* The difference between the two bars, filled in.
+
+     Light enough that the bars stay the loud thing — it is the space between
+     them, and space that shouts is not space. Green where income is on top,
+     which is what the month keeps; coral where spending is, which is what it
+     goes under by. Its own title carries the figure, so the band can be asked
+     what it is worth without hunting for the column below. */
+  .bg-vs-gap{ pointer-events:none; }
+  .bg-vs-gap.up{ fill:var(--mint); opacity:.20; }
+  .bg-vs-gap.down{ fill:var(--coral); opacity:.22; }
   .bg-vs-mlab{ font-family:var(--font-num); font-size:10.5px; fill:var(--muted);
                pointer-events:none; }
   .bg-svg-vs{ display:block; width:100%; margin-top:6px; overflow:visible; }
+
+  /* The three figures for each month, under the month.
+
+     One column per band and the same number of them, so they line up with the
+     plot above without measuring it — the bands are equal and the plot's side
+     padding is a quarter of a per cent, which is the padding here too.
+
+     Ordered as the bars are read: what came in, what is planned out, what is
+     left. The colours are the bars' own, so the column needs no headings of
+     its own to say which figure is which. */
+  .bg-vs-cols{ display:grid; gap:0 2px; padding:2px 0.28% 0;
+               font-family:var(--font-num); }
+  .bg-vs-col{ display:flex; flex-direction:column; align-items:center; gap:1px;
+              min-width:0; }
+  .bg-vs-col span{ font-size:10px; line-height:1.35; white-space:nowrap;
+                   overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .bg-vs-col .in{ color:var(--mint); }
+  .bg-vs-col .out{ color:var(--coral); }
+  /* What is left is the answer the other two are asked for, so it is the one
+     in full ink and the one with a rule over it. */
+  .bg-vs-col .kept{ font-weight:600; margin-top:1px; padding-top:2px;
+                    border-top:1px solid var(--hair); width:100%;
+                    text-align:center; }
+  .bg-vs-col .kept.up{ color:var(--ink); }
+  .bg-vs-col .kept.down{ color:var(--coral); }
+  /* Below this the twelve columns stop holding a figure each. The chart still
+     says the shape; the numbers are in the month boxes under it either way. */
+  @media (max-width:720px){ .bg-vs-cols{ display:none; } }
 
   .bg-save{ flex:1 0 100%; margin-top:14px; padding-top:14px;
             border-top:1px solid var(--hair); }
@@ -6814,6 +6848,29 @@ function bgVsChart() {
     const oh = ov > 0 ? Math.max(BG_MIN_SEG, (ov / hi) * BG_PLOT) : BG_MIN_SEG;
     const kept = t.savings[m];
 
+    /* The difference, drawn.
+
+       A band across the pair from the shorter bar's top to the taller one's,
+       so the space between them is filled rather than left as air the reader
+       has to measure. Green when income is the taller — that height is what
+       the month keeps — and coral when spending is, where the same height is
+       what it goes under by.
+
+       Drawn before the bars, so the taller one covers its own half and the
+       band shows on the side of the shorter one: exactly the space between
+       the top of that bar and the height it would have to reach. Over the top
+       it would tint a bar whose colour is already saying something. */
+    const hiTop = base - Math.max(ih, oh);
+    const loTop = base - Math.min(ih, oh);
+    if (loTop - hiTop > 0.5) {
+      svg += '<rect class="bg-vs-gap ' + (kept >= 0 ? 'up' : 'down') + '" ' +
+        'x="' + g.xIn.toFixed(1) + '" y="' + hiTop.toFixed(1) + '" width="' +
+        (g.xOut + g.barW - g.xIn).toFixed(1) + '" height="' + (loTop - hiTop).toFixed(1) +
+        '" data-vsgap="' + m + '"><title>' + escapeHtml(bgData.labels[i]) + ' · ' +
+        escapeHtml(money(Math.abs(kept))) + (kept >= 0 ? ' kept' : ' over') +
+        '</title></rect>';
+    }
+
     svg +=
       '<rect class="bg-seg' + (iv > 0 ? '' : ' empty') + (past ? ' past' : '') +
         '" x="' + g.xIn.toFixed(1) + '" y="' + (base - ih).toFixed(1) +
@@ -6832,15 +6889,42 @@ function bgVsChart() {
         '" height="' + oh.toFixed(1) + '" rx="1.5" data-vsout="' + m + '">' +
         '<title>' + escapeHtml(bgData.labels[i]) + ' · ' + escapeHtml(money(ov)) +
         ' planned to spend</title></rect>' +
-      '<text class="bg-vs-kept" data-vskept="' + m + '" x="' + g.mid.toFixed(1) +
-        '" y="' + (base - Math.max(ih, oh) - 6).toFixed(1) + '" text-anchor="middle" ' +
-        'fill="' + (kept >= 0 ? 'var(--mint)' : 'var(--coral)') + '">' +
-        escapeHtml(money0(kept)) + '</text>' +
       '<text class="bg-vs-mlab" x="' + g.mid.toFixed(1) + '" y="' + (BG_H - 6) +
         '" text-anchor="middle">' + escapeHtml(bgData.labels[i].slice(0, 3)) + '</text>';
   });
 
-  return svg + '</svg>';
+  return svg + '</svg>' + bgVsCols();
+}
+
+/**
+ * The three figures for each month, under the month.
+ *
+ * In HTML rather than in the plot, for two reasons. Three numbers stacked
+ * above every bar is a chart carrying a table on its back — the shape stops
+ * being the thing you see. And the SVG is drawn with preserveAspectRatio
+ * "none" so it can stretch to any card width, which stretches its text with
+ * it: figures set that way are wider or narrower depending on the window.
+ *
+ * A grid of the same number of equal columns lines up with the bands under it,
+ * because the bands are equal too and the plot's own side padding is a quarter
+ * of one per cent. Alignment by construction rather than by measurement.
+ */
+function bgVsCols() {
+  const t = bgTotals();
+  return '<div class="bg-vs-cols" style="grid-template-columns:repeat(' +
+    bgData.months.length + ',minmax(0,1fr))">' +
+    bgData.months.map((m, i) => {
+      const kept = t.savings[m];
+      return '<div class="bg-vs-col" data-vscol="' + m + '">' +
+        '<span class="in" data-vsfin="' + m + '" title="Income planned for ' +
+          escapeHtml(bgData.labels[i]) + '">' + escapeHtml(money0(t.income[m])) + '</span>' +
+        '<span class="out" data-vsfout="' + m + '" title="Planned to spend in ' +
+          escapeHtml(bgData.labels[i]) + '">' + escapeHtml(money0(t.expense[m])) + '</span>' +
+        '<span class="kept ' + (kept >= 0 ? 'up' : 'down') + '" data-vsfkept="' + m +
+          '" title="' + (kept >= 0 ? 'Kept in ' : 'Over by, in ') +
+          escapeHtml(bgData.labels[i]) + '">' + escapeHtml(money0(kept)) + '</span>' +
+      '</div>';
+    }).join('') + '</div>';
 }
 
 /* Geometry only, so a drag is not fighting a rebuild. Both bars and the figure
@@ -6874,12 +6958,34 @@ function bgVsFit(svg) {
       const ttl = outBar.querySelector('title');
       if (ttl) ttl.textContent = bgData.labels[i] + ' · ' + money(ov) + ' planned to spend';
     }
-    const lab = svg.querySelector('text[data-vskept="' + m + '"]');
-    if (lab) {
-      const kept = t.savings[m];
-      lab.textContent = money0(kept);
-      lab.setAttribute('y', (base - Math.max(ih, oh) - 6).toFixed(1));
-      lab.setAttribute('fill', kept >= 0 ? 'var(--mint)' : 'var(--coral)');
+    const kept = t.savings[m];
+    const gap = svg.querySelector('rect[data-vsgap="' + m + '"]');
+    if (gap) {
+      const hiTop = base - Math.max(ih, oh);
+      const loTop = base - Math.min(ih, oh);
+      gap.setAttribute('y', hiTop.toFixed(1));
+      gap.setAttribute('height', Math.max(0, loTop - hiTop).toFixed(1));
+      gap.classList.toggle('up', kept >= 0);
+      gap.classList.toggle('down', kept < 0);
+      const ttl = gap.querySelector('title');
+      if (ttl) ttl.textContent = bgData.labels[i] + ' · ' + money(Math.abs(kept)) +
+        (kept >= 0 ? ' kept' : ' over');
+    }
+
+    /* The figures are outside the SVG, so they are found from it rather than
+       inside it. Same re-fit either way: one function moves everything this
+       chart draws, or a drag leaves half of it behind. */
+    const cols = svg.parentElement && svg.parentElement.querySelector('.bg-vs-cols');
+    if (cols) {
+      const set = (sel, text, cls) => {
+        const el = cols.querySelector(sel + '="' + m + '"]');
+        if (!el) return;
+        el.textContent = text;
+        if (cls) { el.classList.toggle('up', kept >= 0); el.classList.toggle('down', kept < 0); }
+      };
+      set('[data-vsfin', money0(iv));
+      set('[data-vsfout', money0(ov));
+      set('[data-vsfkept', money0(kept), true);
     }
   });
 }
