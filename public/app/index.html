@@ -1115,9 +1115,11 @@
   /* The light itself does not take clicks: it sits under the bars and would
      otherwise eat them. */
   .mglow, .mpane{ pointer-events:none; }
-  /* An edge, so the lit column has a shape and not only a presence. Enough to
-     find at a glance without competing with the bars standing inside it. */
-  .mpane{ opacity:.6; stroke:var(--lit); stroke-width:1.25; stroke-opacity:.6; }
+  /* An edge, so the lit column has a shape and not only a presence — and one
+     that fades out with the fill, so the shape has sides and a base and no lid.
+     The strength lives in the gradient rather than in stroke-opacity, which
+     would flatten the fade back towards uniform. */
+  .mpane{ opacity:.75; stroke:url(#tr-edge); stroke-width:1.25; }
   /* It arrives rather than appearing. A tenth of a second of fade is the
      difference between a chart that responds and a chart that flickers. */
   .mglow, .mpane, .mlab{ transition:opacity .18s ease; }
@@ -5188,17 +5190,34 @@ function drawTrend() {
 
   /* Declared once, used by whichever column is lit. Mint, because that is what
      this app uses to mean "this is the thing you chose" everywhere else. */
-  /* It reaches the ceiling. The gradient used to fade to nothing at the top,
-     which made the light look shorter than the plot and left the tallest bars
-     standing outside it. It still deepens towards the axis, because that is
-     where the weight of a bar chart is, but it never reaches zero — so the lit
-     band is as tall as the chart and reads as a shaft of light rather than a
-     puddle at the bottom. */
+  /* It runs the height of the plot and dissolves at the top rather than
+     stopping there.
+
+     A hard top edge is a horizontal line drawn across a chart whose whole
+     business is horizontal lines at meaningful heights — it reads as a level,
+     a ceiling, a threshold, something the column has reached. It is none of
+     those; it is only where the light happens to end. So the light gives out
+     instead: full strength at the axis, easing off through the middle, gone by
+     the top with nothing to mark where.
+
+     It still starts fading late enough to cover the tallest bar. The earlier
+     version faded from the very top and looked shorter than the plot, which is
+     the opposite mistake — a puddle at the bottom rather than a shaft of
+     light. Between the two, the fade belongs in the last third. */
   svg += '<defs>' +
     '<linearGradient id="tr-lit" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop offset="0" stop-color="var(--lit)" stop-opacity=".14"/>' +
-      '<stop offset=".55" stop-color="var(--lit)" stop-opacity=".24"/>' +
+      '<stop offset="0" stop-color="var(--lit)" stop-opacity="0"/>' +
+      '<stop offset=".30" stop-color="var(--lit)" stop-opacity=".13"/>' +
+      '<stop offset=".65" stop-color="var(--lit)" stop-opacity=".26"/>' +
       '<stop offset="1" stop-color="var(--lit)" stop-opacity=".42"/>' +
+    '</linearGradient>' +
+    /* The edge fades with it. A stroke is one colour the whole way round by
+       default, so an outline that stopped at full strength would put back the
+       hard top the fill just gave up — and draw the top twice over. */
+    '<linearGradient id="tr-edge" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0" stop-color="var(--lit)" stop-opacity="0"/>' +
+      '<stop offset=".35" stop-color="var(--lit)" stop-opacity=".18"/>' +
+      '<stop offset="1" stop-color="var(--lit)" stop-opacity=".70"/>' +
     '</linearGradient>' +
     '<filter id="tr-blur" x="-50%" y="-20%" width="200%" height="140%">' +
       '<feGaussianBlur stdDeviation="9"/>' +
