@@ -1793,6 +1793,9 @@
                     background:none; color:var(--muted); cursor:pointer;
                     line-height:1; transition:color .12s, border-color .12s; }
   #tx-list .subadd:hover{ color:var(--mint); border-color:var(--mint-dim); }
+  /* The same mark the row button carries, for the same reason: something was
+     added below this one. */
+  #tx-list .subadd.has{ color:var(--mint); border-color:var(--mint-dim); }
   #tx-list .subadd svg{ width:11px; height:11px; }
 
   /* Remove, on the far side of the part from the button that adds one. Two
@@ -1963,21 +1966,33 @@
    * same place their caret sits and at the same weight — every heading on the
    * row carries a mark saying what it does, and this one's says "type". The
    * rule appears on hover and focus, which is when a field needs an edge. */
+  /* It takes the whole column rather than the width of its own placeholder.
+
+     It used to size itself to the word and grow only once there was something
+     typed in it, which left most of the widest column in the table as blank
+     space and made the field look smaller than what it can hold. Now the
+     target you click is the column, and a long merchant name is readable while
+     it is being typed rather than after. */
   #tx-list table.data thead input.thi{ margin-left:0; padding:0 2px;
     border:none; border-bottom:1px solid transparent; border-radius:0;
-    background:none; width:auto; flex:0 1 auto; }
+    background:none; width:100%; flex:1 1 auto; }
   /* The placeholder IS the heading, so it takes the heading's colour. */
   #tx-list table.data thead input.thi::placeholder{ color:var(--ink-quiet); opacity:1; }
   #tx-list table.data thead input.thi:hover{ border-bottom-color:var(--hair-strong); }
   #tx-list table.data thead input.thi:focus{ border-bottom-color:var(--mint-dim); }
-  /* Once there is something to read, it takes the column. */
-  #tx-list table.data thead input.thi:focus,
-  #tx-list table.data thead input.thi:not(:placeholder-shown){ flex:1 1 auto; width:100%; }
 
   /* Drawn rather than typed, so it is the same weight in every font the app
      might be set in. A ring and a handle, sized against the native caret
-     beside it. */
-  .thmag{ flex:none; position:relative; width:10px; height:10px; margin-left:1px;
+     beside it.
+
+     It sits before the field now. The other headings put their caret straight
+     after the word, and this one matched them by keeping the field the width
+     of its own placeholder — but a field that takes the whole column would
+     leave the mark stranded at the far right, a column away from the word it
+     belongs to, which is the arrangement this design already rejected once.
+     Ahead of the word it stays next to it, and reads the way a search box
+     reads anyway. */
+  .thmag{ flex:none; position:relative; width:10px; height:10px; margin-right:5px;
           border:1.5px solid var(--ink-quiet); border-radius:50%;
           opacity:.85; pointer-events:none; }
   .thmag::after{ content:""; position:absolute; left:7px; top:7px;
@@ -3299,6 +3314,7 @@ function txHeaderInput(id, label, value, names) {
      magnifier lands right beside it. It takes the whole column the moment
      there is something in it to read. */
   return '<span class="thwrap thsearch">' +
+    '<span class="thmag" aria-hidden="true"></span>' +
     '<input class="thf thi' + (value ? ' on' : '') + '" id="' + id + '"' +
       /* 14, not 12. size counts characters and letter-spacing is not one of
          them: "Description" is eleven characters plus eleven gaps of .08em,
@@ -3310,7 +3326,6 @@ function txHeaderInput(id, label, value, names) {
       ' size="14" list="' + listId + '" value="' + escapeHtml(value) + '"' +
       ' placeholder="' + escapeHtml(label) + '" autocomplete="off" spellcheck="false"' +
       ' aria-label="Filter by ' + escapeHtml(label) + ' — type to search">' +
-    '<span class="thmag" aria-hidden="true"></span>' +
     '<datalist id="' + listId + '">' +
       (names || []).map(n => '<option value="' + escapeHtml(n) + '"></option>').join('') +
     '</datalist>' +
@@ -3623,10 +3638,14 @@ function splitRest(t) {
   return t.amount - draftFor(t).reduce((n, s) => n + s.amount, 0);
 }
 
-/* The chevron, drawn rather than typed so it is the same mark at every size. */
+/* The chevron, drawn rather than typed so it is the same mark at every size.
+
+   It points down because that is where the part it makes appears. Pointing
+   right was left over from when this opened a panel beside the row; nothing
+   goes rightwards from here any more. */
 const SPLIT_CHEVRON =
   '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
-    '<path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" ' +
+    '<path d="M3 6l5 5 5-5" stroke="currentColor" stroke-width="2" ' +
       'stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 function catCell(t) {
@@ -3692,17 +3711,50 @@ function splitAmounts(t) {
   if (!parts.length) return '<span class="amtline">' + whole + '</span>';
 
   const fig = (n) => (n > 0 ? '+' : '') + money(n);
-  /* Typed as a magnitude. A part always travels the same direction as the
-     transaction it comes out of, so asking for a minus sign would be asking
-     somebody to restate something the app already knows. The direction goes
-     back on in saveSplitsFor, once. */
+  /* Shown with its sign, so the column adds up on the page the way it adds up
+     in the arithmetic. A part of a purchase is money going out and reads as a
+     negative, the same as every other figure in this column: -95.52, -5.00,
+     -5.00, total -105.52. Before, the parts were drawn as magnitudes and the
+     line read as -95.52 + 5 + 5 = -105.52, which is not a sum.
+
+     Typing the sign is still not required. A part always travels the same
+     direction as the transaction it comes out of, so whatever is typed is read
+     as a magnitude and given that direction — see splitAmountOf. */
   return '<span class="amtline">' + fig(splitRest(t)) + '</span>' +
     '<span class="subamts">' + parts.map((p, i) =>
       '<input class="subamt" type="text" inputmode="decimal" ' +
         'data-id="' + t.id + '" data-i="' + i + '" ' +
         'aria-label="Amount for this part" ' +
-        'value="' + (p.amount ? (Math.abs(p.amount) / 100).toFixed(2) : '') + '">').join('') +
+        'placeholder="' + (t.amount > 0 ? '+0.00' : '-0.00') + '" ' +
+        'value="' + splitFieldText(p.amount) + '">').join('') +
       '<span class="amttotal">' + whole + '</span></span>';
+}
+
+/**
+ * What a part's field shows: the signed figure, or nothing when it is empty.
+ *
+ * The plus is carried as well as the minus, so the column reads as the sum it
+ * is whichever way the money went — +2,100.00, +400.00, +2,500.00 on a salary
+ * as much as -95.52, -5.00, -5.00 on a purchase. A bare number would be read
+ * as positive and be right, but only by convention, and the figures it is
+ * stacked under all carry their sign.
+ */
+function splitFieldText(cents) {
+  if (!cents) return '';
+  return (cents > 0 ? '+' : '') + (cents / 100).toFixed(2);
+}
+
+/**
+ * What was typed, in the only direction it can mean.
+ *
+ * The digits are read as a magnitude and the transaction's own direction is put
+ * on them, so typing 5 into a purchase means five dollars out whether or not a
+ * minus was typed with it. A part cannot travel against the transaction it is
+ * carved from — that would make the parts sum to more than the whole — so there
+ * is no sign here for anybody to get wrong.
+ */
+function splitAmountOf(text, t) {
+  return centsOf(text) * (t.amount > 0 ? 1 : -1);
 }
 
 /**
@@ -3798,8 +3850,14 @@ function expanderCell(t) {
                               : 'Divide this transaction') + '" ' +
     'aria-label="Divide this transaction between categories">' + SPLIT_CHEVRON + '</button>';
   if (!parts.length) return out;
+  /* Mint on a chevron means there is a part underneath it — which is why the
+     one on the row turns mint the moment the row is divided. Each of these
+     adds directly below itself, so the same rule reads the same way down the
+     whole column: press one and it goes mint, because now there is. The last
+     one never is, because nothing is under it yet. */
   return out + '<span class="subadds">' + parts.map((p, i) =>
-    '<button class="subadd" data-id="' + t.id + '" data-i="' + i + '" ' +
+    '<button class="subadd' + (i < parts.length - 1 ? ' has' : '') + '" ' +
+      'data-id="' + t.id + '" data-i="' + i + '" ' +
       'aria-label="Add another category to this transaction">' + SPLIT_CHEVRON +
       '</button>').join('') + '</span>';
 }
@@ -3925,9 +3983,7 @@ $('tx-list').addEventListener('input', (e) => {
   if (!t) return;
   const part = draftFor(t)[Number(box.dataset.i)];
   if (!part) return;
-  // Back into the transaction's own direction, which is the only direction a
-  // part of it can travel.
-  part.amount = centsOf(box.value) * (t.amount > 0 ? 1 : -1);
+  part.amount = splitAmountOf(box.value, t);
   refreshSplitRest(t);
 });
 
@@ -3935,7 +3991,13 @@ $('tx-list').addEventListener('change', (e) => {
   const box = e.target.closest('.subamt');
   if (!box) return;
   const t = txById[box.dataset.id];
-  if (t) saveSplitRow(t);
+  if (!t) return;
+  const part = draftFor(t)[Number(box.dataset.i)];
+  /* Tidied to the figure it was understood as, once the typing has stopped:
+     5 becomes -5.00 on a purchase. Only this one field is touched, because
+     redrawing the row would take the cursor out of wherever it went next. */
+  if (part) box.value = splitFieldText(part.amount);
+  saveSplitRow(t);
 });
 
 /**
