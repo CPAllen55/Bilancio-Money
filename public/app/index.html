@@ -1528,6 +1528,9 @@
    * below instead, which is the honest place for it: below that the card
    * scrolls rather than each column quietly shrinking past legibility. */
   #tx-list table.data{ table-layout:fixed; }
+  /* The height of one line of a divided row: the category menu, and the
+     total beside it. Named because two cells have to agree on it. */
+  #tx-list{ --txline:28px; }
   #tx-list col.c-date{ width:12%; }
   #tx-list col.c-desc{ width:23%; }
   /* Sized by its heading, not by its contents.
@@ -1664,6 +1667,38 @@
        narrow one, where the name it sits beside is the identity. */
     #tx-list .ava{ display:none; }
   }
+
+  /* A closed row's other categories, and their figures.
+
+     Two stacks in two different cells that have to read as one list, and
+     nothing here measures anything at runtime. Cells are centred by default,
+     which put the two stacks 5px out of step because one sits under a 28px
+     menu and the other under a line of text. So a divided row hangs its cells
+     from the top and gives both first lines the same height — after which the
+     stacks are two identical columns of fixed-height lines and line three is
+     level with line three for nothing. */
+  #tx-list table.data tbody tr.hassplit td{ vertical-align:top; }
+  #tx-list table.data tbody tr.hassplit .catsel,
+  #tx-list table.data tbody tr.hassplit .amtline{ height:var(--txline); }
+  #tx-list table.data tbody tr.hassplit .amtline{ display:block;
+                                                  line-height:var(--txline); }
+  #tx-list .subcats,
+  #tx-list .subamts{ display:flex; flex-direction:column; gap:4px;
+                     margin-top:6px; align-items:flex-start; }
+  #tx-list .subamts{ align-items:flex-end; }
+  #tx-list .subcat,
+  #tx-list .subamt{ height:20px; line-height:20px; font-size:11px;
+                    font-family:var(--font-num); white-space:nowrap; }
+  /* The same mint as the expander, because it is the same fact: somebody
+     changed this row by hand. */
+  #tx-list .subcat{ display:inline-flex; align-items:center; padding:0 9px;
+                    max-width:100%; overflow:hidden; text-overflow:ellipsis;
+                    border:1px solid var(--mint-dim); border-radius:99px;
+                    color:var(--mint-dim); cursor:default; }
+  :root:not([data-theme="light"]) #tx-list .subcat{ color:var(--mint); }
+  /* Quieter than the total it hangs under: the figure on the first line is
+     what left the account, and these are how it was carved up. */
+  #tx-list .subamt{ color:var(--muted); font-variant-numeric:tabular-nums; }
 
   /* ---- dividing a transaction ----
 
@@ -3242,7 +3277,11 @@ async function renderTransactions() {
     // but it stays editable, because Plaid does mislabel things.
     const source = t.categorySource === 'user' ? 'edited here'
                  : t.categorySource === 'rule' ? 'your rule' : '';
-    return '<tr data-id="' + t.id + '" data-merchant="' + escapeHtml(t.name) + '">' +
+    // Asked of splitParts, not of t.splits, so the class and the two stacks
+    // are decided by one rule rather than by two that agree today.
+    const divided = splitParts(t).length > 0;
+    return '<tr' + (divided ? ' class="hassplit"' : '') + ' data-id="' + t.id +
+      '" data-merchant="' + escapeHtml(t.name) + '">' +
       '<td class="num date">' + t.date + '</td>' +
       // Titled because the cell truncates: a name clipped to "Oakwood
       // Property ..." with no way to see the rest is a name the row has lost.
@@ -3260,12 +3299,18 @@ async function renderTransactions() {
       '<td>' + expanderCell(t) + '</td>' +
       // Amount decides which side of the ledger this row is on. The menu holds
       // only what it is currently showing; the rest arrives when it is opened.
+      //
+      // A divided transaction stacks its other categories under the menu, and
+      // their amounts under the total, so a closed row still says where the
+      // money went. The two stacks are separate cells and line up because they
+      // are given the same line height, not because anything measures them.
       '<td><select class="catsel" data-id="' + t.id + '" data-slug="' +
         escapeHtml(t.category || '') + '" data-side="' + (t.amount > 0 ? 'income' : 'spend') + '">' +
         '<option>' + escapeHtml(t.category ? labelOfSlug(t.category) : '—') + '</option>' +
-        '</select></td>' +
+        '</select>' + splitPills(t) + '</td>' +
       '<td class="num' + (t.amount > 0 ? ' in' : ' out') + '">' +
-        (t.amount > 0 ? '+' : '') + money(t.amount) + '</td></tr>';
+        '<span class="amtline">' + (t.amount > 0 ? '+' : '') + money(t.amount) +
+        '</span>' + splitAmounts(t) + '</td></tr>';
   }).join('');
 
   /* The total belongs in the table, on the column it totals, and it counts
@@ -3286,6 +3331,65 @@ async function renderTransactions() {
     '<p class="msg" id="tx-msg">' + r.transactions.length + ' of ' + r.total + ' shown' +
     (filtering ? ' · <a href="#" id="tx-clear" style="color:var(--mint-dim)">clear filters</a>' : '') + '.</p>';
   restoreCaret();
+}
+
+/**
+ * What a divided transaction shows when it is closed.
+ *
+ * The menu holds the category the merchant rule chose and cannot show a second
+ * one, so the parts that were moved elsewhere hang underneath it as pills —
+ * the same mint as the expander above them, which is already the mark that
+ * this row has been changed by hand.
+ *
+ * Only the parts that were moved are listed. What is left keeps the category
+ * in the menu, which is the thing the pills are stacked under, so naming it
+ * again would be the row repeating itself. The title says the arithmetic out
+ * loud for anybody who wants it: how much of how much, and what stays behind.
+ */
+function splitParts(t) {
+  /* A row that is already only a part of something shows nothing here. Under a
+     category filter the drill-down hands back the share filed under that
+     category, not the whole charge, and stacking the full breakdown beneath a
+     partial figure would give a column that adds up to more than the
+     transaction. The "part of" pill on that row says what it is instead. */
+  if (t.partOf) return [];
+  return (t.splits || []).map(s => ({
+    label: labelOfId(s.categoryId),
+    amount: s.amount,
+  }));
+}
+
+/* The label for a category id. The menus are built from slugs; splits are
+   stored against ids, because a slug can be renamed and an id cannot. */
+function labelOfId(id) {
+  const c = (categoryList || []).filter(x => x.id === id)[0];
+  return c ? c.label : '—';
+}
+
+function splitNote(t, part) {
+  const whole = Math.abs(t.amount);
+  const carved = (t.splits || []).reduce((n, s) => n + Math.abs(s.amount), 0);
+  const rest = whole - carved;
+  const stays = t.category ? labelOfSlug(t.category) : 'where it was';
+  return money(Math.abs(part.amount)) + ' of ' + money(whole) + ' · ' +
+    (rest > 0 ? money(rest) + ' stays in ' + stays
+              : 'nothing stays in ' + stays);
+}
+
+function splitPills(t) {
+  const parts = splitParts(t);
+  if (!parts.length) return '';
+  return '<span class="subcats">' + parts.map(p =>
+    '<span class="subcat" title="' + escapeHtml(splitNote(t, p)) + '">' +
+      escapeHtml(p.label) + '</span>').join('') + '</span>';
+}
+
+function splitAmounts(t) {
+  const parts = splitParts(t);
+  if (!parts.length) return '';
+  return '<span class="subamts">' + parts.map(p =>
+    '<span class="subamt">' + (p.amount > 0 ? '+' : '') + money(p.amount) +
+      '</span>').join('') + '</span>';
 }
 
 /**
