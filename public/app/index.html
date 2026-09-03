@@ -1562,11 +1562,43 @@
      when hovered and when held. */
   .slice{ cursor:pointer; transform-box:fill-box; transform-origin:center;
           transition:filter .12s ease, transform .12s ease, opacity .12s ease; }
-  .slice:hover, .slice:focus-visible{ filter:brightness(1.3) drop-shadow(0 0 6px currentColor); }
+  /* The same numbers the bars use, rather than numbers near them: a slice and
+     a segment answer the same gesture, so they should answer it identically. */
+  .slice:hover, .slice:focus-visible{ filter:brightness(1.35) drop-shadow(0 0 7px currentColor); }
   .slice:focus-visible{ outline:none; }
   .slice:hover, .slice:focus-visible, .slice.sel{ transform:scale(1.04); }
-  .slice.sel{ filter:brightness(1.4) drop-shadow(0 0 9px currentColor); }
+  .slice.sel{ filter:brightness(1.45) drop-shadow(0 0 10px currentColor); }
+
+  /* The light across the ring and the shadow under its inner edge. Neither is
+     clickable: they lie over the slices, and a slice with a dead patch where
+     the light falls would be worse than a slice with no light at all. */
+  .pie-sheen{ fill:url(#pie-sheen); pointer-events:none; }
+  .pie-hole{ fill:url(#pie-hole); pointer-events:none; }
+  /* Enough to say where the light is, not enough to be a second relief.
+
+     The first pass had .20 of white here and the ring came out glossier than
+     the bars it is meant to match -- the pie carries the sheen AND the same
+     gradient the bars carry, so the white has to give back most of what the
+     gradient is already doing. It was also bleaching the hue out of whichever
+     slice sat under the highlight, which on a chart whose whole job is
+     telling colours apart is worse than being flat.
+
+     The dark side keeps its weight: shadow deepens a colour where light
+     washes it, so it can be the stronger half without costing legibility. */
+  .ps0{ stop-color:#FFFFFF; stop-opacity:.13; }
+  .ps1{ stop-color:#FFFFFF; stop-opacity:.04; }
+  .ps2{ stop-color:#000000; stop-opacity:.16; }
+  .ph0{ stop-color:#000000; stop-opacity:.20; }
+  .ph1{ stop-color:#000000; stop-opacity:0; }
   .slice.dim{ opacity:.25; }
+  /* Light mode takes less white and less black. The colours here start much
+     closer to the page than they do on the dark theme, so the same highlight
+     that lifts a slice out of near-black bleaches one off cream, and the same
+     shadow that reads as depth reads as dirt. */
+  :root[data-theme="light"] .ps0{ stop-opacity:.20; }
+  :root[data-theme="light"] .ps1{ stop-opacity:.06; }
+  :root[data-theme="light"] .ps2{ stop-opacity:.10; }
+  :root[data-theme="light"] .ph0{ stop-opacity:.13; }
   .pie-tx{ flex:1 1 auto; min-width:0; }
   .pie-tx .hint{ font-size:12.5px; color:var(--muted); }
   /* Fixed layout with the two narrow columns pinned, so the description gets
@@ -7316,12 +7348,47 @@ function shift(hex, amount) {
 /** A stable, collision-proof id for one colour inside one chart. */
 const reliefId = (prefix, hex) => prefix + "-" + hex.replace(/[^0-9a-fA-F]/g, "");
 
+/* The light on the donut, and the shadow the hole casts on it.
+ *
+ * Off-centre up and to the left, because a light source that sits dead centre
+ * on a ring is not a light source, it is a wash. The stops carry classes and
+ * no colour of their own: what reads as a highlight over near-black reads as
+ * a bleached patch over cream, so the strengths live with the other things
+ * that differ by theme rather than in this string.
+ */
+const PIE_SHEEN =
+  '<defs>' +
+    '<radialGradient id="pie-sheen" cx="34%" cy="28%" r="78%">' +
+      '<stop class="ps0" offset="0%"/>' +
+      '<stop class="ps1" offset="46%"/>' +
+      '<stop class="ps2" offset="100%"/>' +
+    '</radialGradient>' +
+    /* Darkest against the hole and gone twenty pixels out, so the ring sits
+       above the middle rather than beside it. */
+    '<radialGradient id="pie-hole" cx="50%" cy="50%" r="50%">' +
+      '<stop class="ph0" offset="77%"/>' +
+      '<stop class="ph1" offset="100%"/>' +
+    '</radialGradient>' +
+  '</defs>';
+
 /** The <defs> block. Pass every colour the chart is about to use. */
-function reliefDefs(prefix, colours) {
+function reliefDefs(prefix, colours, span) {
   const flat = [...new Set(colours)].filter(c => /^#[0-9a-fA-F]{6}$/.test(c));
   if (!flat.length) return "";
+  /* Without a span each shape is lit within its own box, which is right for a
+     stack of blocks: every one of them is its own little solid.
+
+     A donut is one solid, not twelve. Lighting each wedge inside its own box
+     puts a highlight at the top of every slice and so a light source wherever
+     you look — the ring stops reading as round. A span in user space hands
+     them all the same top and the same bottom, so one light falls across the
+     whole thing. Same stops either way, so the shine is the same strength as
+     the chart above. */
+  const geom = span
+    ? 'gradientUnits="userSpaceOnUse" x1="0" y1="' + span[0] + '" x2="0" y2="' + span[1] + '"'
+    : 'x1="0" y1="0" x2="0" y2="1"';
   return "<defs>" + flat.map(c =>
-    '<linearGradient id="' + reliefId(prefix, c) + '" x1="0" y1="0" x2="0" y2="1">' +
+    '<linearGradient id="' + reliefId(prefix, c) + '" ' + geom + '>' +
       '<stop offset="0%" stop-color="' + shift(c, 0.22) + '"/>' +
       '<stop offset="52%" stop-color="' + c + '"/>' +
       '<stop offset="100%" stop-color="' + shift(c, -0.16) + '"/>' +
@@ -8304,6 +8371,15 @@ function drawPie() {
   const total = shown.reduce((s, e) => s + e[1], 0) || 1;
   const R = 132, CX = 150, CY = 150;
 
+  /* Built from the list the chart actually draws.
+
+     relief() hands back a url(#id) for any six-digit hex whether or not that
+     gradient exists, and a fill pointing at a gradient that was never defined
+     paints nothing at all. The bars learned this the hard way when their defs
+     were built from the key instead of from the chart. */
+  const sliceColours = shown.map(([slug]) => colourOf(slug));
+  const defs = reliefDefs('pie', sliceColours, [CY - R, CY + R]) + PIE_SHEEN;
+
   let angle = -Math.PI / 2;
 
   const slices = shown.map(([slug, v]) => {
@@ -8312,7 +8388,7 @@ function drawPie() {
     angle = a1;
     const on = pieSel === slug;
     return '<path class="slice' + (on ? ' sel' : '') + (pieSel && !on ? ' dim' : '') + '" ' +
-      'd="' + arcPath(CX, CY, R, a0, a1) + '" fill="' + colourOf(slug) + '" ' +
+      'd="' + arcPath(CX, CY, R, a0, a1) + '" fill="' + relief('pie', colourOf(slug)) + '" ' +
       'style="color:' + colourOf(slug) + '" data-slice="' + escapeHtml(slug) + '" ' +
       'tabindex="0" role="button">' +
       '<title>' + escapeHtml(labelOfSlug(slug)) + ': ' + money(v) +
@@ -8345,7 +8421,14 @@ function drawPie() {
   const midShort = midName.length > 18 ? midName.slice(0, 17) + '…' : midName;
   const donut =
     '<svg viewBox="0 0 300 300" width="300" height="300" role="img" ' +
-    'aria-label="Share of spending by category">' + slices +
+    'aria-label="Share of spending by category">' + defs + slices +
+    /* The sheen, and then the hole's own shadow. Both sit over the slices and
+       under the middle, and neither takes the pointer — a slice that could be
+       hovered everywhere except where the light falls would be worse than a
+       flat one. Their strengths are set in the stylesheet because the same
+       white that lifts a colour out of near-black washes it out on cream. */
+    '<circle class="pie-sheen" cx="' + CX + '" cy="' + CY + '" r="' + R + '"/>' +
+    '<circle class="pie-hole" cx="' + CX + '" cy="' + CY + '" r="88"/>' +
     '<circle cx="' + CX + '" cy="' + CY + '" r="68" fill="var(--surface)"/>' +
     '<text x="' + CX + '" y="' + (CY - 5) + '" text-anchor="middle" ' +
       'font-size="17" fill="' + (chosen ? colourOf(chosen) : 'var(--ink)') + '">' +
