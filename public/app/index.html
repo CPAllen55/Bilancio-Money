@@ -996,12 +996,25 @@
                          width:1px; background:var(--hair); }
   .kitem.kchild .klabel{ font-size:12px; }
 
-  /* The category you are inside. It is not selected — nothing is dimmed
-     against it — it is the heading of what is being shown, so it takes a rule
-     under it and the mint that means "this is the thing". */
-  .kitem.inside{ border-bottom:1px solid var(--hair); padding-bottom:6px;
-                 margin-bottom:4px; }
-  .kitem.inside .klabel{ color:var(--mint); font-weight:600; }
+  /* The category you are inside.
+
+     It keeps the shape every other row has — same swatch, same figure, same
+     bar — because it is the same kind of thing and turning it into a different
+     kind of thing on being chosen makes the list reflow around the click. It
+     is marked the way this key already marks a row under the cursor, which is
+     the state it is closest to: you are pointing at this one. A shade larger,
+     never smaller, so being chosen reads as coming forward.
+
+     The rule underneath stays. It is the one thing that says the rows below
+     belong to this row rather than sitting beside it. */
+  /* No padding of its own. The rows in this key are padded 11px and setting a
+     smaller figure here made the chosen row SHORTER than the ones under it,
+     which is the opposite of coming forward. The extra height comes from the
+     type, which is the part that should carry it. */
+  .kitem.inside{ border-bottom:1px solid var(--hair); margin-bottom:5px; }
+  .kitem.inside .kpick{ background:var(--bg-panel); color:var(--ink); }
+  .kitem.inside .klabel{ font-size:13px; font-weight:600; }
+  .kitem.inside .kamt{ font-size:12.5px; }
   .kitem.inside .kexp{ color:var(--mint); border-color:var(--mint-dim); }
   .kitem:hover .kpick:not(.static){ background:var(--bg-panel); color:var(--ink);
                                     border-color:var(--hair); }
@@ -4686,10 +4699,14 @@ function keyList(rows, off, scope, totalLabel, opts) {
        gets no share bar. The bar says how much of the whole this row is, and
        for the category everything else is inside, the answer is all of it —
        a full-width bar over a list of the parts it is made of. */
-    const inner = opts.bars && !r.heading
+    const inner = opts.bars
       ? '<span class="krow1">' + plain + '</span>' +
         '<span class="kbar"><i style="width:' +
-          Math.max(2, Math.round((r.amount / widest) * 100)) + '%;background:' +
+          /* A heading is everything the list under it adds up to, so its bar is
+             full. Measured against widest it would come out over 100% — it is
+             larger than the largest row by construction — and a bar wider than
+             its own track is a bar that has stopped meaning anything. */
+          (r.heading ? 100 : Math.max(2, Math.round((r.amount / widest) * 100))) + '%;background:' +
           r.colour + '"></i>' +
           /* Only where there is a budget to mark, and only where it lands on
              the track — a mark past the end of it would point at nothing. */
@@ -4951,6 +4968,19 @@ function drawTrend() {
   // that is no longer visible — and the axis is always labelled, so the framing
   // states its own scale instead of implying a fixed one.
   const highest = rows => Math.max.apply(null, rows.concat([0]));
+
+  /**
+   * A month a year ago, at the level currently being looked at.
+   *
+   * Outside a category it is the whole month, which is what the line has
+   * always been and what its label says. Inside one it has to be that
+   * category a year ago, or the chart draws one quantity as bars and a
+   * different quantity as the line it is meant to be compared against — the
+   * comparison this view is named after, made between two things that are not
+   * comparable. It reads the same function the bars do, so switching a
+   * subcategory off moves both.
+   */
+  const priorShown = (p) => trendFocus ? shownTotal(trendSegments(p), trendOff) : p.expense;
   /* A line that is switched off does not get to set the ceiling.
    *
    * The axis reaches whatever it has to reach to hold everything drawn, which
@@ -4964,7 +4994,7 @@ function drawTrend() {
   const windowPeak = Math.max(
     highest(all.map(m => shownTotal(trendSegments(m), trendOff))),
     layerOn('income') ? highest(all.map(m => m.income)) : 0,
-    layerOn('prior') ? highest(prior.map(m => m.expense)) : 0
+    layerOn('prior') ? highest(prior.map(priorShown)) : 0
   );
 
   // A window with nothing in it would otherwise be given an axis running $0 to
@@ -5164,15 +5194,21 @@ function drawTrend() {
      those rows are a table with their own labels. Hiding them from here would
      mean a swatch in the key silently governing figures nowhere near it. */
   if (layerOn('prior') && prior.length) {
-    const pts = prior.map((p, i) => (PL + band * i + band / 2).toFixed(1) + ',' + y(p.expense).toFixed(1));
+    const pts = prior.map((p, i) => (PL + band * i + band / 2).toFixed(1) + ',' + y(priorShown(p)).toFixed(1));
     svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--ink)" stroke-width="2" ' +
            'stroke-dasharray="5 4" opacity="' + (trendSel ? '.25' : '.78') + '"/>';
-    // "Everything" because the year-ago line is the whole month either way —
-    // it does not narrow when a category is selected, and saying so keeps it
-    // from being read as that category's own history.
+    /* "Everything" only when it is everything. Selecting a category dims the
+       chart without changing what it holds, so the line stays the whole month
+       and the label says so. Going inside a category changes what the chart
+       is, and then the line is that category a year ago and says that
+       instead — a dot labelled "Everything" on a chart of one category would
+       be the tooltip contradicting the axis it sits on. */
+    const priorWhat = trendFocus
+      ? labelOfSlug(trendFocus) + ', a year earlier'
+      : 'Everything, a year earlier';
     prior.forEach((p, i) => {
-      svg += priorDot((PL + band * i + band / 2).toFixed(1), y(p.expense).toFixed(1),
-        'Everything, a year earlier', p.month, p.expense, !!trendSel);
+      svg += priorDot((PL + band * i + band / 2).toFixed(1), y(priorShown(p)).toFixed(1),
+        priorWhat, p.month, priorShown(p), !!trendSel);
     });
   }
   /* ---- the figures, in rows under the axis ----
@@ -5210,10 +5246,10 @@ function drawTrend() {
 
     const rows = [
       ['THIS YR', (m, i) => money0(shown(m)), 'var(--ink)'],
-      ['LAST YR', (m, i) => (prior[i] ? money0(prior[i].expense) : ''), 'var(--muted)'],
+      ['LAST YR', (m, i) => (prior[i] ? money0(priorShown(prior[i])) : ''), 'var(--muted)'],
       ['CHANGE', (m, i) => {
         if (!prior[i]) return '';
-        const d = shown(m) - prior[i].expense;
+        const d = shown(m) - priorShown(prior[i]);
         return (d >= 0 ? '+' : '\u2212') + money0(Math.abs(d));
       }, null],
       ['BUDGET', (m) => { const b = budgetAt(m); return b ? money0(b.cents) : ''; },
@@ -5240,7 +5276,7 @@ function drawTrend() {
            100% and should not be dressed as a triumph. */
         let fill = row[2];
         if (!fill && r === 2) {
-          fill = (prior[i] && shown(m) - prior[i].expense >= 0)
+          fill = (prior[i] && shown(m) - priorShown(prior[i]) >= 0)
             ? 'var(--coral)' : 'var(--mint-dim)';
         }
         if (!fill && r === 4) {
