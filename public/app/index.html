@@ -978,6 +978,38 @@
   /* ---- where it went ---- */
   .trend-key.panel-box{ flex:1 1 auto; border:1px solid var(--hair-strong);
                         border-radius:10px; overflow:hidden; padding:0; gap:0; }
+  /* The rows, cut to the chart beside them.
+
+     The height itself is set from JS, because it is the height of the plot,
+     which is whatever its width makes it. Everything about how it scrolls
+     lives here: overscroll-behavior so reaching the end of this list does not
+     go on to scroll the page, and a thin bar so it does not sit over the
+     switches at the right-hand end of every row. */
+  .kscroll{ overflow-y:auto; overscroll-behavior:contain;
+            scrollbar-width:thin; scrollbar-color:var(--hair-strong) transparent; }
+  .kscroll::-webkit-scrollbar{ width:8px; }
+  .kscroll::-webkit-scrollbar-thumb{ background:var(--hair-strong); border-radius:4px; }
+  .kscroll::-webkit-scrollbar-track{ background:transparent; }
+
+  /* The line along the bottom that swaps the two modes.
+
+     Full width and quiet: it is the last thing in the panel and it is not one
+     of the categories, so it should read as an edge rather than an entry. The
+     font is inherited the way the range buttons above the chart inherit it —
+     bare buttons take the numeric face in this app, which is not what a line
+     of prose wants. The chevron turns to point the way the panel will move. */
+  .kmore{ display:flex; align-items:center; justify-content:center; gap:7px;
+          width:100%; padding:9px 15px; background:var(--bg-panel);
+          border:0; border-top:1px solid var(--hair-strong);
+          font:500 11.5px/1 inherit; letter-spacing:.02em;
+          color:var(--muted); cursor:pointer;
+          transition:color .12s ease, background .12s ease; }
+  .kmore:hover{ color:var(--ink); background:var(--row-alt); }
+  .kmore:focus-visible{ outline:2px solid var(--mint-dim); outline-offset:-2px; }
+  .kmore-c{ display:inline-flex; transition:transform .16s ease; }
+  .kmore-c svg{ width:11px; height:11px; }
+  .kmore[aria-expanded="true"] .kmore-c{ transform:rotate(180deg); }
+
   .khead{ display:flex; align-items:baseline; justify-content:space-between;
           padding:13px 15px; background:var(--bg-panel);
           border-bottom:1px solid var(--hair-strong); }
@@ -5222,13 +5254,27 @@ function keyList(rows, off, scope, totalLabel, opts) {
   }).join('');
 
   const notes = opts.notes || '';
-  return title + (opts.totalAtBottom ? items + notes + head : head + items + notes);
+  /* Only the rows scroll. The heading above and the total, the notes and the
+     footer below all stay put, so the panel keeps the shape it had and the
+     answer it adds up to is never the thing you have to scroll to find. */
+  const list = opts.scroll ? '<div class="kscroll">' + items + '</div>' : items;
+  return title +
+    (opts.totalAtBottom ? list + notes + head : head + list + notes) +
+    (opts.more || '');
 }
 /* Which range is chosen. Held here rather than read off a control, because the
    control is five buttons and the value is not any one of their states. */
 let trendMonths = 12;
 let trendOffset = 0;       // index of the leftmost visible month
 let trendSel = null;       // { cat, month } | { cat } | null
+/* Whether the key is showing all of itself.
+ *
+ * Off by default: the panel is cut to the height of the chart beside it and
+ * the rows scroll inside, which is what stops a category list of any length
+ * from setting how tall this whole card is. On, it grows to whatever it needs
+ * and the page scrolls instead — the way it always did, for anyone who would
+ * rather see the lot at once. */
+let trendKeyOpen = false;
 
 const MIN_VISIBLE = 3;
 
@@ -6081,8 +6127,18 @@ function drawTrend() {
     }
   }
 
+  /* The line along the bottom. It says what you get, not what you are looking
+     at: a control labelled "Fitted" leaves the reader working out whether that
+     is a description or a promise. */
+  const more =
+    '<button type="button" class="kmore" data-key-expand="1" aria-expanded="' +
+      (trendKeyOpen ? 'true' : 'false') + '">' +
+      (trendKeyOpen ? 'Fit to the chart' : 'Show the full summary') +
+      '<span class="kmore-c" aria-hidden="true">' + KEY_CHEVRON + '</span></button>';
+
   const key = keyList(keyRows, trendOff, 'trend', 'Total', {
     bars: true, totalAtBottom: true,
+    scroll: !trendKeyOpen, more: more,
     /* The heading carries the month, because a panel showing one month's
        figures under a heading that says nothing about time is a panel that
        will be read as the whole window. */
@@ -6166,7 +6222,88 @@ function drawTrend() {
   if (sw) sw.style.background = present.length ? colourOf(present[0]) : 'var(--muted)';
 
   drawPie();
+  fitTrendKey();
 }
+
+/**
+ * Cut the key's rows to the height of the chart beside them.
+ *
+ * Measured rather than declared. The plot is an SVG that keeps its aspect
+ * ratio, so its height is whatever its width makes it — there is no number to
+ * write down in the stylesheet, and CSS cannot size one flex item from the
+ * height of its sibling without one of them already being fixed.
+ *
+ * What is subtracted is everything in the panel that is not the scrolling
+ * part: the heading above it, and the notes, the total and the footer below.
+ * Reading them off the DOM rather than assuming means the panel can grow a
+ * line without this quietly becoming wrong by exactly that line.
+ *
+ * A floor of 150px, because on a narrow window the chart can be shorter than
+ * a single row is tall, and a scroller you cannot see one entry in is worse
+ * than one that overruns.
+ */
+let trendFitPending = 0;
+
+/* Measuring this is a loop, so it is watched rather than calculated once.
+
+   Cutting the rows changes the panel's height, which changes the page's
+   height, which is what decides whether the window has a scrollbar — and that
+   changes the width of the plot, and an SVG that keeps its aspect ratio
+   answers a change of width with a change of height. So the number being
+   measured moves in response to having been measured, by about eight pixels,
+   which is exactly the amount the panel kept overshooting by.
+
+   A ResizeObserver settles it: every time the plot's height actually changes,
+   the cut is taken again. It converges because the write is skipped when the
+   answer has not changed, which is what stops the two of them handing the
+   problem back and forth forever.
+
+   The first cut still waits for a paint frame. Called the moment the markup
+   lands it read the panel's furniture 18px short — the chevron in the footer
+   is an inline SVG with no height until layout — and the rows were cut to 254
+   where the answer was 236. */
+function fitTrendKey() {
+  cancelAnimationFrame(trendFitPending);
+  trendFitPending = requestAnimationFrame(() => { fitTrendKeyNow(); watchTrendPlot(); });
+}
+
+let trendPlotWatch = null;
+function watchTrendPlot() {
+  if (typeof ResizeObserver !== 'function') return;   // the window listener covers it
+  const plot = $('trend-chart') && $('trend-chart').querySelector('.trend-plot');
+  if (!plot) return;
+  if (!trendPlotWatch) trendPlotWatch = new ResizeObserver(() => fitTrendKeyNow());
+  /* The plot is a new element after every draw, so the old one is dropped
+     rather than left observed — an observer holding a detached node fires for
+     nothing and keeps it alive. */
+  trendPlotWatch.disconnect();
+  trendPlotWatch.observe(plot);
+}
+
+function fitTrendKeyNow() {
+  const host = $('trend-chart');
+  const box = host && host.querySelector('.trend-key.panel-box');
+  const scroller = box && box.querySelector('.kscroll');
+  if (!box) return;
+  if (!scroller) return;                       // expanded: nothing to cut
+  const plot = host.querySelector('.trend-plot');
+  if (!plot) return;
+  let chrome = 0;
+  for (const el of box.children) if (el !== scroller) chrome += el.offsetHeight;
+  const next = Math.max(150, plot.offsetHeight - chrome) + 'px';
+  /* Skipped when nothing changed. This is the whole reason the observer above
+     settles instead of running forever. */
+  if (scroller.style.maxHeight !== next) scroller.style.maxHeight = next;
+}
+
+/* The plot's height follows its width, so the cut has to be taken again when
+   the window changes. Trailing-edge only: a drag across the screen is one
+   resize as far as this is concerned. */
+let trendFitTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(trendFitTimer);
+  trendFitTimer = setTimeout(fitTrendKey, 120);
+});
 
 /* What a selection actually tells you. Without this a click just changes some
    colours, which is decoration rather than information. */
@@ -6345,6 +6482,12 @@ function setTrendSel(next) {
    chart and out of the total above it; the box by the total puts them all
    back. Handled before anything else, so a box never reads as a selection. */
 function keyBoxClick(e) {
+  /* Checked first and on its own: it changes how much of the list is on
+     screen and nothing about what the list says, so it must not be mistaken
+     for a row being picked. */
+  const grow = e.target.closest('[data-key-expand]');
+  if (grow) { trendKeyOpen = !trendKeyOpen; drawTrend(); return true; }
+
   const all = e.target.closest('[data-key-all]');
   if (all) {
     if (all.dataset.keyAll === 'trend') {
