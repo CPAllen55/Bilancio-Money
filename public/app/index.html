@@ -1267,6 +1267,31 @@
      spending stays unplannable here by construction rather than by a guard.
      It takes the pointer all the same, because answering a question is not
      the same as being draggable. */
+  /* The divider between what happened and what is planned.
+
+     Gold, which is this app's colour for "you are looking at this" — the
+     picked month on Trend glows the same — rather than a grey hairline that
+     would read as another gridline. Dashed, because it marks a boundary in
+     time rather than a value: a solid rule across a chart is a threshold, and
+     this is not one. */
+  .bg-nowline{ stroke:var(--gold-4); stroke-width:1.25; stroke-dasharray:3 3;
+               opacity:.75; pointer-events:none; }
+  :root[data-theme="light"] .bg-nowline{ opacity:.95; }
+
+  /* Everything else about a month that has gone. The bars already dimmed;
+     these are the parts that did not, and a column dimmed only in its bars
+     reads as a rendering fault rather than as history. */
+  .bg-amt.past, .bg-total.past, .bg-mlab.past{ opacity:.5; }
+  .bg-vs-col.past{ opacity:.5; }
+  /* The line continues under the plot, so the two halves stay apart all the
+     way down instead of only inside the chart. */
+  .bg-vs-col.first{ border-left:1px dashed var(--gold-4); margin-left:-1px;
+                    padding-left:1px; }
+  /* A month box that cannot be typed into says so by looking spent, and keeps
+     the cursor that means it. */
+  .bg-mon.past{ opacity:.55; }
+  .bg-mon.past input{ cursor:not-allowed; background:var(--row-alt); }
+
   .bg-vs-out{ opacity:.85; cursor:default; pointer-events:all;
               transition:filter .12s ease, opacity .12s ease; }
   .bg-vs-out.past{ opacity:.5; }
@@ -1430,7 +1455,11 @@
      a lit block still reads as the category it belongs to. --seg carries the
      fill, which an SVG attribute cannot hand to a CSS filter on its own. */
   .bg-seg{ cursor:ns-resize; transition:filter .12s ease; }
-  .bg-seg.past{ opacity:.42; }
+  /* Dimmed because it has happened, and not ns-resize because it cannot be
+     moved: a cursor that promises a drag the code refuses is the whole gap
+     between a locked control and a broken one. */
+  .bg-seg.past{ opacity:.42; cursor:default; }
+  .bg-seg.past:hover{ stroke:none; filter:none; }
   .bg-seg.empty{ opacity:.16; }
   /* The lift Trend gives a segment, which this chart had the glow of but not
      the brightness: a shadow around an unchanged fill reads as an outline,
@@ -6613,6 +6642,43 @@ function bgRow(slug) {
 }
 
 /** A leaf's planned year, with whatever the reader has done to it. */
+/**
+ * A month that has already happened.
+ *
+ * The one definition, because it now decides three different things — whether
+ * a block dims, whether the divider goes before it, and whether it can be
+ * changed at all — and three copies of a rule are three chances for a month to
+ * be locked while it still looks editable, or the reverse.
+ *
+ * Compared as text rather than by position in the list: YYYY-MM sorts the way
+ * it reads, and a currentMonth that is not itself in the window still puts
+ * every month on the correct side of it. Nothing is past when there is no
+ * current month, which is the safe way round — a missing anchor should not
+ * freeze somebody's whole plan.
+ */
+function bgPast(m) {
+  return !!(bgData && bgData.currentMonth && m < bgData.currentMonth);
+}
+
+/* The divider, drawn on whichever chart asks for it.
+ *
+ * It sits on the boundary between the last month that has happened and the
+ * first one that has not — in the gutter between two bands, where no bar is
+ * drawn, so it separates rather than crosses. Nothing is drawn when there is
+ * no history in the window, since a line with one side is not a divider.
+ *
+ * non-scaling-stroke because these plots stretch to their card: a stroke given
+ * in user units would be a different weight on every window width, and a hair
+ * that thins with the card is a hair that disappears on a laptop. */
+function bgNowLine(height) {
+  const i = bgData.months.findIndex(m => !bgPast(m));
+  if (i <= 0) return '';
+  const band = (BG_W - BG_PL * 2) / bgData.months.length;
+  const x = (BG_PL + band * i).toFixed(1);
+  return '<line class="bg-nowline" vector-effect="non-scaling-stroke" x1="' + x +
+    '" y1="' + (BG_PT - 10) + '" x2="' + x + '" y2="' + (height - 2) + '"/>';
+}
+
 function bgPlanOf(row) {
   const scale = row.baselineOverride && row.baseline > 0
     ? row.baselineOverride / row.baseline : 1;
@@ -6726,7 +6792,8 @@ function drawBudgeting() {
             { slug: '__spend', colour: null, label: 'Everything planned below' },
           ]) +
           '<div class="bg-cap">Drag an income block up or down to change that month' +
-          ' — hold Alt for dollar-by-dollar. Arrow keys work too. Spending is the' +
+          ' — hold Alt for dollar-by-dollar. Arrow keys work too. Months left of' +
+          ' the dashed line have already happened and are fixed. Spending is the' +
           ' sum of the plans below and moves when they do.</div>' +
           '<div class="bg-kids">' + bgLeaf(inc) + '</div>'
         : '') +
@@ -6756,7 +6823,8 @@ function drawBudgeting() {
         ? (shown.length
             ? bgChart(shown, p.slug) + bgLegend(shown) +
               '<div class="bg-cap">Drag any block up or down to change that month' +
-              ' — hold Alt for dollar-by-dollar. Arrow keys work too.</div>'
+              ' — hold Alt for dollar-by-dollar. Arrow keys work too. Months left' +
+              ' of the dashed line have already happened and are fixed.</div>'
             : '') +
           '<div class="bg-kids">' + kids.map(bgLeaf).join('') + '</div>'
         : '') +
@@ -6811,10 +6879,17 @@ function bgLeaf(row) {
 /* The twelve months, for the trip that is already booked. The engine finds a
    pattern that repeats; this is for the one that has not happened yet. */
 function bgMonths(row, plan) {
+  /* This grid wraps to six and then three columns, so a month is not always
+     in the same place as the band above it and a vertical rule through it
+     would point at the wrong boundary. The months that have gone are marked
+     and disabled instead, which says the same thing at any width. */
   return '<div class="bg-months">' + bgData.months.map((m, i) =>
-    '<label class="bg-mon"><span>' + bgData.labels[i].slice(0, 3) + '</span>' +
+    '<label class="bg-mon' + (bgPast(m) ? ' past' : '') + '">' +
+      '<span>' + bgData.labels[i].slice(0, 3) + '</span>' +
       '<input type="number" min="0" step="1" inputmode="decimal" ' +
         'class="' + (row.pinned[m] !== undefined ? 'pin' : '') + '" ' +
+        (bgPast(m) ? 'disabled title="' + escapeHtml(bgData.labels[i]) +
+          ' has already happened — its plan is what the Tracker measured" ' : '') +
         'data-pin="' + escapeHtml(row.slug) + '" data-month="' + m + '" ' +
         'aria-label="' + bgData.labels[i] + ' for ' + escapeHtml(row.label) + '" ' +
         'value="' + (plan[m] / 100).toFixed(0) + '"></label>').join('') +
@@ -6833,8 +6908,11 @@ function bgMonths(row, plan) {
  * about a budget, which is "that one is too big". The savings figure at the
  * top moves as the block moves.
  *
- * Months already gone are dimmed but not locked, because a plan for a month
- * that has happened is still what the Tracker measures against.
+ * Months already gone are dimmed and locked. A plan is a decision taken before
+ * the month, and the Tracker has already reported that month against it — so
+ * editing it afterwards does not correct a forecast, it rewrites the thing the
+ * report was measured against. Every way in checks the same rule, because a
+ * lock with three implementations is a lock with three chances to be wrong.
  */
 /* The top padding is where the monthly totals sit; the plot keeps the height
    it had rather than losing 16 pixels to them. */
@@ -6916,7 +6994,6 @@ function bgVsGeom(i) {
 function bgVsChart() {
   const t = bgTotals();
   const hi = bgVsScale();
-  const nowIdx = bgData.months.indexOf(bgData.currentMonth);
   const incColour = themed('income', bgData.income.colour);
   /* Read from the theme rather than written here, so the shade turns over with
      everything else when the theme does. reliefDefs builds a gradient only for
@@ -6937,7 +7014,7 @@ function bgVsChart() {
 
   bgData.months.forEach((m, i) => {
     const g = bgVsGeom(i);
-    const past = nowIdx >= 0 && i < nowIdx;
+    const past = bgPast(m);
     const iv = t.income[m], ov = t.expense[m];
     const ih = iv > 0 ? Math.max(BG_MIN_SEG, (iv / hi) * BG_PLOT) : BG_MIN_SEG;
     const oh = ov > 0 ? Math.max(BG_MIN_SEG, (ov / hi) * BG_PLOT) : BG_MIN_SEG;
@@ -6992,7 +7069,7 @@ function bgVsChart() {
         ' data-vsout="' + m + '"></rect>';
   });
 
-  return svg + '</svg>' + bgVsCols();
+  return svg + bgNowLine(BG_VS_H) + '</svg>' + bgVsCols();
 }
 
 /**
@@ -7023,7 +7100,12 @@ function bgVsCols() {
     bgData.months.length + ',minmax(0,1fr))">' +
     bgData.months.map((m, i) => {
       const kept = t.savings[m];
-      return '<div class="bg-vs-col" data-vscol="' + m + '">' +
+      /* The divider continues under the plot as an edge on the first month
+         that has not happened, so the two halves stay separated all the way
+         down rather than only inside the chart. */
+      return '<div class="bg-vs-col' + (bgPast(m) ? ' past' : '') +
+        (!bgPast(m) && i > 0 && bgPast(bgData.months[i - 1]) ? ' first' : '') +
+        '" data-vscol="' + m + '">' +
         /* The month came out of the plot along with the figures.
 
            This chart stretches to its card — preserveAspectRatio "none" is
@@ -7125,7 +7207,6 @@ function bgChart(kids, parentSlug) {
   const hi = bgScaleOf(kids);
   const band = (BG_W - BG_PL * 2) / bgData.months.length;
   const barW = Math.min(52, band * 0.74);
-  const nowIdx = bgData.months.indexOf(bgData.currentMonth);
   const plans = kids.map(bgPlanOf);
 
   /* The drawn order is recorded on the element. Re-fitting mid-drag walks that
@@ -7139,7 +7220,7 @@ function bgChart(kids, parentSlug) {
 
   bgData.months.forEach((m, i) => {
     const x = BG_PL + band * i + (band - barW) / 2;
-    const past = nowIdx >= 0 && i < nowIdx;
+    const past = bgPast(m);
     let y = BG_PT + BG_PLOT;
     kids.forEach((r, k) => {
       const v = plans[k][m];
@@ -7159,7 +7240,8 @@ function bgChart(kids, parentSlug) {
         'aria-valuenow="' + Math.round(v / 100) + '" ' +
         'aria-valuetext="' + escapeHtml(money(v)) + '" ' +
         'aria-label="' + escapeHtml(r.label) + ', ' + bgData.labels[i] + '"></rect>' +
-        '<text class="bg-amt" data-amt="' + escapeHtml(r.slug) + '" data-month="' + m +
+        '<text class="bg-amt' + (past ? ' past' : '') + '" data-amt="' +
+        escapeHtml(r.slug) + '" data-month="' + m +
         '" x="' + (x + barW / 2).toFixed(1) + '" y="' + (y + h / 2 + 3.2).toFixed(1) +
         '" text-anchor="middle" fill="' + bgInkOn(fill) + '" style="display:' +
         (h >= BG_AMT_MIN && v > 0 ? 'inline' : 'none') + '">' +
@@ -7167,15 +7249,17 @@ function bgChart(kids, parentSlug) {
     });
     const mid = (BG_PL + band * i + band / 2).toFixed(1);
     const total = kids.reduce((s, r, k) => s + plans[k][m], 0);
-    svg += '<text class="bg-total" data-total="' + m + '" x="' + mid +
-      '" y="' + bgTotalY(y).toFixed(1) + '" text-anchor="middle">' +
+    svg += '<text class="bg-total' + (past ? ' past' : '') + '" data-total="' + m +
+      '" x="' + mid + '" y="' + bgTotalY(y).toFixed(1) + '" text-anchor="middle">' +
       escapeHtml(money0(total)) + '</text>' +
-      '<text class="bg-mlab" x="' + mid + '" y="' + (BG_H - 6) +
+      '<text class="bg-mlab' + (past ? ' past' : '') + '" x="' + mid +
+      '" y="' + (BG_H - 6) +
       '" text-anchor="middle">' + escapeHtml(bgData.labels[i].slice(0, 3)) + '</text>';
   });
   /* One handle for the chart, parked on whichever block is being held. Drawn
      last so it sits over the stack, and moved rather than recreated. */
-  svg += '<text class="bg-grab" text-anchor="middle" style="display:none">⇕</text>';
+  svg += bgNowLine(BG_H - BG_PB) +
+    '<text class="bg-grab" text-anchor="middle" style="display:none">⇕</text>';
   return svg + '</svg>';
 }
 
@@ -7549,6 +7633,11 @@ $('bg-list').addEventListener('input', (e) => {
     if (!row) return;
     const raw = pin.value.trim();
     const month = pin.dataset.month;
+    /* A disabled input raises no input event, so arriving here means the
+       markup and the rule have come apart. Doing nothing is the right answer
+       either way: better a box that ignores a keystroke than one that writes
+       over a month the Tracker has already reported on. */
+    if (bgPast(month)) return;
     if (raw === '') { delete row.pinned[month]; bgLive(); bgSave({ slug: row.slug, month, amount: null }); return; }
     const cents = Math.round(Number(raw) * 100);
     if (!isFinite(cents) || cents < 0) return;
@@ -7659,6 +7748,12 @@ $('bg-list').addEventListener('pointerdown', (e) => {
   const svg = seg.ownerSVGElement;
   const row = bgData && bgRow(seg.dataset.seg);
   if (!svg || !row) return;
+  /* A month that has happened cannot be planned. Checked before anything is
+     picked up rather than when it is put down, so the block never moves under
+     the pointer and then springs back — a control that responds and then
+     undoes itself reads as a bug, where one that does not move reads as a
+     rule. Hovering still works, because the figure is still worth reading. */
+  if (bgPast(seg.dataset.month)) return;
 
   e.preventDefault();
   const month = seg.dataset.month;
@@ -7825,6 +7920,11 @@ $('bg-list').addEventListener('keydown', (e) => {
     }
     return;
   }
+
+  /* Moving between blocks is allowed everywhere — reading a month you cannot
+     change is still worth doing, and a keyboard user who could not cross the
+     divider could not reach the months past it. Changing stops here. */
+  if (bgPast(month)) return;
 
   // Changing.
   const now = bgPlanOf(row)[month];
