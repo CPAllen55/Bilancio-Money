@@ -866,7 +866,16 @@
         justify-content:center; border:1px solid var(--hair-strong);
         border-radius:9px; padding:14px 20px; background:var(--bg-panel);
         text-align:right; min-width:200px; }
-  .trend-side{ flex:0 0 300px; display:flex; flex-direction:column; gap:14px; }
+  /* 256, down from 300. The percentages freed 56px inside the row and this
+     hands most of it to the chart instead of to the names: every category
+     label still fits except the longest, which ellipsises and keeps its full
+     text on hover.
+
+     Not narrower than this. At 256 the label box is about 106px, which holds
+     everything up to "Food and Dining" at 91 — only "Travel & Entertainment"
+     at 130 is cut. Taking another 30 would start cutting names that are
+     nobody's edge case. */
+  .trend-side{ flex:0 0 256px; display:flex; flex-direction:column; gap:14px; }
   @media (max-width:760px){
     .card-head{ flex-direction:column; }
     .kpi{ text-align:left; width:100%; margin-top:0; }
@@ -4691,7 +4700,8 @@ function keyList(rows, off, scope, totalLabel, opts) {
     const isOff = off.has(r.slug);
     const plain =
       '<span class="kswatch" style="background:' + r.colour + '"></span>' +
-      '<span class="klabel">' + escapeHtml(r.label) + '</span>' +
+      '<span class="klabel" title="' + escapeHtml(r.label) + '">' +
+        escapeHtml(r.label) + '</span>' +
       '<span class="kamt">' + r.amount_text + '</span>' +
       (r.change === undefined || r.change === null ? ''
         : '<span class="kdelta ' + (r.change >= 0 ? 'over' : 'under') + '">' +
