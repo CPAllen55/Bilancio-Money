@@ -14,15 +14,20 @@
  */
 
 import { Hono } from "hono";
-import { and, asc, desc, eq, gte, ilike, isNull, lte, notInArray, or, inArray, sql } from "drizzle-orm";
+import {
+  and, asc, desc, eq, gte, ilike, isNull, lte, notExists, notInArray, or, inArray, sql,
+  type SQL,
+} from "drizzle-orm";
 import { getDb } from "./db/client";
 import {
   accounts, categories, items, merchantRules, transactionOverrides, transactions,
+  transactionSplits,
 } from "./db/schema";
 import { requireUser } from "./auth";
 import { classify, merchantKey } from "./categories";
 import { buildShapedPlan, learnWindow, loadOverrides } from "./plan";
 import { judgeAll, type Charge, type Verdict } from "./recurring";
+import { partsOf, type Split } from "./splits";
 
 const summary = new Hono<{ Bindings: Env }>();
 
@@ -321,7 +326,10 @@ const emptyTotals = (ctx: CategoryContext): Totals => ({
   transfersExcluded: 0,
 });
 
-interface AmountRow extends Categorisable { amount: bigint; }
+interface AmountRow extends Categorisable { id: string; amount: bigint; }
+
+/** Splits by transaction id. Absent means the transaction is whole. */
+type SplitMap = Map<string, Split[]>;
 
 /**
  * Which line of the Categories tab a single transaction lands on.
@@ -369,27 +377,59 @@ export function displayBucket(
     : { kind: "spend", bucket: bucketFor(slug, "spend", ctx), signed };
 }
 
-function tally(rows: AmountRow[], ctx: CategoryContext): Totals {
+/**
+ * What one transaction contributes, one entry per category it touches.
+ *
+ * With no splits stored this yields a single part carrying the whole amount,
+ * so an ordinary transaction goes through exactly the arithmetic it always
+ * did. There is no separate unsplit path to keep in step.
+ *
+ * A carved-off part is fed back through displayBucket as though it were an
+ * override, because that is what it is: somebody pointing at this one
+ * transaction and naming a category. Reusing the override path rather than
+ * writing a second one means a split inherits every rule an override already
+ * obeys — a part filed under a transfer category leaves the totals, a part
+ * filed under an income category is allowed to be money coming back. The rule
+ * is stated once and both callers read it.
+ */
+function partsFor(
+  r: AmountRow,
+  splits: SplitMap,
+): { amount: bigint; row: Categorisable }[] {
+  const stored = splits.get(r.id);
+  if (!stored || !stored.length) return [{ amount: r.amount, row: r }];
+  return partsOf(Number(r.amount), stored).map((p) => ({
+    amount: BigInt(p.cents),
+    row: p.categoryId === null ? r : { ...r, overrideCategoryId: p.categoryId },
+  }));
+}
+
+export function tally(rows: AmountRow[], ctx: CategoryContext, splits: SplitMap): Totals {
   const out = emptyTotals(ctx);
   for (const r of rows) {
-    const { kind, bucket, signed } = displayBucket(r.amount, r, ctx);
+    for (const part of partsFor(r, splits)) {
+      const { kind, bucket, signed } = displayBucket(part.amount, part.row, ctx);
 
-    if (kind === "transfer") {
-      out.transfersExcluded++;
-      const moved = Math.abs(signed);
-      out.transfersMoved += moved;
-      if (bucket && bucket in out.byTransferCategory) out.byTransferCategory[bucket] += moved;
-      continue;
+      if (kind === "transfer") {
+        /* Counted per part rather than per transaction: a piece of a purchase
+           moved to a transfer category is its own excluded item, and the money
+           beside the count is the money that left the totals with it. */
+        out.transfersExcluded++;
+        const moved = Math.abs(signed);
+        out.transfersMoved += moved;
+        if (bucket && bucket in out.byTransferCategory) out.byTransferCategory[bucket] += moved;
+        continue;
+      }
+
+      if (kind === "income") {
+        out.income += signed;
+        out.byIncomeCategory[bucket!] = (out.byIncomeCategory[bucket!] ?? 0) + signed;
+        continue;
+      }
+
+      out.expense += -signed;
+      out.byCategory[bucket!] = (out.byCategory[bucket!] ?? 0) + -signed;
     }
-
-    if (kind === "income") {
-      out.income += signed;
-      out.byIncomeCategory[bucket!] = (out.byIncomeCategory[bucket!] ?? 0) + signed;
-      continue;
-    }
-
-    out.expense += -signed;
-    out.byCategory[bucket!] = (out.byCategory[bucket!] ?? 0) + -signed;
   }
   out.net = out.income - out.expense;
   return out;
@@ -416,6 +456,7 @@ async function ownedAccountIds(
 }
 
 const rowFields = {
+  id: transactions.id,
   amount: transactions.amount,
   categoryPrimary: transactions.categoryPrimary,
   categoryDetailed: transactions.categoryDetailed,
@@ -435,6 +476,39 @@ function withOverrides(db: ReturnType<typeof getDb>["db"], userId: string) {
         eq(transactionOverrides.userId, userId),
       ),
     );
+}
+
+/**
+ * The splits for whatever a where-clause matched.
+ *
+ * Loaded by joining that same predicate rather than by listing the ids it
+ * returned: a wide range is thousands of transactions, and sending thousands
+ * of uuids back to Postgres to ask about the handful that are split is a very
+ * large question with a very small answer. Splits are rare, so this reads a
+ * few rows however big the window is.
+ */
+async function loadSplits(
+  db: ReturnType<typeof getDb>["db"],
+  userId: string,
+  where: SQL | undefined,
+): Promise<SplitMap> {
+  const rows = await db
+    .select({
+      transactionId: transactionSplits.transactionId,
+      categoryId: transactionSplits.categoryId,
+      cents: transactionSplits.cents,
+    })
+    .from(transactionSplits)
+    .innerJoin(transactions, eq(transactions.id, transactionSplits.transactionId))
+    .where(and(eq(transactionSplits.userId, userId), where));
+
+  const out: SplitMap = new Map();
+  for (const r of rows) {
+    const one = { categoryId: r.categoryId, cents: Number(r.cents) };
+    const list = out.get(r.transactionId);
+    if (list) list.push(one); else out.set(r.transactionId, [one]);
+  }
+  return out;
 }
 
 /* ---------------------------------------------------------- subscriptions -- */
@@ -630,25 +704,36 @@ summary.get("/summary", async (c) => {
       ownedAccountIds(db, auth.user.id, account, true),
     ]);
 
+    /* Named rather than inlined so the splits can be fetched against the very
+       same predicate. Two conditions that have to select the same rows and are
+       written out twice are two conditions that will one day differ. */
+    const windowWhere = (w: Window) =>
+      and(
+        inArray(transactions.accountId, ids),
+        gte(transactions.date, ymd(w.start)),
+        lte(transactions.date, ymd(w.end)),
+        eq(transactions.pending, false),
+      );
+
     const inWindow = (w: Window) =>
       ids.length
-        ? withOverrides(db, auth.user.id).where(
-            and(
-              inArray(transactions.accountId, ids),
-              gte(transactions.date, ymd(w.start)),
-              lte(transactions.date, ymd(w.end)),
-              eq(transactions.pending, false),
-            ),
-          )
+        ? withOverrides(db, auth.user.id).where(windowWhere(w))
         : Promise.resolve([] as AmountRow[]);
 
-    const [nowRows, prevRows, budget] = await Promise.all([
+    const splitsIn = (w: Window) =>
+      ids.length
+        ? loadSplits(db, auth.user.id, windowWhere(w))
+        : Promise.resolve(new Map() as SplitMap);
+
+    const [nowRows, prevRows, nowSplits, prevSplits, budget] = await Promise.all([
       inWindow(current),
       inWindow(previous),
+      splitsIn(current),
+      splitsIn(previous),
       budgetFor(db, auth.user.id, ids, ctx, current, new Date()),
     ]);
-    const now = tally(nowRows as AmountRow[], ctx);
-    const before = tally(prevRows as AmountRow[], ctx);
+    const now = tally(nowRows as AmountRow[], ctx, nowSplits);
+    const before = tally(prevRows as AmountRow[], ctx, prevSplits);
 
     const daysLeft = Math.max(0, daysInPeriod - daysElapsed);
     const remaining = Math.max(0, now.income - now.expense);
@@ -835,6 +920,16 @@ summary.get("/transactions", async (c) => {
         desc(transactions.date),
       );
 
+    /* Read once for the whole filtered set, then used twice: to decide which
+       rows belong to a category being drilled into, and to tell the page which
+       of its rows are divided. */
+    const splits = await loadSplits(db, auth.user.id, where);
+
+    /* A row on its way out, with the amount that belongs to the category being
+       drilled into rather than the amount on the statement. `partOf` carries
+       the whole so the reader can be told this is a piece of something. */
+    type Drilled = Awaited<typeof page>[number] & { partOf?: number };
+
     let rows;
     let total;
     // Totals for everything the filters match, not for the page being shown.
@@ -852,13 +947,49 @@ summary.get("/transactions", async (c) => {
       // Capped rather than unbounded: this runs inside a request, and a range
       // wide enough to exceed the cap is one nobody is reading line by line.
       const all = await page.limit(DRILL_SCAN_CAP);
-      const matching = all.filter((r) => {
-        const { bucket: landed } = displayBucket(r.amount, r, ctx);
-        return landed !== null && wanted.has(landed);
-      });
+
+      /* A split transaction belongs to this category for the part that was
+         filed here, and for no more than that. Listing the whole $388.01 shop
+         under Gifts because $50 of it was a present would make the drill-down
+         disagree with the total it was opened from — and the drill-down exists
+         to show the reader exactly what built that number. */
+      const matching: Drilled[] = [];
+      for (const r of all) {
+        const parts = partsFor(r as AmountRow, splits);
+        let attributed = 0n;
+        let hit = false;
+        let filedAs: string | null = r.overrideCategoryId;
+        let several = false;
+
+        for (const part of parts) {
+          const { bucket: landed } = displayBucket(part.amount, part.row, ctx);
+          if (landed === null || !wanted.has(landed)) continue;
+          attributed += part.amount;
+          /* Drilling into a parent can catch two of one transaction's parts.
+             Then no single category is the answer and the row keeps its own. */
+          if (hit) several = true;
+          else filedAs = part.row.overrideCategoryId;
+          hit = true;
+        }
+        if (!hit) continue;
+
+        matching.push(
+          attributed === r.amount
+            ? r
+            : {
+                ...r,
+                amount: attributed,
+                overrideCategoryId: several ? r.overrideCategoryId : filedAs,
+                partOf: -Number(r.amount),   // normalised: positive is money in
+              },
+        );
+      }
+
       total = matching.length;
       rows = matching.slice(offset, offset + limit);
       for (const r of matching) {
+        // The attributed amount, not the statement amount, so these totals are
+        // the ones the category tile was showing.
         const signed = -Number(r.amount);   // normalised: positive is money in
         if (signed > 0) moneyIn += signed; else moneyOut += -signed;
       }
@@ -889,11 +1020,21 @@ summary.get("/transactions", async (c) => {
       sum: { in: moneyIn, out: moneyOut, net: moneyIn - moneyOut },
       merchants: periodNames,
       categories: ctx.list,
-      transactions: rows.map((r) => {
+      transactions: (rows as Drilled[]).map((r) => {
         const { kind, slug } = resolveSlug(r, ctx);
         const key = merchantKey(r.merchantName, r.name);
+        /* Sent in the reader's convention, the same way round as `amount`, so
+           the editor never has to know which way Plaid counts. */
+        const parts = (splits.get(r.id) ?? []).map((s) => ({
+          categoryId: s.categoryId,
+          amount: -s.cents,
+        }));
         return {
           id: r.id,
+          /* Present only when this row is a piece of a larger transaction:
+             the whole it was carved from. */
+          partOf: r.partOf ?? null,
+          splits: parts,
           date: r.date,
           name: r.merchantName ?? r.name,
           rawName: r.name,
@@ -1012,12 +1153,44 @@ export async function monthlyBuckets(
         inArray(transactions.accountId, accountIds),
         gte(transactions.date, `${span[0]}-01`),
         eq(transactions.pending, false),
+        /* Split transactions are held back and counted one at a time below.
+           This query collapses many transactions into one row per month,
+           category and merchant, and a split is a fact about a single
+           transaction — there is nothing left in a grouped row to apply it to.
+           When nothing is split, which is nearly always, this excludes nothing
+           and the second pass reads no rows. */
+        notExists(
+          db.select({ one: sql`1` }).from(transactionSplits).where(
+            and(
+              eq(transactionSplits.transactionId, transactions.id),
+              eq(transactionSplits.userId, userId),
+            ),
+          ),
+        ),
       ),
     )
     .groupBy(
       monthExpr, transactions.categoryPrimary, transactions.categoryDetailed,
       merchantExpr, transactionOverrides.categoryId,
     );
+
+  /* One statement of what a month is made of, read by both passes. The grouped
+     query arrives pre-summed and the split rows arrive one part at a time, but
+     what either does to a month has to be the same thing or a split
+     transaction would be counted by different rules than its neighbours. */
+  const add = (b: MonthBucket, kind: string, slug: string | null,
+               inCents: number, outCents: number) => {
+    if (kind === "transfer") return;
+    b.income += inCents;
+    if (outCents > 0) {
+      b.expense += outCents;
+      // Spending can only land in a spending bucket. An expense filed under an
+      // income category would otherwise stack as an "Income" bar in the chart,
+      // and income belongs behind the bars as a level, never as one of them.
+      const bucket = bucketFor(slug, "spend", ctx);
+      b.byCategory[bucket] = (b.byCategory[bucket] ?? 0) + outCents;
+    }
+  };
 
   for (const r of rows) {
     const b = buckets.get(r.ym);
@@ -1032,19 +1205,45 @@ export async function monthlyBuckets(
       },
       ctx,
     );
-    if (kind === "transfer") continue;
+    add(b, kind, slug, Number(r.inCents), Number(r.outCents));
+  }
 
-    b.income += Number(r.inCents);
-    const out = Number(r.outCents);
-    if (out > 0) {
-      b.expense += out;
-      // Spending can only land in a spending bucket. An expense filed under an
-      // income category would otherwise stack as an "Income" bar in the chart,
-      // and income belongs behind the bars as a level, never as one of them.
-      const bucket = bucketFor(slug, "spend", ctx);
-      b.byCategory[bucket] = (b.byCategory[bucket] ?? 0) + out;
+  /* The second pass: the transactions held back above, counted whole rather
+     than grouped, so each of their parts can go where it belongs. */
+  const splitWhere = and(
+    inArray(transactions.accountId, accountIds),
+    gte(transactions.date, `${span[0]}-01`),
+    eq(transactions.pending, false),
+  );
+  const splits = await loadSplits(db, userId, splitWhere);
+
+  if (splits.size) {
+    const splitRows = await db
+      .select({
+        ...rowFields,
+        ym: sql<string>`to_char(${transactions.date}, 'YYYY-MM')`,
+      })
+      .from(transactions)
+      .leftJoin(
+        transactionOverrides,
+        and(
+          eq(transactionOverrides.transactionId, transactions.id),
+          eq(transactionOverrides.userId, userId),
+        ),
+      )
+      .where(and(splitWhere, inArray(transactions.id, [...splits.keys()])));
+
+    for (const r of splitRows) {
+      const b = buckets.get(r.ym);
+      if (!b) continue;
+      for (const part of partsFor(r as AmountRow, splits)) {
+        const { kind, slug } = resolveSlug(part.row, ctx);
+        const cents = Number(part.amount);   // Plaid: positive is money leaving
+        add(b, kind, slug, cents < 0 ? -cents : 0, cents > 0 ? cents : 0);
+      }
     }
   }
+
   for (const b of buckets.values()) b.total = b.expense;
   return buckets;
 }
