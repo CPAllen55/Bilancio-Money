@@ -1715,7 +1715,6 @@
   #tx-list .subrow,
   #tx-list .subsel,
   #tx-list .subamt,
-  #tx-list .subdel,
   #tx-list .subtot,
   #tx-list .amttotal{ font-family:var(--font-num); white-space:nowrap; }
   /* A split line is the height of the menu above it, because it is the same
@@ -1723,8 +1722,7 @@
      it is a footing, not another category. */
   #tx-list .subrow,
   #tx-list .subsel,
-  #tx-list .subamt,
-  #tx-list .subdel{ height:var(--txline); line-height:var(--txline);
+  #tx-list .subamt{ height:var(--txline); line-height:var(--txline);
                     font-size:12px; box-sizing:border-box; }
   #tx-list .subtot,
   #tx-list .amttotal{ height:20px; line-height:20px; font-size:11px; }
@@ -1751,25 +1749,26 @@
   #tx-list .subsel:hover{ border-color:var(--ink); }
   #tx-list .subsel:focus{ outline:2px solid var(--split-ring); outline-offset:1px; }
 
-  /* Add another, on the right of the part it hangs off. Same mark as the
-     chevron on the row, one size down, because it does the same thing. */
+  /* Add, in the expander column under the button that made the first part.
+     Every chevron in the column does the same thing, so the column can be read
+     rather than inspected. */
+  #tx-list .subadds{ display:flex; flex-direction:column; gap:4px;
+                     margin-top:6px; align-items:center; }
   #tx-list .subadd{ display:inline-flex; align-items:center; justify-content:center;
-                    flex:none; width:20px; height:20px; padding:0;
-                    border:1px solid var(--hair); border-radius:5px;
+                    width:24px; height:var(--txline); padding:0;
+                    border:1px solid var(--hair); border-radius:6px;
                     background:none; color:var(--muted); cursor:pointer;
                     line-height:1; transition:color .12s, border-color .12s; }
   #tx-list .subadd:hover{ color:var(--mint); border-color:var(--mint-dim); }
-  #tx-list .subadd svg{ width:10px; height:10px; }
+  #tx-list .subadd svg{ width:11px; height:11px; }
 
-  /* Remove, in the expander column under the button that made the part. One
-     control per line all the way down, rather than adding in one place and
-     removing in another. */
-  #tx-list .subdels{ display:flex; flex-direction:column; gap:4px;
-                     margin-top:6px; align-items:center; }
+  /* Remove, on the far side of the part from the button that adds one. Two
+     opposite actions a few pixels apart is how you press the wrong one. */
   #tx-list .subdel{ display:inline-flex; align-items:center; justify-content:center;
-                    width:24px; padding:0; border:1px solid transparent;
-                    border-radius:6px; background:none; color:var(--muted);
-                    cursor:pointer; font-size:15px;
+                    flex:none; width:20px; height:20px; padding:0;
+                    border:1px solid var(--hair); border-radius:5px;
+                    background:none; color:var(--muted); cursor:pointer;
+                    font-size:14px; line-height:1;
                     transition:color .12s, border-color .12s; }
   #tx-list .subdel:hover{ color:var(--coral); border-color:var(--coral); }
 
@@ -3556,11 +3555,14 @@ function catCell(t) {
  * The parts, under the menu they were carved out of.
  *
  * Each is the menu's own box — same width, same height, same corner — sunk a
- * shade and ringed in gold, and each carries the two things you can do to it:
- * add another below, on the right, and remove this one, on the left. The
- * remove sits in the expander column rather than in here, under the button
- * that made the part in the first place, so the column reads as one control
- * per line all the way down.
+ * shade and ringed in gold, and each carries the cross that takes it away
+ * again, on its right.
+ *
+ * Adding lives in the expander column instead, so every button that makes a
+ * part is in one column under the one that made the first — and removing is
+ * the other side of the pill from adding, which is the point: the two are
+ * opposite actions and putting them side by side is how you press the wrong
+ * one.
  *
  * It is a menu because it has to be — a part has to be able to say which
  * category it is — but it is drawn without a caret, so the one box you can
@@ -3576,8 +3578,8 @@ function splitPills(t) {
         'title="' + escapeHtml(splitNote(t, p)) + '">' +
         partOptions(p.categoryId, side) +
       '</select>' +
-      '<button class="subadd" data-id="' + t.id + '" data-i="' + i + '" ' +
-        'aria-label="Add another category to this transaction">' + SPLIT_CHEVRON + '</button>' +
+      '<button class="subdel" data-id="' + t.id + '" data-i="' + i + '" ' +
+        'aria-label="Remove this part">&times;</button>' +
     '</span>').join('') +
     '<span class="subtot">total</span></span>';
 }
@@ -3690,12 +3692,14 @@ $('tx-list').addEventListener('click', (e) => {
 let txById = {};
 
 /**
- * The button that divides a transaction, and the buttons that undo it.
+ * The buttons that divide a transaction.
  *
- * One control per line, all the way down the column: the chevron on the first
- * line adds a part, and every line under it carries the cross that takes that
- * part away again. Adding and removing therefore live in the same column
- * rather than one being a button and the other a menu item somewhere else.
+ * One chevron per line, all the way down the column. The one on the first line
+ * adds a part at the end; each one under it adds directly beneath its own part.
+ * They are the same mark doing the same thing at every height, which is what
+ * makes the column readable at a glance — the alternative had adding on one
+ * side and removing on the other side of the same line, where the two opposite
+ * actions sit close enough to hit the wrong one.
  *
  * The chevron stays mint once a row is divided, because that is the mark that
  * says this row has been changed by hand and is worth being able to find
@@ -3709,9 +3713,10 @@ function expanderCell(t) {
                               : 'Divide this transaction') + '" ' +
     'aria-label="Divide this transaction between categories">' + SPLIT_CHEVRON + '</button>';
   if (!parts.length) return out;
-  return out + '<span class="subdels">' + parts.map((p, i) =>
-    '<button class="subdel" data-id="' + t.id + '" data-i="' + i + '" ' +
-      'aria-label="Remove this part">&times;</button>').join('') + '</span>';
+  return out + '<span class="subadds">' + parts.map((p, i) =>
+    '<button class="subadd" data-id="' + t.id + '" data-i="' + i + '" ' +
+      'aria-label="Add another category to this transaction">' + SPLIT_CHEVRON +
+      '</button>').join('') + '</span>';
 }
 
 /**
