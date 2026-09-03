@@ -1687,8 +1687,10 @@
                      margin-top:6px; align-items:flex-start; }
   #tx-list .subamts{ align-items:flex-end; }
   #tx-list .subcat,
-  #tx-list .subamt{ height:20px; line-height:20px; font-size:11px;
-                    font-family:var(--font-num); white-space:nowrap; }
+  #tx-list .subamt,
+  #tx-list .subtot,
+  #tx-list .amttotal{ height:20px; line-height:20px; font-size:11px;
+                      font-family:var(--font-num); white-space:nowrap; }
   /* The same mint as the expander, because it is the same fact: somebody
      changed this row by hand. */
   #tx-list .subcat{ display:inline-flex; align-items:center; padding:0 9px;
@@ -1696,9 +1698,54 @@
                     border:1px solid var(--mint-dim); border-radius:99px;
                     color:var(--mint-dim); cursor:default; }
   :root:not([data-theme="light"]) #tx-list .subcat{ color:var(--mint); }
-  /* Quieter than the total it hangs under: the figure on the first line is
-     what left the account, and these are how it was carved up. */
+  /* The parts are quieter than the figure they add up to. */
   #tx-list .subamt{ color:var(--muted); font-variant-numeric:tabular-nums; }
+
+  /* The word beside the total, so a figure at the bottom of a stack cannot be
+     mistaken for one more category. */
+  #tx-list .subtot{ color:var(--muted); text-transform:uppercase;
+                    letter-spacing:.06em; font-size:9.5px; padding-left:2px; }
+  /* The rule goes over the figure only. Drawn across both cells it would come
+     out as two segments with a column gap between them, which reads as broken
+     rather than as a total. */
+  #tx-list .amttotal{ display:block; margin-top:4px; padding-top:4px;
+                      border-top:1px solid var(--hair);
+                      font-size:12.5px; color:var(--ink);
+                      font-variant-numeric:tabular-nums; }
+  #tx-list tbody tr.hassplit td.num.in .amttotal{ color:var(--mint); }
+  /* The first line is now a part like any other, so it stops carrying the
+     weight of the row and the total below it takes it. */
+  #tx-list tbody tr.hassplit .amtline{ color:var(--muted); font-size:11px; }
+  #tx-list .subtot{ margin-top:4px; padding-top:4px;
+                    border-top:1px solid transparent; }
+
+  /* A divided row on a phone.
+
+     A second block for a breakpoint that already has one, and deliberately so:
+     these rules override the receipt above them, and at equal specificity CSS
+     resolves by source order, so an override written before the thing it
+     overrides is not an override at all. Written in the earlier block it was
+     outranked and silently did nothing.
+
+     The category column is gone at this width, so a divided row has nothing
+     left to label its parts: the figures would stand in a column with no words
+     beside them, reading as three separate charges rather than as one being
+     broken down. So the breakdown goes and the total stays — and the total IS
+     the whole transaction, which is the one figure this width exists to
+     protect. It stops being a subtotal and goes back to being the amount, at
+     the same size and weight as every other amount in the column. */
+  @media (max-width:560px){
+    #tx-list table.data tbody tr.hassplit .amtline,
+    #tx-list table.data tbody tr.hassplit .subamt{ display:none; }
+    #tx-list table.data tbody tr.hassplit .amttotal{
+      border-top:none; margin-top:0; padding-top:0;
+      font-size:inherit; height:auto; line-height:inherit; }
+    /* Nothing is stacked any more, so the row goes back to being one line —
+       including the space the stack was reserving, or a divided row would sit
+       five pixels taller than its neighbours for a breakdown nobody can see. */
+    #tx-list table.data tbody tr.hassplit td{ vertical-align:middle; }
+    #tx-list table.data tbody tr.hassplit .subamts{ margin-top:0; gap:0; }
+  }
 
   /* ---- dividing a transaction ----
 
@@ -3309,8 +3356,7 @@ async function renderTransactions() {
         '<option>' + escapeHtml(t.category ? labelOfSlug(t.category) : '—') + '</option>' +
         '</select>' + splitPills(t) + '</td>' +
       '<td class="num' + (t.amount > 0 ? ' in' : ' out') + '">' +
-        '<span class="amtline">' + (t.amount > 0 ? '+' : '') + money(t.amount) +
-        '</span>' + splitAmounts(t) + '</td></tr>';
+        splitAmounts(t) + '</td></tr>';
   }).join('');
 
   /* The total belongs in the table, on the column it totals, and it counts
@@ -3368,12 +3414,16 @@ function labelOfId(id) {
 
 function splitNote(t, part) {
   const whole = Math.abs(t.amount);
-  const carved = (t.splits || []).reduce((n, s) => n + Math.abs(s.amount), 0);
-  const rest = whole - carved;
+  const rest = Math.abs(splitRest(t));
   const stays = t.category ? labelOfSlug(t.category) : 'where it was';
   return money(Math.abs(part.amount)) + ' of ' + money(whole) + ' · ' +
     (rest > 0 ? money(rest) + ' stays in ' + stays
               : 'nothing stays in ' + stays);
+}
+
+/* What is left under the category in the menu, once the parts are taken out. */
+function splitRest(t) {
+  return t.amount - (t.splits || []).reduce((n, s) => n + s.amount, 0);
 }
 
 function splitPills(t) {
@@ -3381,15 +3431,37 @@ function splitPills(t) {
   if (!parts.length) return '';
   return '<span class="subcats">' + parts.map(p =>
     '<span class="subcat" title="' + escapeHtml(splitNote(t, p)) + '">' +
-      escapeHtml(p.label) + '</span>').join('') + '</span>';
+      escapeHtml(p.label) + '</span>').join('') +
+    '<span class="subtot">total</span></span>';
 }
 
+/**
+ * The amount column, which for a divided row is a receipt.
+ *
+ * The figure beside the menu is what is left under that category — $5.52, not
+ * the $105.52 that was charged. The old layout put the whole transaction there,
+ * which read as though the entire charge had landed in Events & Outings when
+ * $100 of it had been moved to Business. The column said one thing and the
+ * pills underneath said another.
+ *
+ * The whole moves to the bottom, under a rule and beside the word total, which
+ * is where a figure that everything above adds up to belongs. Nothing is lost:
+ * the amount you would reconcile against a statement is still on the row, and
+ * now the three lines above it sum to it exactly.
+ *
+ * A fully reallocated transaction shows $0.00 against its own category, which
+ * is the truth and is worth seeing.
+ */
 function splitAmounts(t) {
+  const whole = (t.amount > 0 ? '+' : '') + money(t.amount);
   const parts = splitParts(t);
-  if (!parts.length) return '';
-  return '<span class="subamts">' + parts.map(p =>
-    '<span class="subamt">' + (p.amount > 0 ? '+' : '') + money(p.amount) +
-      '</span>').join('') + '</span>';
+  if (!parts.length) return '<span class="amtline">' + whole + '</span>';
+
+  const fig = (n) => (n > 0 ? '+' : '') + money(n);
+  return '<span class="amtline">' + fig(splitRest(t)) + '</span>' +
+    '<span class="subamts">' + parts.map(p =>
+      '<span class="subamt">' + fig(p.amount) + '</span>').join('') +
+      '<span class="amttotal">' + whole + '</span></span>';
 }
 
 /**
