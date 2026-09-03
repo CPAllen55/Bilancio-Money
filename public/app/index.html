@@ -231,7 +231,17 @@
        on the card colour, where the muted optgroup labels still clear 4.5. */
     --field:#F2E2B4;
     --split-fill:#D5C79E;
-    --lit:#B8892A;
+    /* Deeper and more saturated than the dark theme's gold, and not for taste.
+       The same wash on a cream card separated by less than half as much: 5.0 to
+       11.8 in L* against the dark theme's 12.6 to 29.2, measured on the
+       composite rather than the token. A tint that works on near-black is a
+       tint you cannot find on tan.
+
+       Most of the correction is in the opacity below rather than here. Taken
+       far enough down in lightness to close the gap on its own this stops being
+       gold and becomes a brown shadow across the column — the right number and
+       the wrong thing. This holds the hue; the alpha does the work. */
+    --lit:#8A6410;
     --split-ring:var(--gold-4);
     /* The stripe goes lighter than the card, not darker.
      *
@@ -1120,6 +1130,11 @@
      The strength lives in the gradient rather than in stroke-opacity, which
      would flatten the fade back towards uniform. */
   .mpane{ opacity:.75; stroke:url(#tr-edge); stroke-width:1.25; }
+  /* Stronger on the light theme, because the same alpha over cream travels a
+     shorter distance than it does over near-black. The gradient shape is the
+     same in both; only how far it gets is adjusted. */
+  :root[data-theme="light"] .mpane{ opacity:.95; }
+  :root[data-theme="light"] .mglow{ opacity:1.15; }
   /* It arrives rather than appearing. A tenth of a second of fade is the
      difference between a chart that responds and a chart that flickers. */
   .mglow, .mpane, .mlab{ transition:opacity .18s ease; }
@@ -5127,6 +5142,27 @@ function drawTrend() {
     if (seg[id] > 0) totals[id] = (totals[id] || 0) + seg[id];
   }); });
   const present = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
+
+  /**
+   * Every category the CHART draws, which stops being the same list as the key
+   * the moment a month is picked.
+   *
+   * The key narrows to what is in the picked month, which is the point of
+   * picking one. The chart does not: it goes on drawing every month, so it goes
+   * on needing a colour for every category in any of them.
+   *
+   * Those colours are gradient definitions, referenced by id from each
+   * segment's fill. Built from the key's list, a category absent from the
+   * picked month had no gradient defined and every one of its segments in every
+   * other month pointed at an id that was not there — which does not fall back
+   * to the colour, it fills with nothing. A category that happened not to appear
+   * in the month you picked turned into a hole in eleven other bars.
+   */
+  const drawn = new Set();
+  all.forEach(m => {
+    const seg = trendSegments(m);
+    for (const id of Object.keys(seg)) if (seg[id] > 0) drawn.add(id);
+  });
   // The same rollup for the year-ago window, so the key can carry a change
   // column instead of leaving the reader to compare two charts.
   /* Leaf totals across the window, for the rows an opened parent reveals.
@@ -5155,7 +5191,8 @@ function drawTrend() {
             'style="height:auto;display:block" ' +
             'preserveAspectRatio="xMidYMid meet" role="img" ' +
             'aria-label="Monthly spending, with the year before and any forecast">' +
-            reliefDefs('tr', present.map(colourOf));
+            /* From what the chart draws, not from what the key lists. */
+            reliefDefs('tr', [...drawn].map(colourOf));
 
   if (emptyWindow) {
     svg += '<text x="' + (PL + plotW / 2) + '" y="' + (PT + plotH / 2) + '" text-anchor="middle" ' +
@@ -5191,7 +5228,14 @@ function drawTrend() {
   /* Declared once, used by whichever column is lit. Mint, because that is what
      this app uses to mean "this is the thing you chose" everywhere else. */
   /* It runs the height of the plot and dissolves at the top rather than
-     stopping there.
+     stopping there — but only at the top.
+
+     The first attempt at this faded from a third of the way down, which made
+     the lit column too faint to find at the height most bars do not reach: you
+     could tell which month was picked only by looking at the axis, which is
+     the opposite of what a glow is for. The dissolve belongs in the last tenth
+     — enough that there is no line to mistake for a level, and not so much
+     that the light stops doing its job.
 
      A hard top edge is a horizontal line drawn across a chart whose whole
      business is horizontal lines at meaningful heights — it reads as a level,
@@ -5207,17 +5251,17 @@ function drawTrend() {
   svg += '<defs>' +
     '<linearGradient id="tr-lit" x1="0" y1="0" x2="0" y2="1">' +
       '<stop offset="0" stop-color="var(--lit)" stop-opacity="0"/>' +
-      '<stop offset=".30" stop-color="var(--lit)" stop-opacity=".13"/>' +
-      '<stop offset=".65" stop-color="var(--lit)" stop-opacity=".26"/>' +
-      '<stop offset="1" stop-color="var(--lit)" stop-opacity=".42"/>' +
+      '<stop offset=".10" stop-color="var(--lit)" stop-opacity=".20"/>' +
+      '<stop offset=".50" stop-color="var(--lit)" stop-opacity=".33"/>' +
+      '<stop offset="1" stop-color="var(--lit)" stop-opacity=".48"/>' +
     '</linearGradient>' +
     /* The edge fades with it. A stroke is one colour the whole way round by
        default, so an outline that stopped at full strength would put back the
        hard top the fill just gave up — and draw the top twice over. */
     '<linearGradient id="tr-edge" x1="0" y1="0" x2="0" y2="1">' +
       '<stop offset="0" stop-color="var(--lit)" stop-opacity="0"/>' +
-      '<stop offset=".35" stop-color="var(--lit)" stop-opacity=".18"/>' +
-      '<stop offset="1" stop-color="var(--lit)" stop-opacity=".70"/>' +
+      '<stop offset=".10" stop-color="var(--lit)" stop-opacity=".32"/>' +
+      '<stop offset="1" stop-color="var(--lit)" stop-opacity=".80"/>' +
     '</linearGradient>' +
     '<filter id="tr-blur" x="-50%" y="-20%" width="200%" height="140%">' +
       '<feGaussianBlur stdDeviation="9"/>' +
@@ -5907,8 +5951,21 @@ function keyBoxClick(e) {
 $('trend-chart').addEventListener('click', (e) => {
   if (keyBoxClick(e)) return;
 
+  /* A segment is a category IN a month, so picking one picks both. Choosing
+     Groceries in June and being shown June's breakdown is the same gesture
+     read at the level it was made at — and it saves the second click that
+     otherwise had to land in exactly the right empty air.
+
+     Clicking it again puts both down together, so the pair is never left half
+     set: a lit column with nothing selected in it is a state nobody asked for. */
   const seg = e.target.closest('.seg');
-  if (seg) { setTrendSel({ cat: seg.dataset.cat, month: seg.dataset.month }); return; }
+  if (seg) {
+    const same = trendSel && trendSel.cat === seg.dataset.cat &&
+                 trendSel.month === seg.dataset.month;
+    trendMonth = same ? null : seg.dataset.month;
+    setTrendSel({ cat: seg.dataset.cat, month: seg.dataset.month });
+    return;
+  }
 
   /* The column, which is anywhere in the month's band that is not a segment.
      Picking the same one again puts it down, the way every other choice on
@@ -5933,6 +5990,10 @@ $('trend-chart').addEventListener('keydown', (e) => {
   const seg = e.target.closest('.seg');
   if (!seg) return;
   e.preventDefault();
+  // The same gesture from the keyboard, so it means the same thing.
+  const same = trendSel && trendSel.cat === seg.dataset.cat &&
+               trendSel.month === seg.dataset.month;
+  trendMonth = same ? null : seg.dataset.month;
   setTrendSel({ cat: seg.dataset.cat, month: seg.dataset.month });
 });
 
