@@ -176,6 +176,18 @@
        eight: money arriving and money kept are one thing, money leaving and
        money lost are the other. */
     --tile-pos:var(--surface); --tile-neg:var(--surface);
+
+    /* The readout takes the same two meanings the tiles do — green arriving,
+       red leaving — but it takes them on both themes, where the tiles only
+       take them on the light one. The tiles' reason for staying flat here is
+       that a row of eight tinted blocks in the dark reads as noise; a single
+       box under the cursor is not a row of eight.
+
+       Chosen on lightness rather than contrast ratio: against a panel this
+       dark, ratio compresses to nothing and cannot tell two surfaces apart.
+       These sit 5.4 and 5.0 L* above the panel, which it can. */
+    --tip-in:#0E201B;  --tip-in-ink:var(--cand-up);
+    --tip-out:#2A161C; --tip-out-ink:var(--cand-dn);
     --card-safe:var(--surface);
 
     /* The comparison lines on Budgeting v2. Chosen per theme, because the
@@ -331,6 +343,13 @@
        money leaving and for one that did not. Set apart from the gold the other
        cards use — 16.5 and 12.7 from it — so a tile still reads as a tile. */
     --tile-pos:#DCF1E6; --tile-neg:#F9E3DA;
+    /* The tiles' own two, so the readout and the card it describes are the
+       same colour. The figures on them are NOT the candle's greens and reds:
+       --cand-up on this tint measures 4.08, under the line for 21px text.
+       These are deeper — 6.64 and 6.68 — and still plainly the same two
+       colours. */
+    --tip-in:var(--tile-pos);  --tip-in-ink:#075E3D;
+    --tip-out:var(--tile-neg); --tip-out-ink:#9E0F26;
     --card-safe:#F7EBCA;
 
     --line-average:#8B2FBF; --line-trend:#0B6B8F;
@@ -1632,26 +1651,45 @@
 
   /* A figure that is good or bad news says so.
 
-     Only where the thing hovered has an opinion — most figures on this page
-     are neither, and a chart where every box is coloured is a chart where the
-     colour has stopped meaning anything. The measure between the bars has an
-     opinion, so its box is edged and lit in the same colour the measure is,
-     and the amount inside it takes that colour too.
+     Only where the thing hovered has an opinion — plenty of figures on this
+     page are neither, and a chart where every box is coloured is a chart
+     where the colour has stopped meaning anything.
+     Two levels of it.
 
-     The label stays in plain ink. "Over by" written in red on a red-edged box
-     is the same fact three times; the money is the part worth colouring. */
+     tone-in and tone-out are money arriving or leaving: the tint and a
+     matching figure, exactly what the Overview tiles carry and nothing more.
+     Most of what this box describes is one or the other.
+
+     tone-up and tone-down are the measure between the bars, which is not just
+     money in a direction but the answer to the question the chart is asking.
+     Same tints, plus the edge and halo the measure itself has, so pointing at
+     it and reading it look like the same act.
+
+     The label stays in plain ink throughout. "Over by" written in red inside a
+     red box is the same fact three times; the money is the part worth
+     colouring. */
+  .charttip.tone-in,  .charttip.tone-up{ background:var(--tip-in); }
+  .charttip.tone-out, .charttip.tone-down{ background:var(--tip-out); }
+  .charttip.tone-in .ct-amount,
+  .charttip.tone-up .ct-amount{ color:var(--tip-in-ink); }
+  .charttip.tone-out .ct-amount,
+  .charttip.tone-down .ct-amount{ color:var(--tip-out-ink); }
+  /* The line above the note is the box's own edge repeated inside it, so it
+     follows the tone rather than staying the one grey line in a tinted box. */
+  .charttip.tone-in .ct-note,
+  .charttip.tone-up .ct-note{ border-top-color:var(--cand-up-glow); }
+  .charttip.tone-out .ct-note,
+  .charttip.tone-down .ct-note{ border-top-color:var(--cand-dn-glow); }
+
+  /* Only the measure is edged and haloed. Written below the shared rules on
+     purpose: these carry the same specificity, so the later one is the one
+     that wins. */
   .charttip.tone-up{ border-color:var(--cand-up);
     box-shadow:0 10px 28px var(--shadow), 0 0 0 1px var(--cand-up-glow),
                0 0 22px var(--cand-up-glow); }
-  .charttip.tone-up .ct-amount{ color:var(--cand-up); }
   .charttip.tone-down{ border-color:var(--cand-dn);
     box-shadow:0 10px 28px var(--shadow), 0 0 0 1px var(--cand-dn-glow),
                0 0 22px var(--cand-dn-glow); }
-  .charttip.tone-down .ct-amount{ color:var(--cand-dn); }
-  /* The line above the note is the box's own edge repeated inside it, so it
-     follows the tone rather than staying the one grey line in a lit box. */
-  .charttip.tone-up .ct-note{ border-top-color:var(--cand-up-glow); }
-  .charttip.tone-down .ct-note{ border-top-color:var(--cand-dn-glow); }
 
   .panner{ width:100%; margin-top:10px; accent-color:var(--mint-dim); cursor:grab; }
 
@@ -7278,7 +7316,8 @@ function bgVsChart() {
         '" y="' + (base - oh).toFixed(1) + '" width="' + g.barW.toFixed(1) +
         '" height="' + oh.toFixed(1) + '" rx="1.5" ' +
         'fill="' + relief('vs', outColour) + '" style="--seg:' + outColour + '" ' +
-        tipAttrs('Everything planned', m, ov, iv + ov, 'the sum of the plans below') +
+        tipAttrs('Everything planned', m, ov, iv + ov,
+          'the sum of the plans below', 'out') +
         ' data-vsout="' + m + '"></rect>';
   });
 
@@ -7783,6 +7822,15 @@ function bgTipSet(html, x, y) {
 
 function bgTipShow(row, month, start, x, y) {
   const el = bgTip();
+  /* Green for the income row, red for everything else, because everything
+     else in this view is money going out. Identity rather than a slug: there
+     is exactly one income row and bgRow hands back that same object.
+
+     Set on every call, never once at creation — this element is reused by
+     every block in every card, so a tone left on it from the last one would
+     colour the next. */
+  el.className = 'charttip bg-tip ' +
+    (row === (bgData && bgData.income) ? 'tone-in' : 'tone-out');
   const i = bgData.months.indexOf(month);
   const label = bgData.labels[i] || month;
   const v = bgPlanOf(row)[month];
