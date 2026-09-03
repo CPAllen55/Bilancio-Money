@@ -753,6 +753,26 @@
      Pinned to the far right of the cell it was a long way from the control
      it belonged to — on a wide column, far enough to read as unrelated. */
   .thwrap{ display:flex; align-items:center; gap:6px; width:100%; }
+
+  /* A heading in two lines. The word above is dressed exactly as the menu
+     below it — same face, size, spacing and colour — so the pair reads as one
+     heading that wrapped rather than as a label and a control. It turns mint
+     with the menu, because a filter that is switched on should look switched
+     on across the whole of its name.
+
+     The menu carries the bottom margin for both, so a stacked heading sits on
+     the same baseline as the four beside it that are not stacked. */
+  .thstack{ display:flex; flex-direction:column; align-items:flex-start;
+            width:100%; min-width:0; }
+  .thpre{ font-family:var(--font-num); font-size:11px; letter-spacing:.08em;
+          text-transform:uppercase; color:var(--muted); font-weight:500;
+          padding:0 4px; margin:0 0 1px 0; cursor:pointer;
+          white-space:nowrap; }
+  .thstack:hover .thpre{ color:var(--ink); }
+  .thpre.on{ color:var(--mint); }
+  /* Its own left padding already lines the word up with the menu text, so the
+     menu's negative margin would push the two out of line with each other. */
+  .thstack .thf{ margin-left:0; }
   /* Styled to match the active filter it belongs to rather than to recede.
      It was muted grey on a near-transparent border, sitting a wide cell away
      from its select, and it read as empty space — an undo nobody can find is
@@ -1557,7 +1577,12 @@
      total beside it. Named because two cells have to agree on it. */
   #tx-list{ --txline:28px; }
   #tx-list col.c-date{ width:12%; }
-  #tx-list col.c-desc{ width:23%; }
+  /* Nine points wider, taken from the recurring column now that its heading
+     sits on two lines. This is the column with the least room to spare and the
+     most to say: merchant names are the one thing here that is neither a date,
+     a menu nor a figure, and "Oakwood Property Management" was being cut to
+     "Oakwood Property Ma...". */
+  #tx-list col.c-desc{ width:30%; }
   /* Sized by its heading, not by its contents.
      Measured: the select needs 197px for "RECURRING FIXED EXPENSES" and its
      caret, 225 with the cell's padding, against the 119 "SUBSCRIPTION" wanted.
@@ -1574,12 +1599,20 @@
      words.
      The mark underneath is a small pill and would be happy in half of this.
      A column whose own name does not fit is worse than a column with air. */
-  #tx-list col.c-sub{ width:25%; }
+  /* 16%, down from 25. The heading was the widest thing in the column by a
+     long way — the cell under it holds a small pill or nothing at all — and on
+     two lines it needs 143px and this gives it 180, of which 28 is the cell
+     padding — which is the part that is easy to forget, and did get forgotten:
+     at 16% the column was 160 and the heading wanted 143 in a 132px content
+     box. A column is its width minus its padding. The 1000px floor below is
+     still set by this column, just at a much lower number. */
+  #tx-list col.c-sub{ width:18%; }
   /* The four points come from the description and the category, not from
      here: the recurring column is sized by its heading and 25% of the 1000px
      floor is exactly what "Recurring Fixed Expenses" needs. */
   #tx-list col.c-exp{ width:4%; }
   #tx-list col.c-cat{ width:20%; }
+  /* 12 + 30 + 18 + 4 + 20 + 16 = 100. */
   /* Its own padding, because every other cell's is set for text and this one
      holds a 24px button. At the shared 14px the button was wider than the box
      it sits in and only looked right because what it overflowed into was the
@@ -1652,13 +1685,6 @@
     #tx-list col.c-exp{ width:6%; }
     #tx-list col.c-cat{ width:23%; }
     #tx-list col.c-amt{ width:18%; }
-    /* The row margin is a luxury at this width; the columns need it more. */
-    #tx-list table.data th,
-    #tx-list table.data td{ padding:10px 8px; }
-    #tx-list table.data th:first-child,
-    #tx-list table.data td:first-child{ padding-left:10px; }
-    #tx-list table.data th:last-child,
-    #tx-list table.data td:last-child{ padding-right:10px; }
 
     /* The footer says colspan="4" in the markup, and CSS cannot change an
        attribute. With two columns gone that span covers the whole table and
@@ -1691,6 +1717,13 @@
     /* The avatar is identity at a glance on a wide screen and a squeeze on a
        narrow one, where the name it sits beside is the identity. */
     #tx-list .ava{ display:none; }
+
+    /* The magnifier goes the same way, and for the column beside it rather
+       than for itself. At this width the description heading is seven pixels
+       short of its own placeholder and clips to "DESCRIPTIO"; the magnifier
+       and its gap are sixteen. A mark saying the box can be typed into is
+       worth less than the word saying what the box is for. */
+    #tx-list table.data thead .thmag{ display:none; }
   }
 
   /* A closed row's other categories, and their figures.
@@ -1869,6 +1902,28 @@
   #tx-list table.data td:first-child{ padding-left:18px; }
   #tx-list table.data th:last-child,
   #tx-list table.data td:last-child{ padding-right:18px; }
+
+  /* The row margin is a luxury on a phone; the columns need it more.
+
+     This lived in the 760px block further up the file, which is above the
+     three rules it overrides — and at equal specificity CSS resolves by source
+     order, so it lost every time and never applied at all. Every cell has been
+     carrying the desktop margin on a phone since it was written, which is 24
+     pixels a row spent on whitespace at the width with the least to spare. It
+     came to light because the description heading was clipping at 375 and the
+     column turned out to have 28px of padding in a 110px cell.
+
+     Second time this session that an override was written above what it
+     overrides. Worth stating the rule plainly: a media block only wins if it
+     comes after the block it is narrowing. */
+  @media (max-width:760px){
+    #tx-list table.data th,
+    #tx-list table.data td{ padding:10px 8px; }
+    #tx-list table.data th:first-child,
+    #tx-list table.data td:first-child{ padding-left:10px; }
+    #tx-list table.data th:last-child,
+    #tx-list table.data td:last-child{ padding-right:10px; }
+  }
 
   /* ── The heading band ────────────────────────────────────────────────────
    *
@@ -3245,7 +3300,14 @@ function txHeaderInput(id, label, value, names) {
      there is something in it to read. */
   return '<span class="thwrap thsearch">' +
     '<input class="thf thi' + (value ? ' on' : '') + '" id="' + id + '"' +
-      ' size="12" list="' + listId + '" value="' + escapeHtml(value) + '"' +
+      /* 14, not 12. size counts characters and letter-spacing is not one of
+         them: "Description" is eleven characters plus eleven gaps of .08em,
+         which comes to about twelve and a half. At 12 the box was 0.7px wider
+         than the word it holds — it fitted on one machine and clipped to
+         "DESCRIPTI" on another, which is what 0.7px of margin buys you. 14
+         leaves ten pixels, and stays in character units so it survives the
+         webfont failing and a wider fallback taking its place. */
+      ' size="14" list="' + listId + '" value="' + escapeHtml(value) + '"' +
       ' placeholder="' + escapeHtml(label) + '" autocomplete="off" spellcheck="false"' +
       ' aria-label="Filter by ' + escapeHtml(label) + ' — type to search">' +
     '<span class="thmag" aria-hidden="true"></span>' +
@@ -3257,16 +3319,38 @@ function txHeaderInput(id, label, value, names) {
     '</span>';
 }
 
-function txHeaderSelect(id, label, value, options) {
+/**
+ * A column heading that is also its own filter.
+ *
+ * `above` puts a word on its own line over the menu, for a heading too long to
+ * sit on one. It has to be a real element to wrap at all — a select renders
+ * its label on a single line whatever you do to it — and it is a <label for>
+ * rather than a span so the word still belongs to the control underneath it
+ * and clicking it reaches the menu.
+ *
+ * The menu keeps its own native caret, which is the alternative this rejects:
+ * covering a transparent select with a two-line span would have meant drawing
+ * a caret by hand and keeping it looking like the four beside it that are
+ * drawn by the browser.
+ *
+ * The full name goes on the aria-label, so what a screen reader announces is
+ * the heading as written rather than the half of it that fits on line two.
+ */
+function txHeaderSelect(id, label, value, options, above) {
+  const whole = above ? above + ' ' + label : label;
   // The clear sits at the right edge of the cell and only exists while the
   // column is doing something. Re-opening the menu to find a blank first
   // option works, but it is not where anybody looks to undo.
-  return '<span class="thwrap">' +
-    '<select class="thf' + (value ? ' on' : '') + '" id="' + id + '" aria-label="Filter by ' + label + '">' +
+  const menu = '<span class="thwrap">' +
+    '<select class="thf' + (value ? ' on' : '') + '" id="' + id + '" aria-label="Filter by ' + whole + '">' +
       '<option value="">' + label + '</option>' + options + '</select>' +
     (value ? '<button class="thx" type="button" data-clear="' + id + '" ' +
-      'title="Clear" aria-label="Clear the ' + label + ' filter">×</button>' : '') +
+      'title="Clear" aria-label="Clear the ' + whole + ' filter">×</button>' : '') +
     '</span>';
+  if (!above) return menu;
+  return '<span class="thstack">' +
+    '<label class="thpre' + (value ? ' on' : '') + '" for="' + id + '">' +
+      escapeHtml(above) + '</label>' + menu + '</span>';
 }
 
 /* Two years of months, most recent first. */
@@ -3356,9 +3440,10 @@ async function renderTransactions() {
   const head = '<thead><tr>' +
     '<th>' + txHeaderSelect('f-date', 'Date', txFilters.period, txMonthOptions(txFilters.period)) + '</th>' +
     '<th>' + txHeaderInput('f-desc', 'Description', txFilters.merchant, r.merchants) + '</th>' +
-    '<th>' + txHeaderSelect('f-sub', 'Recurring Fixed Expenses', txFilters.subscription,
+    '<th>' + txHeaderSelect('f-sub', 'Fixed Expenses', txFilters.subscription,
       '<option value="yes"' + (txFilters.subscription === 'yes' ? ' selected' : '') + '>Recurring only</option>' +
-      '<option value="no"' + (txFilters.subscription === 'no' ? ' selected' : '') + '>Everything else</option>') + '</th>' +
+      '<option value="no"' + (txFilters.subscription === 'no' ? ' selected' : '') + '>Everything else</option>',
+      'Recurring') + '</th>' +
     /* No heading. The column holds one button per row and a word above it
        would be a label for a control that already says what it does — and
        there is no filtering to be done on it. */
