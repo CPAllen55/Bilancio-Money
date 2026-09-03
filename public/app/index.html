@@ -1709,26 +1709,23 @@
      The label stays in plain ink throughout. "Over by" written in red inside a
      red box is the same fact three times; the money is the part worth
      colouring. */
-  /* The box wearing the colour of the thing that raised it.
+  /* The box edged in the colour of the thing that raised it.
 
-     A tint of it behind the text and a stronger line around the edge, so a
-     box raised by the blue category is recognisably that category's box
-     before a word of it is read. --tip-hue arrives from the element as an rgb
-     triplet rather than a finished colour, which is what lets the stylesheet
-     put its own alpha on it here and a different one on the border.
+     The edge only. The body keeps the panel colour every other readout on the
+     page has, so a box raised by the blue category is named by its border and
+     is otherwise the same box — which is what stops nine categories from
+     producing nine differently-coloured panels for the same kind of content.
 
-     The figures stay in --ink. A category colour is whatever the category
-     happens to be — some of them are dark, some are pale — and text in an
-     arbitrary hue on a tint of that same hue is the one combination that
-     cannot be checked in advance. The tint is light enough that ink reads on
-     it whatever colour it is made of; the hue does its work as a surface and
-     an edge, which is where colour is safe. */
-  .charttip.hued{ background-color:var(--bg-panel);
-    background-image:linear-gradient(rgb(var(--tip-hue) / .18), rgb(var(--tip-hue) / .18));
-    border-color:rgb(var(--tip-hue) / .55);
-    box-shadow:0 10px 28px var(--shadow), 0 0 0 1px rgb(var(--tip-hue) / .22),
-               0 0 18px rgb(var(--tip-hue) / .20); }
-  .charttip.hued .ct-note{ border-top-color:rgb(var(--tip-hue) / .30); }
+     --tip-hue arrives from the element as an rgb triplet rather than a
+     finished colour, which is what lets the border take one alpha and the ring
+     under it take another.
+
+     Stronger than it was when a tint was doing half the work — the line is now
+     the only thing carrying the colour — and a hairline ring sits under it,
+     because a border here computes to two thirds of a pixel and a single one
+     of those is easy to miss against a dark panel. */
+  .charttip.hued{ border-color:rgb(var(--tip-hue) / .85);
+    box-shadow:0 10px 28px var(--shadow), 0 0 0 1px rgb(var(--tip-hue) / .35); }
 
   .charttip.tone-in,  .charttip.tone-up{ background:var(--tip-in); }
   .charttip.tone-out, .charttip.tone-down{ background:var(--tip-out); }
