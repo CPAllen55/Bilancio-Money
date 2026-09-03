@@ -95,6 +95,11 @@
        it stands beside than from the idea it carries. */
     --cand-up:#00F0A8; --cand-up-glow:rgba(0,240,168,.55);
     --cand-dn:#FF2D55; --cand-dn-glow:rgba(255,45,85,.50);
+    /* Held. Brightening a stroke with a filter washes it towards white and
+       takes the hue with it, which on a measure whose whole job is saying
+       which of two colours it is would be exactly the wrong thing to lose. */
+    --cand-up-hot:#5CFFCE; --cand-up-lit:rgba(0,240,168,.95);
+    --cand-dn-hot:#FF7A93; --cand-dn-lit:rgba(255,45,85,.90);
     /* Not the bright #F5A623 the light theme was drawing.
      *
      * That was chosen by measuring white against it and stopping there. The
@@ -230,6 +235,11 @@
        light over near-black reads as a smudge over paper. */
     --cand-up:#0B8259; --cand-up-glow:rgba(11,130,89,.50);
     --cand-dn:#C41E3A; --cand-dn-glow:rgba(196,30,58,.42);
+    /* Held, on cream. These go DARKER rather than brighter: on this theme a
+       lighter line is a fainter line, so the way to make a held measure
+       shout is to deepen it, not to raise it. */
+    --cand-up-hot:#046B45; --cand-up-lit:rgba(11,130,89,.85);
+    --cand-dn-hot:#9E0F26; --cand-dn-lit:rgba(196,30,58,.75);
     /* The dark gold out of the owl's own line work — #A07026 is the commonest
        colour in it by a distance, 5,148 samples against the next one's 1,712.
        3.94:1 on the page and 3.65:1 on a card, so it reads as a mark rather
@@ -1340,10 +1350,18 @@
      seeing, but it is not worth celebrating. */
   .bg-vs-candle{ pointer-events:all; cursor:default;
                  transition:filter .14s ease, opacity .14s ease; }
-  /* The floor and the ceiling are the two figures, so they are the heavier
-     of the three; the stem is the distance between them and only has to be
-     followed, not read. */
-  .bg-vs-candle .ccap{ stroke-width:2.5; stroke-linecap:round; }
+  /* The ceiling is the heaviest of the three: it is the height being reached
+     for, and nothing else on the chart marks it.
+
+     The floor is lighter, and thinner. It lands exactly on the top edge of
+     the bar it stands on, in a colour from the same family, so at the
+     ceiling's weight it merged with that edge and the bar appeared to grow a
+     bright lip. It is also the end that needs saying least — the bar
+     underneath is already showing that height; the floor only has to say
+     where the measure starts. */
+  .bg-vs-candle .ccap{ stroke-linecap:round; }
+  .bg-vs-candle .ccap.ceil{ stroke-width:2.5; }
+  .bg-vs-candle .ccap.floor{ stroke-width:1.5; opacity:.5; }
   .bg-vs-candle .cstem{ stroke-width:1.75; stroke-linecap:butt; }
   /* The spine that catches the pointer. Invisible, and never in front of the
      bar's own hover: it is inside the group, which is drawn over the bars,
@@ -1364,13 +1382,43 @@
                              drop-shadow(0 0 6px var(--cand-dn-glow))
                              drop-shadow(0 0 12px var(--cand-dn-glow)); }
 
-  /* Hovering lifts it the way a segment lifts anywhere else on the page. */
-  .bg-vs-candle.up:hover{ filter:brightness(1.2) drop-shadow(0 0 4px var(--cand-up-glow))
-                                 drop-shadow(0 0 11px var(--cand-up-glow))
-                                 drop-shadow(0 0 22px var(--cand-up-glow)); }
-  .bg-vs-candle.down:hover{ filter:brightness(1.2) drop-shadow(0 0 3px var(--cand-dn-glow))
-                                   drop-shadow(0 0 8px var(--cand-dn-glow))
-                                   drop-shadow(0 0 17px var(--cand-dn-glow)); }
+  /* Held — under the cursor, or pressed.
+
+     :active as well as :hover, so a tap lights it on a touch screen, where
+     there is no hover at all and the glow would otherwise be a thing only
+     mouse users ever saw.
+
+     Three changes together, because one alone is not much on lines this
+     thin: the strokes thicken, they take the held colour, and the halo goes
+     to nearly full alpha across four radii. The floor comes up to meet the
+     rest — it is quiet at rest so it does not fight the bar, but a measure
+     that lights everything except its own base looks broken. */
+  .bg-vs-candle:not(.past):hover .ccap.ceil,
+  .bg-vs-candle:not(.past):active .ccap.ceil{ stroke-width:3.25; }
+  .bg-vs-candle:not(.past):hover .ccap.floor,
+  .bg-vs-candle:not(.past):active .ccap.floor{ stroke-width:2.25; opacity:.85; }
+  .bg-vs-candle:not(.past):hover .cstem,
+  .bg-vs-candle:not(.past):active .cstem{ stroke-width:2.5; }
+
+  .bg-vs-candle.up:not(.past):hover .ccap,
+  .bg-vs-candle.up:not(.past):hover .cstem,
+  .bg-vs-candle.up:not(.past):active .ccap,
+  .bg-vs-candle.up:not(.past):active .cstem{ stroke:var(--cand-up-hot); }
+  .bg-vs-candle.down:not(.past):hover .ccap,
+  .bg-vs-candle.down:not(.past):hover .cstem,
+  .bg-vs-candle.down:not(.past):active .ccap,
+  .bg-vs-candle.down:not(.past):active .cstem{ stroke:var(--cand-dn-hot); }
+
+  .bg-vs-candle.up:not(.past):hover,
+  .bg-vs-candle.up:not(.past):active{ filter:drop-shadow(0 0 3px var(--cand-up-lit))
+                            drop-shadow(0 0 8px var(--cand-up-lit))
+                            drop-shadow(0 0 18px var(--cand-up-lit))
+                            drop-shadow(0 0 34px var(--cand-up-glow)); }
+  .bg-vs-candle.down:not(.past):hover,
+  .bg-vs-candle.down:not(.past):active{ filter:drop-shadow(0 0 2px var(--cand-dn-lit))
+                              drop-shadow(0 0 6px var(--cand-dn-lit))
+                              drop-shadow(0 0 14px var(--cand-dn-lit))
+                              drop-shadow(0 0 28px var(--cand-dn-glow)); }
 
   /* A month that has happened keeps its shape and gives up its glow. The
      light is for a number you can still do something about. */
@@ -1581,6 +1629,29 @@
   .ct-note{ font-size:11.5px; color:var(--ink-soft); margin-top:5px;
             padding-top:5px; border-top:1px solid var(--hair); max-width:230px;
             line-height:1.45; }
+
+  /* A figure that is good or bad news says so.
+
+     Only where the thing hovered has an opinion — most figures on this page
+     are neither, and a chart where every box is coloured is a chart where the
+     colour has stopped meaning anything. The measure between the bars has an
+     opinion, so its box is edged and lit in the same colour the measure is,
+     and the amount inside it takes that colour too.
+
+     The label stays in plain ink. "Over by" written in red on a red-edged box
+     is the same fact three times; the money is the part worth colouring. */
+  .charttip.tone-up{ border-color:var(--cand-up);
+    box-shadow:0 10px 28px var(--shadow), 0 0 0 1px var(--cand-up-glow),
+               0 0 22px var(--cand-up-glow); }
+  .charttip.tone-up .ct-amount{ color:var(--cand-up); }
+  .charttip.tone-down{ border-color:var(--cand-dn);
+    box-shadow:0 10px 28px var(--shadow), 0 0 0 1px var(--cand-dn-glow),
+               0 0 22px var(--cand-dn-glow); }
+  .charttip.tone-down .ct-amount{ color:var(--cand-dn); }
+  /* The line above the note is the box's own edge repeated inside it, so it
+     follows the tone rather than staying the one grey line in a lit box. */
+  .charttip.tone-up .ct-note{ border-top-color:var(--cand-up-glow); }
+  .charttip.tone-down .ct-note{ border-top-color:var(--cand-dn-glow); }
 
   .panner{ width:100%; margin-top:10px; accent-color:var(--mint-dim); cursor:grab; }
 
@@ -5081,8 +5152,11 @@ const MIN_VISIBLE = 3;
 
 /* What the hover box reads, carried on the shape itself so one listener can
    serve every chart without knowing which one it is looking at. */
-function tipAttrs(label, month, amount, ofTotal, note) {
+function tipAttrs(label, month, amount, ofTotal, note, tone) {
   return 'data-tip="1"' +
+    /* Carried by the element rather than worked out in the box, because only
+       the thing being hovered knows whether its own number is good news. */
+    (tone ? ' data-tip-tone="' + escapeHtml(tone) + '"' : '') +
     ' data-tip-label="' + escapeHtml(label) + '"' +
     ' data-tip-month="' + escapeHtml(monthLabel(month)) + '"' +
     ' data-tip-amount="' + amount + '"' +
@@ -6085,6 +6159,10 @@ function setTrendSel(next) {
   document.body.appendChild(tip);
 
   const show = (el, x, y) => {
+    /* Reset every time, not just when a tone is present: the box is one
+       element reused by every chart on the page, so a tone left on it from
+       the last thing hovered would colour the next thing's figure. */
+    tip.className = 'charttip' + (el.dataset.tipTone ? ' tone-' + el.dataset.tipTone : '');
     const amount = Number(el.dataset.tipAmount);
     const of = Number(el.dataset.tipOf);
     const note = el.dataset.tipNote;
@@ -7143,7 +7221,17 @@ function bgVsChart() {
        weight however wide the card stretches the plot. */
     const c = bgVsCandle(g, ih, oh, base);
     if (c.h > 0.5) {
-      const rule = (y) => '<line class="ccap" vector-effect="non-scaling-stroke" x1="' +
+      /* The two ends are not equals.
+
+         The floor sits exactly on the top edge of the bar it stands on, in a
+         colour from the same family, so drawn at the ceiling's weight it
+         merges with that edge and the bar grows a bright lip. It is also the
+         end that needs saying least: the bar underneath is already showing
+         that height. Lighter, and the two stop bleeding together.
+
+         The ceiling keeps its weight, because nothing else on the chart marks
+         the height being reached for. */
+      const rule = (y, k) => '<line class="ccap ' + k + '" vector-effect="non-scaling-stroke" x1="' +
         (c.cx - c.hw).toFixed(1) + '" y1="' + y.toFixed(1) + '" x2="' +
         (c.cx + c.hw).toFixed(1) + '" y2="' + y.toFixed(1) + '"/>';
       candles +=
@@ -7151,7 +7239,8 @@ function bgVsChart() {
           (past ? ' past' : '') + '" data-vsgap="' + m + '" ' +
           tipAttrs(kept >= 0 ? 'Kept' : 'Over by', m, Math.abs(kept), 0,
             kept >= 0 ? 'income above everything planned'
-                      : 'planned to spend more than comes in') + '>' +
+                      : 'planned to spend more than comes in',
+            kept >= 0 ? 'up' : 'down') + '>' +
           /* A wider invisible spine, so the thing can be pointed at. Three
              two-pixel lines are a hard target for a mouse and an impossible
              one for a finger. */
@@ -7161,7 +7250,7 @@ function bgVsChart() {
           '<line class="cstem" vector-effect="non-scaling-stroke" x1="' + c.cx.toFixed(1) +
             '" y1="' + c.top.toFixed(1) + '" x2="' + c.cx.toFixed(1) +
             '" y2="' + c.bot.toFixed(1) + '"/>' +
-          rule(c.top) + rule(c.bot) +
+          rule(c.top, 'ceil') + rule(c.bot, 'floor') +
         '</g>';
     }
 
@@ -7170,10 +7259,13 @@ function bgVsChart() {
         '" x="' + g.xIn.toFixed(1) + '" y="' + (base - ih).toFixed(1) +
         '" width="' + g.barW.toFixed(1) + '" height="' + ih.toFixed(1) + '" rx="1.5" ' +
         'fill="' + relief('vs', incColour) + '" style="--seg:' + incColour + '" ' +
-        /* The same box the Trend chart raises, from the same builder. A bar
-           that stays silent while the ones a tab away answer does not read as
-           a quieter bar, it reads as a broken one. */
-        tipAttrs('Income', m, iv, iv + ov, 'planned for this month') + ' ' +
+        /* No tipAttrs here, and that is the point.
+
+           This bar is a .bg-seg, and Budgeting raises its own box for those —
+           the one that reads "was $2,600" while you drag. Giving it the shared
+           box as well got both at once, stacked, saying the same figure in two
+           formats. The bar keeps the richer one; the shared box is for the two
+           things in this chart that had none. */
         'data-seg="income" data-month="' + m + '" ' +
         'tabindex="' + (i === 0 ? '0' : '-1') + '" role="slider" aria-valuemin="0" ' +
         'aria-valuenow="' + Math.round(iv / 100) + '" ' +
@@ -7322,15 +7414,19 @@ function bgVsFit(svg) {
        and a drag moves the pointer — so a bar whose figures were not kept up
        to date would answer with the number it had before the drag began while
        sitting at its new height. */
-    const ibar = svg.querySelector('rect[data-seg="income"][data-month="' + m + '"]');
+    /* Only the spending bar and the measure use the shared box now; the
+       income bar has Budgeting's own, which builds its figures fresh on every
+       hover and needs nothing kept up to date here. */
     const obar = svg.querySelector('rect[data-vsout="' + m + '"]');
-    if (ibar) { ibar.dataset.tipAmount = iv; ibar.dataset.tipOf = iv + ov; }
     if (obar) { obar.dataset.tipAmount = ov; obar.dataset.tipOf = iv + ov; }
     if (gap) {
       gap.dataset.tipLabel = kept >= 0 ? 'Kept' : 'Over by';
       gap.dataset.tipAmount = Math.abs(kept);
       gap.dataset.tipNote = kept >= 0 ? 'income above everything planned'
                                       : 'planned to spend more than comes in';
+      /* A drag can carry a month across zero, and a box still coloured green
+         over the word "Over by" is worse than a box with no colour at all. */
+      gap.dataset.tipTone = kept >= 0 ? 'up' : 'down';
     }
 
     /* The figures are outside the SVG, so they are found from it rather than
