@@ -433,6 +433,7 @@
   :root[data-theme="light"] .thf,
   :root[data-theme="light"] select.catsel,
   :root[data-theme="light"] .askbox select,
+  :root[data-theme="light"] .splitpart input.amt,
   :root[data-theme="light"] select.ctl{ color-scheme:light; }
   :root[data-theme="light"] select.ctl,
   :root[data-theme="light"] select.catsel{
@@ -714,7 +715,8 @@
   .thf.on{ color:var(--mint); border-color:var(--mint-dim); text-transform:none;
            letter-spacing:0; font-size:12px; }
   table.data th{ padding-bottom:0; }
-  .thf, select.catsel, select.ctl, .askbox select{ color-scheme:dark; }
+  .thf, select.catsel, select.ctl, .askbox select,
+  .splitpart input.amt{ color-scheme:dark; }
   .thf option, .thf optgroup{
     background:var(--bg-panel); color:var(--ink);
     font-family:var(--font-body); font-size:13.5px;
@@ -1527,7 +1529,7 @@
    * scrolls rather than each column quietly shrinking past legibility. */
   #tx-list table.data{ table-layout:fixed; }
   #tx-list col.c-date{ width:12%; }
-  #tx-list col.c-desc{ width:25%; }
+  #tx-list col.c-desc{ width:23%; }
   /* Sized by its heading, not by its contents.
      Measured: the select needs 197px for "RECURRING FIXED EXPENSES" and its
      caret, 225 with the cell's padding, against the 119 "SUBSCRIPTION" wanted.
@@ -1545,7 +1547,18 @@
      The mark underneath is a small pill and would be happy in half of this.
      A column whose own name does not fit is worse than a column with air. */
   #tx-list col.c-sub{ width:25%; }
-  #tx-list col.c-cat{ width:22%; }
+  /* The four points come from the description and the category, not from
+     here: the recurring column is sized by its heading and 25% of the 1000px
+     floor is exactly what "Recurring Fixed Expenses" needs. */
+  #tx-list col.c-exp{ width:4%; }
+  #tx-list col.c-cat{ width:20%; }
+  /* Its own padding, because every other cell's is set for text and this one
+     holds a 24px button. At the shared 14px the button was wider than the box
+     it sits in and only looked right because what it overflowed into was the
+     next column's empty margin — true until either number changes. */
+  #tx-list table.data th:nth-child(4),
+  #tx-list table.data tbody td:nth-child(4){ padding-left:4px; padding-right:4px;
+                                             text-align:center; }
   #tx-list col.c-amt{ width:16%; }
 
   /* One line, always.
@@ -1604,9 +1617,12 @@
        outside the table. Removing the column outright leaves four, and four
        percentages that add to 100. */
     #tx-list col.c-sub{ display:none; }
-    #tx-list col.c-date{ width:24%; }
-    #tx-list col.c-desc{ width:34%; }
-    #tx-list col.c-cat{ width:24%; }
+    #tx-list col.c-date{ width:22%; }
+    #tx-list col.c-desc{ width:31%; }
+    /* Six points rather than three. The percentage is of a much smaller table
+       here, and three of them is a button too small to hit. */
+    #tx-list col.c-exp{ width:6%; }
+    #tx-list col.c-cat{ width:23%; }
     #tx-list col.c-amt{ width:18%; }
     /* The row margin is a luxury at this width; the columns need it more. */
     #tx-list table.data th,
@@ -1628,8 +1644,14 @@
     #tx-list table.data tfoot td{ display:block; width:auto; }
   }
   @media (max-width:560px){
+    /* The expander goes with the category, and for the same reason: dividing a
+       transaction between categories is a desk task, and what is left is what
+       the ledger is for. */
     #tx-list table.data th:nth-child(4),
-    #tx-list table.data tbody td:nth-child(4){ display:none; }
+    #tx-list table.data tbody td:nth-child(4),
+    #tx-list table.data th:nth-child(5),
+    #tx-list table.data tbody td:nth-child(5){ display:none; }
+    #tx-list col.c-exp{ display:none; }
     #tx-list col.c-cat{ display:none; }
     /* A point smaller, which is what makes the date fit. "2026-08-25" wants
        99px at 13.5 and had 85 — measured, and clipped. At 12.5 it wants 92,
@@ -1642,6 +1664,60 @@
        narrow one, where the name it sits beside is the identity. */
     #tx-list .ava{ display:none; }
   }
+
+  /* ---- dividing a transaction ----
+
+     The button sits immediately left of the category menu, which is where the
+     thing it changes already is: the menu files the whole transaction, this
+     files parts of it. A chevron rather than a plus, because it opens
+     something rather than adding one. */
+  .expander{ display:inline-flex; align-items:center; justify-content:center;
+             width:24px; height:24px; padding:0; border-radius:6px;
+             border:1px solid var(--hair); background:none;
+             color:var(--muted); cursor:pointer; line-height:1;
+             transition:color .12s, border-color .12s; }
+  .expander:hover{ color:var(--ink); border-color:var(--mint-dim); }
+  .expander svg{ width:12px; height:12px; transition:transform .12s ease; }
+  .expander[aria-expanded="true"]{ color:var(--mint); border-color:var(--mint-dim); }
+  .expander[aria-expanded="true"] svg{ transform:rotate(90deg); }
+  /* A transaction already divided says so without being opened — otherwise the
+     only way to find out is to open every row. */
+  .expander.has{ color:var(--mint); border-color:var(--mint-dim); }
+
+  /* The editor is a row of the table, spanning it, so it stays attached to the
+     transaction it belongs to when the table is sorted or scrolled. */
+  #tx-list tr.splitrow > td{ padding:0; background:var(--row-alt); }
+  .splitbox{ padding:16px 18px; display:flex; flex-direction:column; gap:12px; }
+  .splitbox h4{ margin:0; font-size:13px; font-weight:600; }
+  .splitbox .hint{ margin:0; font-size:12px; color:var(--muted); max-width:62ch; }
+  .splitpart{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  /* The menus carry the app's own select class, so they inherit both themes
+     rather than being restyled here and drifting from every other menu. */
+  .splitpart select.ctl{ flex:1 1 200px; min-width:0; max-width:none; }
+  /* The amount is a quantity, so it takes the figures font and the right edge
+     — the same treatment as every other amount on the page. */
+  .splitpart input.amt{ width:120px; flex:none; text-align:right;
+                        font-family:var(--font-num); font-size:12px;
+                        padding:7px 10px; border-radius:6px;
+                        border:1px solid var(--hair); background:var(--field);
+                        color:var(--ink); }
+  .splitpart input.amt:focus{ outline:none; border-color:var(--mint-dim); }
+  .splitpart button.drop{ border:none; background:transparent; color:var(--muted);
+                          cursor:pointer; font-size:16px; line-height:1; padding:4px 6px; }
+  .splitpart button.drop:hover{ color:var(--coral); }
+
+  /* What is left, and whether it adds up. This is the line the reader checks,
+     so it is stated in words and money rather than left to be inferred from
+     the boxes above it. */
+  .splitsum{ display:flex; align-items:baseline; justify-content:space-between;
+             gap:12px; flex-wrap:wrap; font-size:12.5px; padding-top:10px;
+             margin:0; border-top:1px solid var(--hair); }
+  .splitsum .left{ color:var(--muted); }
+  .splitsum .figure{ font-family:var(--font-num); color:var(--ink); }
+  .splitsum.over .figure{ color:var(--coral); }
+  .splitsum.over .left{ color:var(--coral); }
+  .splitacts{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .splitacts .grow{ flex:1; }
 
   /* A date is not a quantity: nothing lines up underneath it that wants its
      units stacked, so it takes the left edge like the text it is. */
@@ -1790,10 +1866,14 @@
      fallback: an <img> that fails to load paints nothing, so the letter it was
      covering simply shows. No error handler, no flash of a broken icon, and
      the row is the right width from the first frame either way. */
+  /* 30px rather than 22. At 22 a bank's logo was a smudge with a shape — big
+     enough to be seen and not to be recognised, which is the one thing an
+     identifying mark has to do. The letter behind it grows with the box so a
+     merchant Plaid has no logo for reads as the same kind of thing. */
   .ava{ position:relative; display:inline-flex; align-items:center; justify-content:center;
-        width:22px; height:22px; border-radius:5px; flex:none; overflow:hidden;
-        margin-right:10px; vertical-align:-6px;
-        font:600 10.5px/1 var(--font-num); letter-spacing:.02em; color:#fff;
+        width:30px; height:30px; border-radius:7px; flex:none; overflow:hidden;
+        margin-right:12px; vertical-align:-1px;
+        font:600 13px/1 var(--font-num); letter-spacing:.02em; color:#fff;
         background:var(--ava, var(--muted)); text-transform:uppercase;
         user-select:none; }
   /* White behind the logo because Plaid's are PNGs drawn for a light ground;
@@ -3007,7 +3087,7 @@ function avatar(t) {
     avaLetter(name) +
     (t.logo
       ? '<img src="/api/logo/' + encodeURIComponent(t.logo) + '" alt="" loading="lazy" ' +
-        'decoding="async" width="22" height="22">'
+        'decoding="async" width="30" height="30">'
       : '') +
     '</span>';
 }
@@ -3102,12 +3182,16 @@ async function renderTransactions() {
     '&limit=200');
 
   categoryList = r.categories; catOptCache = {};
+  /* Kept so a click on an expander can find the transaction it belongs to
+     without the row having to carry its splits around in data attributes. */
+  txById = {};
+  for (const tx of r.transactions) txById[tx.id] = tx;
   const host = $('tx-list');
 
   /* Declared once, so the widths live in the stylesheet with the rest of the
      layout rather than being repeated on every th and td. */
   const cols = '<colgroup><col class="c-date"><col class="c-desc">' +
-    '<col class="c-sub"><col class="c-cat"><col class="c-amt"></colgroup>';
+    '<col class="c-sub"><col class="c-exp"><col class="c-cat"><col class="c-amt"></colgroup>';
 
   /* "Recurring Fixed Expenses", not "Subscription".
    *
@@ -3129,6 +3213,10 @@ async function renderTransactions() {
     '<th>' + txHeaderSelect('f-sub', 'Recurring Fixed Expenses', txFilters.subscription,
       '<option value="yes"' + (txFilters.subscription === 'yes' ? ' selected' : '') + '>Recurring only</option>' +
       '<option value="no"' + (txFilters.subscription === 'no' ? ' selected' : '') + '>Everything else</option>') + '</th>' +
+    /* No heading. The column holds one button per row and a word above it
+       would be a label for a control that already says what it does — and
+       there is no filtering to be done on it. */
+    '<th></th>' +
     '<th>' + txHeaderSelect('f-cat', 'Category', txFilters.category, txCategoryOptions(txFilters.category)) + '</th>' +
     '<th style="text-align:right">' +
       txHeaderSelect('f-amt', 'Amount', txFilters.amount,
@@ -3161,8 +3249,15 @@ async function renderTransactions() {
       '<td>' + avatar(t) + '<span class="tx-name" title="' + escapeHtml(t.name) + '">' +
         escapeHtml(t.name) + '</span>' +
         (t.pending ? ' <span class="pill">pending</span>' : '') +
-        (source ? ' <span class="pill">' + source + '</span>' : '') + '</td>' +
+        (source ? ' <span class="pill">' + source + '</span>' : '') +
+        /* Filtering by category shows a divided transaction for the part filed
+           under it, not for what the whole thing cost. Saying so is the
+           difference between a row that disagrees with the statement and a row
+           that explains why. */
+        (t.partOf ? ' <span class="pill">part of ' + money(Math.abs(t.partOf)) + '</span>' : '') +
+        '</td>' +
       '<td>' + subscriptionCell(t) + '</td>' +
+      '<td>' + expanderCell(t) + '</td>' +
       // Amount decides which side of the ledger this row is on. The menu holds
       // only what it is currently showing; the rest arrives when it is opened.
       '<td><select class="catsel" data-id="' + t.id + '" data-slug="' +
@@ -3182,7 +3277,7 @@ async function renderTransactions() {
   if (s.in) parts.push('+' + money(s.in) + ' in');
   if (s.out) parts.push(money(-s.out) + ' out');
   const foot = '<tfoot><tr>' +
-    '<td class="tx-total-label" colspan="4">' + r.total + ' transaction' + (r.total === 1 ? '' : 's') +
+    '<td class="tx-total-label" colspan="5">' + r.total + ' transaction' + (r.total === 1 ? '' : 's') +
       (parts.length > 1 ? ' · ' + parts.join(' · ') : '') + '</td>' +
     '<td class="num tx-total">' +
       (s.net > 0 ? '+' : '') + money(s.net) + '</td></tr></tfoot>';
@@ -3257,6 +3352,271 @@ $('tx-list').addEventListener('click', (e) => {
     txClearAll();
   } else return;
   renderTransactions().catch(err => say($('global-msg'), err.message, 'bad'));
+});
+
+/* ------------------------------------------------- dividing a transaction -- */
+
+/* The rows currently on screen, by id. */
+let txById = {};
+
+/**
+ * The button that opens the editor.
+ *
+ * Marked when the transaction is already divided, so the table can be read
+ * for it. Without that the only way to find a split is to open every row, and
+ * a fact you have to hunt for is one you stop trusting is there.
+ */
+function expanderCell(t) {
+  const has = (t.splits || []).length;
+  return '<button class="expander' + (has ? ' has' : '') + '" data-id="' + t.id + '" ' +
+    'aria-expanded="false" ' +
+    'title="' + (has ? 'Divided between ' + (has + 1) + ' categories' :'' ) + '" ' +
+    'aria-label="Divide this transaction between categories">' +
+    '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+      '<path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" ' +
+        'stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+}
+
+/**
+ * The editor, as a row of the table beneath the transaction it divides.
+ *
+ * ── Everything here is a magnitude ─────────────────────────────────────────
+ *
+ * The reader types 50.00, not -50.00, whichever way the money went. A split is
+ * always a piece of the transaction and so always travels the same direction
+ * as it; asking somebody to type a minus sign to carve part of a purchase out
+ * would be asking them to restate a fact the app already has. The direction is
+ * put back on the way out, once, in save.
+ *
+ * ── The remainder is shown, never typed ────────────────────────────────────
+ *
+ * What is left stays where the merchant rule put it, and the line at the
+ * bottom says how much that is. Making it an editable box would make it a
+ * second number that has to agree with the others, and the moment two numbers
+ * have to agree one of them is wrong.
+ */
+function splitEditorHtml(t) {
+  const side = t.amount > 0 ? 'income' : 'spend';
+  const parts = (t.splits || []).map(s => ({
+    categoryId: s.categoryId,
+    cents: Math.abs(s.amount),
+  }));
+  // An unsplit transaction opens with one empty row, because the reason to
+  // open this at all is to divide it.
+  if (!parts.length) parts.push({ categoryId: '', cents: 0 });
+
+  return '<div class="splitbox" data-tx="' + t.id + '" data-side="' + side + '" ' +
+      'data-whole="' + Math.abs(t.amount) + '">' +
+    '<h4>Divide ' + escapeHtml(t.name) + ' — ' + money(Math.abs(t.amount)) + '</h4>' +
+    '<p class="hint">' + escapeHtml(t.name) + ' still files under ' +
+      escapeHtml(t.category ? labelOfSlug(t.category) : 'no category') +
+      ' by default. What you move here changes this one transaction only.</p>' +
+    '<div class="splitparts">' + parts.map(p => splitPartHtml(p, side)).join('') + '</div>' +
+    '<div class="splitacts">' +
+      '<button class="sp-add" type="button">Add a part</button>' +
+      '<span class="grow"></span>' +
+      '<button class="sp-cancel" type="button">Cancel</button>' +
+      '<button class="primary sp-save" type="button">Save</button>' +
+    '</div>' +
+    '<p class="splitsum"><span class="left"></span><span class="figure"></span></p>' +
+  '</div>';
+}
+
+function splitPartHtml(p, side) {
+  /* categoryOptions marks its selection by slug — the option VALUES are ids,
+     which is the trap: passing the id selects nothing and fails silently,
+     leaving a stored split showing an empty menu. */
+  const c = categoryList.filter(x => x.id === p.categoryId)[0];
+  return '<div class="splitpart">' +
+    '<select class="ctl sp-cat">' + categoryOptions(c ? c.slug : null, side) + '</select>' +
+    '<input class="amt sp-amt" type="text" inputmode="decimal" ' +
+      'aria-label="Amount for this part" value="' +
+      (p.cents ? (p.cents / 100).toFixed(2) : '') + '">' +
+    '<button class="drop sp-drop" type="button" aria-label="Remove this part">×</button>' +
+  '</div>';
+}
+
+/** Dollars as typed, in cents. Anything unreadable is nothing. */
+function centsOf(text) {
+  const n = Math.round(parseFloat(String(text).replace(/[^0-9.]/g, '')) * 100);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * The line that says whether it adds up, recomputed on every keystroke.
+ *
+ * Over-allocating is shown rather than prevented: stopping the keystroke that
+ * takes the total past the transaction makes the box fight the person typing,
+ * and somebody entering 100 before 10 is not making a mistake yet. Saving is
+ * what is refused, and the line says why before they try.
+ */
+function refreshSplitSum(box) {
+  const whole = Number(box.dataset.whole);
+  let carved = 0;
+  let nameless = false;
+  box.querySelectorAll('.splitpart').forEach(p => {
+    const cents = centsOf(p.querySelector('.sp-amt').value);
+    carved += cents;
+    // An amount with nowhere to go. Worth saying here rather than letting the
+    // save fail on it: the reader can see which line is unfinished.
+    if (cents && !p.querySelector('.sp-cat').value) nameless = true;
+  });
+  const left = whole - carved;
+  const sum = box.querySelector('.splitsum');
+  const over = left < 0;
+
+  sum.classList.toggle('over', over || nameless);
+  sum.querySelector('.left').textContent =
+    nameless ? 'Every part needs a category'
+    : over ? 'That is more than the transaction, by'
+    : left === 0 ? 'Fully divided — nothing left where it was'
+    : 'Left where it is now';
+  sum.querySelector('.figure').textContent =
+    nameless ? '' : left === 0 ? '' : money(Math.abs(left));
+  box.querySelector('.sp-save').disabled = over || nameless;
+}
+
+function closeSplit(btn) {
+  const row = btn.closest('tr');
+  const open = row && row.nextElementSibling;
+  if (open && open.classList.contains('splitrow')) open.remove();
+  btn.setAttribute('aria-expanded', 'false');
+}
+
+function openSplit(btn) {
+  const t = txById[btn.dataset.id];
+  if (!t) return;
+  const row = btn.closest('tr');
+
+  // One at a time. Two editors open at once is two half-finished edits, and
+  // only the one being saved can be checked against the transaction it divides.
+  document.querySelectorAll('#tx-list .expander[aria-expanded="true"]')
+    .forEach(other => closeSplit(other));
+
+  const tr = document.createElement('tr');
+  tr.className = 'splitrow';
+  const td = document.createElement('td');
+  td.colSpan = 6;
+  td.innerHTML = splitEditorHtml(t);
+  tr.appendChild(td);
+  row.after(tr);
+  btn.setAttribute('aria-expanded', 'true');
+  refreshSplitSum(td.querySelector('.splitbox'));
+  const first = td.querySelector('.sp-cat');
+  if (first) first.focus();
+}
+
+async function saveSplits(box) {
+  const txId = box.dataset.tx;
+  const t = txById[txId];
+  // The direction, put back once. Everything above this line is a magnitude.
+  const sign = t.amount > 0 ? 1 : -1;
+
+  const splits = [];
+  box.querySelectorAll('.splitpart').forEach(p => {
+    const categoryId = p.querySelector('.sp-cat').value;
+    const cents = centsOf(p.querySelector('.sp-amt').value);
+    // A row with no amount is an empty box, not an instruction. A row with an
+    // amount and no category is the one thing worth complaining about, and the
+    // server says so.
+    if (!cents) return;
+    splits.push({ categoryId: categoryId, amount: sign * cents });
+  });
+
+  const res = await authed('/api/transactions/' + encodeURIComponent(txId) + '/splits', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ splits: splits })
+  });
+
+  // Every total on every other tab was computed without this.
+  summaryCache = null;
+  await renderTransactions();
+  say($('tx-msg'), splits.length
+    ? 'Divided — ' + money(Math.abs(res.remainder)) + ' stays where it was.'
+    : 'Put back together.');
+}
+
+/* Delegated, because the table is rebuilt on every render. */
+$('tx-list').addEventListener('click', (e) => {
+  const btn = e.target.closest('.expander');
+  if (btn) {
+    if (btn.getAttribute('aria-expanded') === 'true') closeSplit(btn);
+    else openSplit(btn);
+    return;
+  }
+
+  const box = e.target.closest('.splitbox');
+  if (!box) return;
+
+  if (e.target.closest('.sp-add')) {
+    const parts = box.querySelector('.splitparts');
+    parts.insertAdjacentHTML('beforeend', splitPartHtml({ categoryId: '', cents: 0 }, box.dataset.side));
+    parts.lastElementChild.querySelector('.sp-cat').focus();
+    refreshSplitSum(box);
+  } else if (e.target.closest('.sp-drop')) {
+    const parts = box.querySelectorAll('.splitpart');
+    // The last row is emptied rather than removed, so the editor never becomes
+    // a panel with nothing in it and no way to start again.
+    if (parts.length > 1) e.target.closest('.splitpart').remove();
+    else parts[0].querySelector('.sp-amt').value = '';
+    refreshSplitSum(box);
+  } else if (e.target.closest('.sp-cancel')) {
+    const btn = document.querySelector('#tx-list .expander[aria-expanded="true"]');
+    if (btn) closeSplit(btn);
+  } else if (e.target.closest('.sp-save')) {
+    saveSplits(box).catch(err => say($('tx-msg'), err.message, 'bad'));
+  }
+});
+
+$('tx-list').addEventListener('input', (e) => {
+  const box = e.target.closest('.splitbox');
+  if (box && e.target.classList.contains('sp-amt')) refreshSplitSum(box);
+});
+
+/**
+ * The two menus offer "+ New category", and the reason to be here at all is
+ * often that the right bucket does not exist yet — the birthday present has
+ * nowhere to go. Refusing it in this one menu would send somebody to the row's
+ * own category menu to make it and then back here, which is the app knowing
+ * what they want and making them ask twice.
+ *
+ * The category is created and selected in place. The editor is not rebuilt, so
+ * the other parts keep whatever has been typed into them.
+ */
+$('tx-list').addEventListener('change', async (e) => {
+  const sel = e.target.closest('.sp-cat');
+  if (!sel) return;
+  const box = sel.closest('.splitbox');
+
+  if (sel.value === NEW_CATEGORY || sel.value === NEW_SUBCATEGORY) {
+    const was = sel.dataset.was || '';
+    try {
+      const asked = sel.value === NEW_SUBCATEGORY
+        ? await askSubcategory(box.dataset.side)
+        : (() => { const n = window.prompt('Name the new category'); return n ? { label: n } : null; })();
+      // Dismissed. The menu goes back to whatever it was showing before, which
+      // is not necessarily nothing.
+      if (!asked) { sel.value = was; refreshSplitSum(box); return; }
+
+      const made = await authed('/api/categories', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: asked.label, parent: asked.parent })
+      });
+      categoryList = (await authed('/api/categories')).categories;
+      catOptCache = {};
+      rememberColours(categoryList);
+      // Only this menu is rebuilt. Rebuilding the editor would throw away the
+      // amounts already typed into the other parts.
+      sel.innerHTML = categoryOptions(made.category.slug, box.dataset.side);
+      sel.value = made.category.id;
+    } catch (err) {
+      sel.value = was;
+      say($('tx-msg'), err.message, 'bad');
+    }
+  }
+  sel.dataset.was = sel.value;
+  refreshSplitSum(box);
 });
 
 /**

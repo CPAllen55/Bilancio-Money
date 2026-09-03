@@ -1,5 +1,6 @@
 /**
- * /api/categories and re-filing a transaction.
+ * /api/categories, re-filing a transaction, and dividing one between
+ * categories.
  *
  * Two things happen when someone re-files a transaction:
  *   - an override is written for that transaction, and
@@ -11,12 +12,16 @@
  */
 
 import { Hono } from "hono";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { getDb } from "./db/client";
-import { categories, merchantRules, transactionOverrides, transactions, accounts, items } from "./db/schema";
+import {
+  categories, merchantRules, transactionOverrides, transactionSplits, transactions,
+  accounts, items,
+} from "./db/schema";
 import { requireUser } from "./auth";
 import { loadCategories } from "./summary-routes";
 import { merchantKey } from "./categories";
+import { checkSplits, remainderOf, type Split } from "./splits";
 
 const cats = new Hono<{ Bindings: Env }>();
 
@@ -275,6 +280,140 @@ cats.delete("/rules/:id", async (c) => {
       .returning({ id: merchantRules.id });
 
     return gone.length ? c.json({ ok: true }) : c.json({ error: "not_found" }, 404);
+  } finally {
+    c.executionCtx.waitUntil(close());
+  }
+});
+
+/* ------------------------------------------------------------------ split -- */
+
+/**
+ * Divide one transaction between categories.
+ *
+ * A PUT replacing the whole set rather than endpoints for adding and removing
+ * one part at a time. The editor shows every part at once and the rule being
+ * enforced is about the set — that the parts do not add up to more than the
+ * transaction — so a request that can only be judged alongside parts it did
+ * not send is a request that cannot be checked. Sending the whole set means
+ * every save is validated against exactly what will be stored.
+ *
+ * Amounts arrive the way the transactions list sends them: positive is money
+ * IN, so an expense and the parts carved out of it are both negative. The
+ * column keeps Plaid's opposite convention, and the two are converted here, at
+ * the boundary, so nothing above this line has to know which way round Plaid
+ * counts.
+ */
+cats.put("/transactions/:id/splits", async (c) => {
+  const { db, ready, close } = getDb(c.env);
+  try {
+    await ready;
+    const auth = await requireUser(c, db);
+    if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+
+    const txId = c.req.param("id");
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "bad_request", reason: "body must be JSON" }, 400);
+    }
+    const sent = (body as { splits?: unknown })?.splits;
+    if (!Array.isArray(sent)) {
+      return c.json({ error: "bad_request", reason: "splits must be an array" }, 400);
+    }
+
+    /* Merged rather than rejected. Two rows pointing at the same category is
+       not two facts about the transaction, it is one number entered over two
+       lines, and the table holds one row per category per transaction. */
+    const merged = new Map<string, number>();
+    for (const raw of sent) {
+      const categoryId = (raw as { categoryId?: unknown })?.categoryId;
+      const amount = (raw as { amount?: unknown })?.amount;
+      if (typeof categoryId !== "string" || !categoryId) {
+        return c.json({ error: "bad_request", reason: "every part needs a categoryId" }, 400);
+      }
+      if (typeof amount !== "number" || !Number.isInteger(amount)) {
+        return c.json(
+          { error: "bad_request", reason: "every amount must be a whole number of cents" },
+          400,
+        );
+      }
+      merged.set(categoryId, (merged.get(categoryId) ?? 0) + amount);
+    }
+
+    // The transaction must belong to this user. Joining through accounts and
+    // items is what proves it — the id in the URL proves nothing on its own.
+    const owned = await db
+      .select({ id: transactions.id, amount: transactions.amount })
+      .from(transactions)
+      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+      .innerJoin(items, eq(accounts.itemId, items.id))
+      .where(and(eq(transactions.id, txId), eq(items.userId, auth.user.id)));
+
+    if (!owned.length) return c.json({ error: "not_found" }, 404);
+    const amountCents = Number(owned[0].amount);   // Plaid: positive is money out
+
+    // Likewise every category: a system one, or one of theirs. Nobody else's.
+    const wanted = [...merged.keys()];
+    if (wanted.length) {
+      const allowed = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(
+          and(
+            inArray(categories.id, wanted),
+            or(isNull(categories.userId), eq(categories.userId, auth.user.id)),
+          ),
+        );
+      if (allowed.length !== wanted.length) {
+        return c.json({ error: "bad_request", reason: "unknown category" }, 400);
+      }
+    }
+
+    /* Flipped into the column's convention before checking, so the rules are
+       applied to the numbers that will actually be stored. */
+    const splits: Split[] = [...merged].map(([categoryId, amount]) => ({
+      categoryId,
+      cents: -amount,
+    }));
+
+    const verdict = checkSplits(amountCents, splits);
+    if (!verdict.ok) return c.json({ error: "bad_request", reason: verdict.reason }, 400);
+
+    const keep = splits.filter((s) => s.cents !== 0);
+
+    /* Replaced wholesale: clearing the editor and saving has to leave nothing
+       behind, and a part moved from one category to another must not linger
+       under both. There is no transaction wrapping these — this database is
+       reached over HTTP and the driver has none — so the delete is ordered
+       first and the failure it leaves behind is an unsplit transaction rather
+       than a doubled one. */
+    await db
+      .delete(transactionSplits)
+      .where(
+        and(
+          eq(transactionSplits.transactionId, txId),
+          eq(transactionSplits.userId, auth.user.id),
+        ),
+      );
+
+    if (keep.length) {
+      await db.insert(transactionSplits).values(
+        keep.map((s) => ({
+          transactionId: txId,
+          userId: auth.user.id,
+          categoryId: s.categoryId,
+          cents: BigInt(s.cents),
+        })),
+      );
+    }
+
+    return c.json({
+      ok: true,
+      // Back in the reader's convention, the way they were sent.
+      splits: keep.map((s) => ({ categoryId: s.categoryId, amount: -s.cents })),
+      remainder: -remainderOf(amountCents, keep),
+    });
   } finally {
     c.executionCtx.waitUntil(close());
   }
