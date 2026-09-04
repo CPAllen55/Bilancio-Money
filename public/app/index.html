@@ -1873,8 +1873,21 @@
   /* The vendor mark in this list. Smaller than the one on the Transactions tab
      — the column is narrow and the name beside it is doing most of the work —
      but the same shape, so it reads as the same thing. */
+  /* The date, the logo and the name, all on one line.
+
+     They were on three. The logo carried a hand-tuned vertical-align of -6px
+     while the name used middle -- two different reference points, so nothing
+     was holding them to each other -- and the cells took the baseline
+     alignment a table cell has by default, which lines up the text baselines
+     and lets a 22px logo push its own row down around them. Measured, the
+     logo sat 5.6px below the name and the date 3.6px above it.
+
+     Every one of them is middle now, including the cells, so they are centred
+     on each other by the same rule rather than by three offsets that have to
+     be re-tuned whenever a size changes. */
+  table.pie-table td{ vertical-align:middle; }
   .pie-table .ava{ width:22px; height:22px; border-radius:5px; margin-right:9px;
-                   font-size:10px; vertical-align:-6px; }
+                   font-size:10px; vertical-align:middle; }
   .pie-table .tx-name{ display:inline-block; max-width:calc(100% - 34px);
                        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
                        vertical-align:middle; }
