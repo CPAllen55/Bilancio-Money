@@ -177,35 +177,78 @@ struct Sparkline: Shape {
 
 // MARK: - Proportion bar
 
-/// One figure drawn as a share of a larger one, with the amount inside it.
+/// One figure drawn as a share of a larger one, with its amount printed inside
+/// the bar and, optionally, the figure it was planned to be marked on it.
+///
+/// Both bars on a card are drawn against one scale, so the difference in their
+/// lengths is the money kept — visible without reading either number.
+///
+/// The amount is drawn twice: once on the track, once clipped to the fill. The
+/// ink then changes colour exactly where the colour under it does, which is
+/// what lets the number sit inside the bar at any length instead of jumping
+/// outside it when the bar gets short.
 struct ProportionBar: View {
     let label: String
     let amount: Int
     let of: Int
     let tint: Color
+    /// What this figure was budgeted to be, drawn as a tick. Nil when there is
+    /// no plan to draw — a mark at zero would read as a budget of nothing
+    /// rather than as the absence of one.
+    var marker: Int?
 
-    private var fraction: Double {
+    private static let corner: CGFloat = 3
+    private static let inset: CGFloat = 9
+
+    private func fraction(_ value: Int) -> Double {
         guard of > 0 else { return 0 }
-        return min(1, Double(amount) / Double(of))
+        return min(1, Double(value) / Double(of))
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(label)
-                Spacer()
-                Text(amount.asMoney).monospacedDigit()
-            }
-            .font(Theme.note)
-            .foregroundStyle(Theme.quietText)
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label.uppercased())
+                .font(.system(size: 11, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(Theme.quietText)
 
             GeometryReader { geo in
+                let fill = max(2, geo.size.width * fraction(amount))
+
                 ZStack(alignment: .leading) {
-                    Capsule().fill(tint.opacity(0.15))
-                    Capsule().fill(tint).frame(width: max(2, geo.size.width * fraction))
+                    RoundedRectangle(cornerRadius: Self.corner).fill(tint.opacity(0.16))
+                    RoundedRectangle(cornerRadius: Self.corner).fill(tint).frame(width: fill)
+
+                    caption(width: geo.size.width).foregroundStyle(Theme.text)
+                    caption(width: geo.size.width)
+                        .foregroundStyle(.white)
+                        .frame(width: fill, alignment: .leading)
+                        .clipped()
+
+                    if let marker, marker > 0, marker < of {
+                        // Outlined, because it crosses both the filled and
+                        // unfilled parts of the track and has to stay visible
+                        // against either.
+                        Rectangle()
+                            .fill(Theme.text)
+                            .frame(width: 2)
+                            .overlay(Rectangle().stroke(Theme.surface, lineWidth: 1))
+                            .offset(x: geo.size.width * fraction(marker) - 1)
+                    }
                 }
+                .clipShape(RoundedRectangle(cornerRadius: Self.corner))
             }
-            .frame(height: 8)
+            .frame(height: 21)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label) \(amount.asMoney)")
+    }
+
+    private func caption(width: CGFloat) -> some View {
+        Text(amount.asMoney)
+            .font(.system(size: 12, weight: .medium))
+            .monospacedDigit()
+            .padding(.leading, Self.inset)
+            .frame(width: width, alignment: .leading)
     }
 }

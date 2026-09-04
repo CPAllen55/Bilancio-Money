@@ -165,20 +165,24 @@ private struct StandingCard: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
 
-                    Text(overspent ? "More went out than came in" : "Kept")
+                    Text(subline)
                         .font(Theme.body)
                         .foregroundStyle(Theme.quietText)
                 }
 
-                // Both bars are drawn against the larger of the two, so their
-                // lengths can be compared with each other rather than each
-                // filling its own row and looking equal.
-                let scale = max(summary.totals.income, summary.totals.expense)
-                VStack(spacing: 10) {
-                    ProportionBar(label: "Money in", amount: summary.totals.income,
-                                  of: scale, tint: Theme.incomeTint)
-                    ProportionBar(label: "Money out", amount: summary.totals.expense,
-                                  of: scale, tint: Theme.expenseTint)
+                // Both bars, and both budget marks, share one scale — so the
+                // difference in their lengths is the money kept, and the marks
+                // can be read against each other rather than each bar filling
+                // its own row and looking equal.
+                let scale = max(summary.totals.income, summary.totals.expense,
+                                budget?.income ?? 0, budget?.expense ?? 0)
+                VStack(spacing: 12) {
+                    ProportionBar(label: "Income", amount: summary.totals.income,
+                                  of: scale, tint: Theme.incomeTint,
+                                  marker: plannedIncome)
+                    ProportionBar(label: "Expenses", amount: summary.totals.expense,
+                                  of: scale, tint: Theme.expenseTint,
+                                  marker: plannedExpense)
                 }
 
                 if let status = budgetStatus {
@@ -188,6 +192,35 @@ private struct StandingCard: View {
                 }
             }
         }
+    }
+
+    private var budget: SummaryResponse.Budget? {
+        guard let b = summary.budget, b.available else { return nil }
+        return b
+    }
+
+    private var plannedIncome: Int? {
+        guard let b = budget, b.income > 0 else { return nil }
+        return b.income
+    }
+
+    private var plannedExpense: Int? {
+        guard let b = budget, b.expense > 0 else { return nil }
+        return b.expense
+    }
+
+    /// What the headline figure means, in the terms the reader is in.
+    ///
+    /// A finished period gets no daily rate: there are no days left to spread
+    /// anything over, and "about $40 a day for the 0 days left" is what
+    /// arithmetic says rather than what a person would.
+    private var subline: String {
+        let safe = summary.safeToSpend
+        if safe.daysLeft <= 0 { return "This period is complete." }
+        if overspent {
+            return "\((-net).asMoney) more out than in, with \(safe.daysLeft) day\(safe.daysLeft == 1 ? "" : "s") still to go."
+        }
+        return "About \(safe.perDay.asMoney) a day for the \(safe.daysLeft) day\(safe.daysLeft == 1 ? "" : "s") left."
     }
 
     /// Reported against the budget, not against elapsed days.
