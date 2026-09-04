@@ -81,6 +81,7 @@ struct TrendView: View {
 
                 InOutChart(series: data.series)
                 NetChart(series: data.series)
+                RunningTotalChart(series: data.series)
                 YearAgoCard(now: data.series, before: data.priorSeries)
             }
             .padding()
@@ -158,8 +159,59 @@ private struct NetChart: View {
                 .chartYAxis { AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0))) }
                 .frame(height: 180)
 
-                if let total = series.map(\.net).reduce(0, +) as Int? {
-                    Text("\(total.asMoney) across the \(series.count) months shown")
+            }
+        }
+    }
+}
+
+// MARK: - The running total
+
+/// The same months summed left to right.
+///
+/// Deliberately its own chart rather than a line over the bars above. Twelve
+/// months of around eight thousand each accumulate to eighty, and on one axis
+/// the total flattens every bar it is made of into a sliver — the two are the
+/// same data at an order of magnitude apart, and a shared axis can only ever
+/// serve one of them.
+private struct RunningTotalChart: View {
+    let series: [TrendResponse.Month]
+
+    private var points: [(label: String, total: Int)] {
+        var total = 0
+        return series.map { m in
+            total += m.net
+            return (m.shortLabel, total)
+        }
+    }
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Running total")
+                    .font(Theme.tileLabel)
+                    .foregroundStyle(Theme.quietText)
+
+                Chart {
+                    ForEach(points, id: \.label) { p in
+                        AreaMark(
+                            x: .value("Month", p.label),
+                            y: .value("Running", Double(p.total) / 100)
+                        )
+                        .foregroundStyle(Theme.tint(forNet: p.total).opacity(0.14))
+
+                        LineMark(
+                            x: .value("Month", p.label),
+                            y: .value("Running", Double(p.total) / 100)
+                        )
+                        .foregroundStyle(Theme.tint(forNet: p.total))
+                        .interpolationMethod(.monotone)
+                    }
+                }
+                .chartYAxis { AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0))) }
+                .frame(height: 170)
+
+                if let last = points.last {
+                    Text("\(last.total.asMoney) across the \(series.count) months shown")
                         .font(Theme.note)
                         .foregroundStyle(Theme.quietText)
                 }
