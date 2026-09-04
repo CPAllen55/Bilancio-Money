@@ -79,7 +79,15 @@ struct OverviewView: View {
             .navigationTitle("Overview")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Sign out") { Task { try? await clerk.auth.signOut() } }
+                    // Banks is where sign-out lives too. Both are about the
+                    // account rather than about the money, and a destructive
+                    // action sitting permanently beside the figures is one
+                    // mis-tap from a sign-out nobody wanted.
+                    NavigationLink {
+                        BanksView()
+                    } label: {
+                        Label("Banks", systemImage: "building.columns")
+                    }
                 }
             }
             .refreshable { await model.load() }

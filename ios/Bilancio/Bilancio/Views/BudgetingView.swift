@@ -70,6 +70,15 @@ struct BudgetingView: View {
                 }
             }
             .navigationTitle("Budgeting")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink {
+                        ForecastView()
+                    } label: {
+                        Label("The year ahead", systemImage: "calendar")
+                    }
+                }
+            }
             .refreshable { await model.load() }
         }
         .tint(Theme.accent)
