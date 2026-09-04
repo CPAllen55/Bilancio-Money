@@ -8418,15 +8418,29 @@ function bgTipSet(html, x, y) {
 
 function bgTipShow(row, month, start, x, y) {
   const el = bgTip();
-  /* Green for the income row, red for everything else, because everything
-     else in this view is money going out. Identity rather than a slug: there
-     is exactly one income row and bgRow hands back that same object.
+  /* Two different questions, so two different treatments.
+
+     The income row belongs to the Income and spending chart, where a readout
+     is answering "is this money coming in or going out" — the same question
+     the bars beside it answer, and it keeps the green tint that says so.
+
+     A subcategory is not answering that. Everything in those cards is money
+     going out, so tinting every one of them red said nothing; what a reader
+     needs to know is WHICH of eight blocks they are pointing at. So the body
+     stays the plain panel and the colour goes on the edge, where it names the
+     subcategory the way the swatch beside its row does. Same treatment the
+     Trend charts use, and for the same reason.
+
+     Identity rather than a slug for the income test: there is exactly one
+     income row and bgRow hands back that same object.
 
      Set on every call, never once at creation — this element is reused by
-     every block in every card, so a tone left on it from the last one would
-     colour the next. */
-  el.className = 'charttip bg-tip ' +
-    (row === (bgData && bgData.income) ? 'tone-in' : 'tone-out');
+     every block in every card, so a colour left on it from the last one would
+     be worn by the next. */
+  const isIncome = row === (bgData && bgData.income);
+  const hue = isIncome ? '' : rgbTriplet(themed(row.slug, row.colour) || '');
+  el.className = 'charttip bg-tip ' + (isIncome ? 'tone-in' : (hue ? 'hued' : 'tone-out'));
+  el.style.setProperty('--tip-hue', hue);
   const i = bgData.months.indexOf(month);
   const label = bgData.labels[i] || month;
   const v = bgPlanOf(row)[month];
