@@ -96,17 +96,28 @@ is the one piece of setup the app cannot inherit from the web.
 ```
 { ok, range: { key, label, start, end },
   comparison: { label, start, end },
-  totals:   { income, expense, net, savingsRate },
-  previous: { income, expense, net, savingsRate },
+  totals:   { income, expense, net, byCategory, byIncomeCategory,
+              byTransferCategory, transfersMoved, transfersExcluded,
+              byParent, byIncomeParent },
+  previous: { ...the same shape, for the comparison period },
   safeToSpend: { remaining, perDay, daysLeft, daysElapsed, daysInPeriod,
                  spent, budget, onPace },
   budget, categories, accountsCounted }
 ```
 
+There is **no `savingsRate` on `totals`**. It lives on `budget`, which is a
+different object with its own `income`, `expense` and `net` describing what a
+month *should* cost rather than what it did. Reading `totals.savingsRate` gets
+you `nil`, silently.
+
 `safeToSpend.remaining` is **floored at zero**. For a period that spent more
 than it earned it reads `0`, not the loss. Use `totals.net` for the real
 figure — the web app's headline was reading the floored one and had to be
 changed.
+
+`accountsCounted` is `0` until a bank is linked, and every figure above is
+then `0` too. That is not the same as a month with no activity, and a first
+screen should say which it is rather than showing a bare zero.
 
 ### `/transactions`
 
