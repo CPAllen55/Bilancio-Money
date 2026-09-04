@@ -75,6 +75,12 @@ private struct SignedIn: View {
             Tab("Trend", systemImage: "chart.bar") {
                 TrendView()
             }
+            Tab("Budgeting", systemImage: "chart.pie.fill") {
+                BudgetingView()
+            }
+            Tab("Net Worth", systemImage: "building.columns") {
+                NetWorthView()
+            }
         }
     }
 }
