@@ -76,6 +76,30 @@ struct SummaryResponse: Decodable {
 /// changes nothing else, so it is never allowed to fail the screen.
 struct TrendResponse: Decodable {
     let sparklines: Sparklines
+    /// One entry per month shown, oldest first.
+    let series: [Month]
+    /// The same months a year earlier, for the year-ago comparison.
+    let priorSeries: [Month]
+
+    struct Month: Decodable, Identifiable {
+        /// `YYYY-MM`.
+        let month: String
+        let income: Int
+        let expense: Int
+        let net: Int
+
+        var id: String { month }
+
+        /// "Sep", and "Sep 25" each January so a twelve-month run does not
+        /// silently wrap without saying which year it landed in.
+        var shortLabel: String {
+            let parts = month.split(separator: "-")
+            guard parts.count == 2, let m = Int(parts[1]), (1...12).contains(m) else { return month }
+            let name = ["Jan","Feb","Mar","Apr","May","Jun",
+                        "Jul","Aug","Sep","Oct","Nov","Dec"][m - 1]
+            return m == 1 ? "\(name) \(parts[0].suffix(2))" : name
+        }
+    }
 
     struct Sparklines: Decodable {
         let income: [Int]

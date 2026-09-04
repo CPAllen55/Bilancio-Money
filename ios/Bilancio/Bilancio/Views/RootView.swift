@@ -72,6 +72,9 @@ private struct SignedIn: View {
             Tab("Transactions", systemImage: "list.bullet") {
                 TransactionsView()
             }
+            Tab("Trend", systemImage: "chart.bar") {
+                TrendView()
+            }
         }
     }
 }
