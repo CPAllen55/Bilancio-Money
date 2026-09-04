@@ -236,7 +236,7 @@ private struct LedgerCard: View {
     }
 }
 
-private struct LedgerRow: View {
+struct LedgerRow: View {
     let row: TransactionsResponse.Row
     let category: TransactionsResponse.Category?
 

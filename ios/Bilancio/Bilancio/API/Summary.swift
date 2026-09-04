@@ -133,20 +133,29 @@ enum SummaryRange: Hashable, CaseIterable {
     case thisMonth
     case lastMonth
     case yearToDate
+    /// One named calendar month, whole. `YYYY-MM`.
+    case month(String)
+
+    /// Only the three a period picker offers. `month:` is reached by drilling
+    /// into a chart, never by choosing it from a list, and putting twelve of
+    /// them in a segmented control is how that control stops being usable.
+    static var allCases: [SummaryRange] { [.thisMonth, .lastMonth, .yearToDate] }
 
     var queryValue: String {
         switch self {
-        case .thisMonth:  return "this-month"
-        case .lastMonth:  return "last-month"
-        case .yearToDate: return "ytd"
+        case .thisMonth:      return "this-month"
+        case .lastMonth:      return "last-month"
+        case .yearToDate:     return "ytd"
+        case .month(let ym):  return "month:\(ym)"
         }
     }
 
     var label: String {
         switch self {
-        case .thisMonth:  return "This month"
-        case .lastMonth:  return "Last month"
-        case .yearToDate: return "Year to date"
+        case .thisMonth:      return "This month"
+        case .lastMonth:      return "Last month"
+        case .yearToDate:     return "Year to date"
+        case .month(let ym):  return ym
         }
     }
 }

@@ -128,17 +128,28 @@ private struct CategoryTrendChart: View {
         let cents: Int
     }
 
+    /// Built by walking `visible` rather than the response dictionary.
+    ///
+    /// A dictionary has no order, and Swift Charts assigns a colour scale
+    /// positionally against whatever order the marks arrive in — so building
+    /// these from `byCategory` directly gave Groceries a different colour on
+    /// every launch, and never the colour the category itself carries
+    /// everywhere else in the app.
     private var segments: [Segment] {
-        let lookup = Dictionary(uniqueKeysWithValues: visible.map { ($0.slug, $0) })
-        return series.flatMap { m -> [Segment] in
+        series.flatMap { m -> [Segment] in
             let source = drilled == nil ? (m.byParent ?? [:]) : (m.byCategory ?? [:])
-            return source.compactMap { slug, cents in
-                guard cents > 0, let cat = lookup[slug] else { return nil }
+            return visible.compactMap { cat in
+                guard let cents = source[cat.slug], cents > 0 else { return nil }
                 return Segment(month: m.shortLabel, label: cat.label,
                                colour: Color(hex: cat.colour), cents: cents)
             }
         }
     }
+
+    /// The scale, stated rather than inferred: each category's own colour,
+    /// against its own name.
+    private var domain: [String] { visible.map(\.label) }
+    private var range: [Color] { visible.map { Color(hex: $0.colour) } }
 
     /// The same months a year earlier, summed over whatever is on screen — so
     /// drilling in compares like with like rather than against the whole year.
@@ -150,9 +161,6 @@ private struct CategoryTrendChart: View {
             return (now.shortLabel, total)
         }
     }
-
-    /// Stable colours, so a category keeps its colour as months scroll past.
-    private var palette: KeyValuePairs<String, Color> { [:] }
 
     var body: some View {
         Card {
@@ -206,7 +214,7 @@ private struct CategoryTrendChart: View {
                             }
                         }
                     }
-                    .chartForegroundStyleScale(range: visible.map { Color(hex: $0.colour) })
+                    .chartForegroundStyleScale(domain: domain, range: range)
                     .chartLegend(position: .bottom, alignment: .leading, spacing: 8)
                     .chartYAxis {
                         AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
@@ -220,6 +228,12 @@ private struct CategoryTrendChart: View {
 
                 if drilled == nil {
                     DrillStrip(parents: visible, onPick: { drilled = $0 })
+                } else {
+                    // A stack says Groceries was heavy in February; the only
+                    // useful next question is which rows made it heavy. Rows
+                    // rather than the bars themselves, for the same reason the
+                    // way in was one: a segment this size is not a tap target.
+                    MonthBreakdown(series: series, subcategories: visible)
                 }
             }
         }
@@ -227,6 +241,97 @@ private struct CategoryTrendChart: View {
 
     private var drilledLabel: String {
         categories.first { $0.slug == drilled }?.label ?? drilled ?? ""
+    }
+}
+
+/// A month, a subcategory within it, and the way through to its transactions.
+///
+/// Two steps rather than one screen per combination: picking the month first
+/// keeps the list short, and a month with nothing in a subcategory simply does
+/// not offer it.
+private struct MonthBreakdown: View {
+    let series: [TrendResponse.Month]
+    let subcategories: [TransactionsResponse.Category]
+    @State private var month: String?
+
+    /// Newest first. Somebody drilling in is far more often asking about the
+    /// month just gone than about one eleven months back.
+    private var months: [TrendResponse.Month] { series.reversed() }
+
+    /// The newest month that actually has something in it, until one is
+    /// picked. Opening on the newest month full stop lands on "Nothing in
+    /// Sep." four days into September — an empty state as the first thing a
+    /// drill-down shows reads as a broken screen rather than as a quiet month.
+    private var chosen: TrendResponse.Month? {
+        if let month { return series.first { $0.month == month } }
+        let slugs = Set(subcategories.map(\.slug))
+        return months.first { m in
+            (m.byCategory ?? [:]).contains { slugs.contains($0.key) && $0.value > 0 }
+        } ?? months.first
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Divider()
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(months) { m in
+                        let isOn = (chosen?.month == m.month)
+                        Button {
+                            month = m.month
+                        } label: {
+                            Text(m.shortLabel)
+                                .font(Theme.note)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 6)
+                                .background(isOn ? Theme.accent : Theme.background, in: .capsule)
+                                .foregroundStyle(isOn ? Color.white : Theme.text)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 1)
+            }
+
+            if let chosen {
+                let rows = subcategories
+                    .compactMap { cat -> (TransactionsResponse.Category, Int)? in
+                        let cents = chosen.byCategory?[cat.slug] ?? 0
+                        return cents > 0 ? (cat, cents) : nil
+                    }
+                    .sorted { $0.1 > $1.1 }
+
+                if rows.isEmpty {
+                    Text("Nothing in \(chosen.shortLabel).")
+                        .font(Theme.note)
+                        .foregroundStyle(Theme.quietText)
+                } else {
+                    ForEach(rows, id: \.0.id) { cat, cents in
+                        NavigationLink {
+                            CategoryMonthView(slug: cat.slug, month: chosen.month,
+                                              title: cat.label, monthLabel: chosen.shortLabel)
+                        } label: {
+                            HStack(spacing: 8) {
+                                RoundedRectangle(cornerRadius: 1.5)
+                                    .fill(Color(hex: cat.colour))
+                                    .frame(width: 3, height: 18)
+                                Text(cat.label).font(Theme.note).lineLimit(1)
+                                Spacer(minLength: 8)
+                                Text(cents.asShortMoney)
+                                    .font(Theme.note)
+                                    .monospacedDigit()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Theme.quietText)
+                            }
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
     }
 }
 
