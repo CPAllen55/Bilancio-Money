@@ -219,7 +219,13 @@ private struct LedgerCard: View {
             Card(padding: 0) {
                 VStack(spacing: 0) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        LedgerRow(row: row, category: row.category.flatMap { categories[$0] })
+                        Button {
+                            editing = row
+                        } label: {
+                            LedgerRow(row: row, category: row.category.flatMap { categories[$0] })
+                        }
+                        .buttonStyle(.plain)
+
                         if index < rows.count - 1 {
                             Divider().padding(.leading, 14)
                         }
@@ -284,9 +290,17 @@ private struct LedgerRow: View {
                 .font(Theme.body)
                 .monospacedDigit()
                 .foregroundStyle(row.amount > 0 ? Theme.positive : Theme.text)
+
+            // A row that opens something has to look like it does. Without
+            // this the whole editor is reachable only by guessing that the
+            // list is tappable, which is the same as it not being there.
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.quietText)
         }
         .padding(.vertical, 9)
         .padding(.trailing, 14)
+        .contentShape(.rect)
     }
 }
 
