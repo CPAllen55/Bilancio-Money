@@ -34,6 +34,10 @@ struct SummaryResponse: Decodable {
         let income: Int
         let expense: Int
         let net: Int
+        /// Spending per category slug. The Budgeting screen needs this for the
+        /// month in progress, which `/api/budget` deliberately does not report
+        /// spending for.
+        let byCategory: [String: Int]?
 
         /// Not a field on the response. The Worker puts `savingsRate` on
         /// `budget` and nowhere else, so the one for the actual period is
@@ -96,14 +100,15 @@ struct TrendResponse: Decodable {
 
         var id: String { month }
 
-        /// "Sep", and "Sep 25" each January so a twelve-month run does not
-        /// silently wrap without saying which year it landed in.
+        /// Three letters, no year. "Jan 26" is wider than a twelfth of a
+        /// phone and the axis truncated it to "Ja…", which is worse than the
+        /// ambiguity it was there to remove — the run is chronological and
+        /// left to right, so January is legible as the wrap without saying so.
         var shortLabel: String {
             let parts = month.split(separator: "-")
             guard parts.count == 2, let m = Int(parts[1]), (1...12).contains(m) else { return month }
-            let name = ["Jan","Feb","Mar","Apr","May","Jun",
-                        "Jul","Aug","Sep","Oct","Nov","Dec"][m - 1]
-            return m == 1 ? "\(name) \(parts[0].suffix(2))" : name
+            return ["Jan","Feb","Mar","Apr","May","Jun",
+                    "Jul","Aug","Sep","Oct","Nov","Dec"][m - 1]
         }
     }
 

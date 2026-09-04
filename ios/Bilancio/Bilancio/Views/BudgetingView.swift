@@ -26,6 +26,17 @@ final class BudgetingModel {
     private(set) var state: State = .loading
     var month: String?
 
+    /// Spending in the month still running, per category slug.
+    ///
+    /// /api/budget reports spending only for *complete* months: a partial
+    /// month taken as evidence drags every baseline down, so history stops at
+    /// the last finished one and the current month is planned rather than
+    /// learned from. That leaves no `spent` entry for it — which is not the
+    /// same as zero, and rendering it as zero says a month with real spending
+    /// in it has none. The figure comes from /api/summary instead, which is
+    /// where the Overview gets the same number.
+    private(set) var spentThisMonth: [String: Int] = [:]
+
     private let client = APIClient(baseURL: Bilancio.apiBaseURL) {
         guard let session = Clerk.shared.session else { return nil }
         return try await session.getToken()
@@ -35,6 +46,8 @@ final class BudgetingModel {
         do {
             let data = try await client.budget()
             state = .loaded(data)
+            spentThisMonth = (try? await client.summary(range: .thisMonth))?
+                .totals.byCategory ?? [:]
             // Opens on the month in progress, which is the one a person came
             // to look at. Any other default is a click before the screen is
             // showing what was asked for.
@@ -87,8 +100,12 @@ struct BudgetingView: View {
 
     private func content(_ data: BudgetResponse) -> some View {
         let month = model.month ?? data.currentMonth
+        let isCurrent = month == data.currentMonth
+        let live = isCurrent ? model.spentThisMonth : [:]
         let planned = data.categories.compactMap { $0.plan[month] }.reduce(0, +)
-        let spent = data.categories.compactMap { $0.spent[month] }.reduce(0, +)
+        let spent = data.categories
+            .compactMap { live[$0.slug] ?? $0.spent[month] }
+            .reduce(0, +)
 
         return ScrollView {
             VStack(spacing: Theme.sectionGap) {
@@ -115,7 +132,7 @@ struct BudgetingView: View {
                     }
                 }
 
-                CategoryPlanCard(rows: data.categories, month: month)
+                CategoryPlanCard(rows: data.categories, month: month, live: live)
 
                 Text("Only subcategories are budgeted, so anything filed straight onto a top-level category — and everything in Unsorted — is spending with no line here. The plan is shaped from \(data.monthsOfHistory) month\(data.monthsOfHistory == 1 ? "" : "s") of history.")
                     .font(Theme.note)
@@ -166,11 +183,16 @@ private struct MonthStrip: View {
 private struct CategoryPlanCard: View {
     let rows: [BudgetResponse.Row]
     let month: String
+    let live: [String: Int]
+
+    private func spent(_ row: BudgetResponse.Row) -> Int {
+        live[row.slug] ?? row.spent[month] ?? 0
+    }
 
     /// Biggest plan first. A budget is read to find what dominates it, and
     /// alphabetical order buries that under whatever begins with an A.
     private var ordered: [BudgetResponse.Row] {
-        rows.filter { ($0.plan[month] ?? 0) > 0 || ($0.spent[month] ?? 0) > 0 }
+        rows.filter { ($0.plan[month] ?? 0) > 0 || spent($0) > 0 }
             .sorted { ($0.plan[month] ?? 0) > ($1.plan[month] ?? 0) }
     }
 
@@ -191,7 +213,7 @@ private struct CategoryPlanCard: View {
                 Card(padding: 0) {
                     VStack(spacing: 0) {
                         ForEach(Array(ordered.enumerated()), id: \.element.id) { i, row in
-                            PlanRow(row: row, month: month)
+                            PlanRow(row: row, month: month, spent: spent(row))
                             if i < ordered.count - 1 {
                                 Divider().padding(.leading, 14)
                             }
@@ -206,9 +228,9 @@ private struct CategoryPlanCard: View {
 private struct PlanRow: View {
     let row: BudgetResponse.Row
     let month: String
+    let spent: Int
 
     private var plan: Int { row.plan[month] ?? 0 }
-    private var spent: Int { row.spent[month] ?? 0 }
     private var over: Bool { plan > 0 && spent > plan }
 
     var body: some View {

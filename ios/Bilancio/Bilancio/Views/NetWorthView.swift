@@ -233,8 +233,9 @@ private struct CreditCard: View {
                     }
                 }
 
-                ProportionBar(label: "of \(credit.limit.asShortMoney) limit",
+                ProportionBar(label: "Limit",
                               amount: credit.used,
+                              planned: credit.limit,
                               fallbackScale: credit.limit,
                               tint: credit.utilisation.map { $0 > 0.3 } == true
                                     ? Theme.caution : Theme.positive,
