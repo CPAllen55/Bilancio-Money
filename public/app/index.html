@@ -1941,8 +1941,19 @@
      is the only colour on the card and it can afford to be the mint. */
   .bv-card.bv-income{ border-left:3px solid var(--mint); margin-bottom:8px; }
   .bv-card.bv-income .bv-head b{ letter-spacing:.01em; }
+  /* Every card wears its category down its left edge, the way Income does.
+
+     The colour is handed in as --edge because it is the category own colour
+     and only the row knows it; the fallback is the hairline every other card
+     border uses, so a category with no colour set looks like a card rather
+     than like a bug.
+
+     border-left comes AFTER the border shorthand inside this same block on
+     purpose. The shorthand sets all four sides, so written above it the edge
+     would be overwritten by the very next line. */
   .bv-card{ background:var(--surface); border:1px solid var(--hair);
-            border-radius:6px; padding:15px 20px 13px; }
+            border-radius:6px; padding:15px 20px 13px;
+            border-left:3px solid var(--edge, var(--hair)); }
   .bv-head{ display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:10px; }
   .bv-head b{ font-weight:600; }
   /* The verdict is the answer to the question the two bars pose, so it sits on
@@ -8776,7 +8787,7 @@ async function renderBudgetView() {
       '<div class="bv-tx" data-bud-tx-for="' + escapeHtml(forSlug) + '"' +
       (budgetTxOpen.has(forSlug) ? '' : ' hidden') + '></div>';
 
-    return '<div class="bv-card">' +
+    return '<div class="bv-card" style="--edge:' + colourOf(slug) + '">' +
       budgetPair(labelOfSlug(slug), colourOf(slug), actual, budget, parentExpand) +
       (expandable
         ? '<div class="bv-kids" data-bud-kids="' + escapeHtml(slug) + '"' + (open ? '' : ' hidden') + '>' +
