@@ -1770,6 +1770,29 @@
      the only thing carrying the colour — and a hairline ring sits under it,
      because a border here computes to two thirds of a pixel and a single one
      of those is easy to miss against a dark panel. */
+  /* The field inside a pinned readout.
+
+     The box stops following the pointer while this is here, so it can take
+     the pointer itself -- a readout that dodged the cursor could never be
+     typed into. Everywhere else .charttip is pointer-events:none, which is
+     why that is set on the pinned state rather than on the field. */
+  .charttip.pinned{ pointer-events:auto; }
+  .ct-edit{ display:flex; align-items:center; gap:8px; margin-top:9px;
+            padding-top:9px; border-top:1px solid var(--hair); }
+  .ct-edit label{ display:flex; align-items:center; gap:7px; flex:1;
+                  font-size:11.5px; color:var(--muted); white-space:nowrap; }
+  .ct-edit input{ flex:1; min-width:0; width:100%;
+                  font-family:var(--font-num); font-size:13px; text-align:right;
+                  padding:5px 8px; border-radius:5px;
+                  border:1px solid var(--mint-dim); background:var(--bg-panel);
+                  color:var(--ink); }
+  .ct-edit input:focus{ outline:2px solid var(--mint-dim); outline-offset:1px; }
+  .ct-reset{ font-size:11px; padding:4px 8px; flex:none; }
+  /* What the plan said before it was moved. Quiet, because it is the thing
+     being overridden rather than the thing being set. */
+  .ct-was{ font-size:11px; color:var(--muted); margin-top:6px;
+           font-family:var(--font-num); }
+
   .charttip.hued{ border-color:rgb(var(--tip-hue) / .85);
     box-shadow:0 10px 28px var(--shadow), 0 0 0 1px rgb(var(--tip-hue) / .35); }
 
@@ -8396,20 +8419,50 @@ function bgTipShow(row, month, start, x, y) {
   const v = bgPlanOf(row)[month];
   const moved = (start === null || start === undefined) ? 0 : v - start;
 
-  /* What this block is of the column it sits in. The figure alone does not say
-     whether $180 on restaurants is most of the month's food or a corner of it,
-     and that is usually the question being asked of a stacked bar. It is
-     recomputed on every call, so it moves with the block. */
+  /* What the whole column comes to. This used to carry the block's share of
+     it as a percentage as well, on the reasoning that the figure alone does
+     not say whether $180 on restaurants is most of the month's food or a
+     corner of it. In front of a reader it was one number too many: the
+     amount above answers what was asked, and a second figure derived from it
+     mostly gave the eye somewhere else to go. The column total stays because
+     it is a different fact, not a restatement of the same one. */
   const column = bgShownKids(row.parentSlug)
     .reduce((s, r) => s + bgPlanOf(r)[month], 0);
-  const share = column > 0 ? (v / column) * 100 : 0;
+
+  /* Pinned means this box is being typed into rather than passed over: it
+     stops following the pointer, stops hiding, and grows a field. */
+  const pinned = !!(bgTipPin && bgTipPin.slug === row.slug && bgTipPin.month === month);
+  el.classList.toggle('pinned', pinned);
+  /* What the plan said before anybody moved it. The reason to show it is that
+     an override is only meaningful against the thing it overrides — a figure
+     typed over a number you can no longer see is a figure with nothing to
+     judge it by. */
+  const original = Math.max(0, Math.round(row.computed[month] || 0));
+  const edited = row.pinned[month] !== undefined;
 
   el.innerHTML =
     '<div class="ct-head">' + escapeHtml(row.label) +
       '<span class="ct-month">' + escapeHtml(label) + '</span></div>' +
     '<div class="ct-amount">' + money(v) + '</div>' +
-    '<div class="ct-share">' + share.toFixed(1) + '% of ' + escapeHtml(label) +
-      ' · ' + money0(column) + (row.pinned[month] !== undefined ? ' · pinned' : '') + '</div>' +
+    /* The share of the column used to lead this line. It was arithmetic
+       nobody asked for -- the figure above it is the answer, and what this
+       line is for is saying what the month comes to and whether this one has
+       been moved by hand. */
+    '<div class="ct-share">' + escapeHtml(money0(column)) + ' in ' + escapeHtml(label) +
+      (edited ? ' · pinned' : '') + '</div>' +
+    (pinned
+      ? '<div class="ct-edit">' +
+          '<label>Set to<input type="number" min="0" step="1" inputmode="decimal" ' +
+            'id="bg-tip-input" value="' + (v / 100).toFixed(0) + '"></label>' +
+          (edited
+            ? '<button type="button" class="ct-reset" data-bg-unpin="1">Reset</button>'
+            : '') +
+        '</div>' +
+        '<div class="ct-was">Plan says ' + escapeHtml(money(original)) +
+          (v !== original
+            ? ' · ' + (v > original ? '+' : '\u2212') + escapeHtml(money(Math.abs(v - original)))
+            : '') + '</div>'
+      : '') +
     (moved
       // Up is more spending, so up is the unwelcome direction and takes the
       // colour that means so everywhere else on the page.
@@ -8431,7 +8484,24 @@ function bgTipAt(x, y) {
   el.style.top = Math.max(8, y - el.offsetHeight - 14) + 'px';
 }
 
-function bgTipHide() { if (bgTipEl) bgTipEl.hidden = true; }
+/* Which block's readout is being typed into, if any. */
+let bgTipPin = null;
+
+/* A pinned readout is not hidden by the pointer leaving: the reader is aiming
+   at the field inside it, and a box that vanished on the way there could never
+   be reached. Every hide goes through here so none of them can forget. */
+function bgTipHide() {
+  if (bgTipPin) return;
+  if (bgTipEl) bgTipEl.hidden = true;
+}
+
+/* Closing it for real, whatever it was showing. */
+function bgTipUnpin(redraw) {
+  if (!bgTipPin) return;
+  bgTipPin = null;
+  if (bgTipEl) bgTipEl.hidden = true;
+  if (redraw) drawBudgeting();
+}
 
 /* Saved after a pause, not on every keystroke. The figure on screen is already
    right — this only persists it, so there is nothing to wait for.
@@ -8659,6 +8729,9 @@ $('bg-list').addEventListener('pointermove', (e) => {
   if (!bgDrag) {
     // Not dragging: the readout still follows a hovered block.
     const over = bgSeg(e);
+    /* A pinned box holds still. It has a field in it being aimed at, and one
+       that slid away from the cursor could not be reached. */
+    if (bgTipPin) return;
     if (over) bgTipAt(e.clientX, e.clientY); else bgTipHide();
     return;
   }
@@ -8710,8 +8783,20 @@ function bgDragEnd(e) {
   d.svg.classList.remove('dragging');
   d.seg.classList.remove('on');
   try { d.seg.releasePointerCapture(e.pointerId); } catch (err) { /* already gone */ }
+  /* A press that never moved is a click, and a click on a block asks to type
+     a figure into it rather than to nudge it. The drag machinery has always
+     known the difference -- it is the same flag that decides whether anything
+     needs saving -- so this costs no new gesture and no new hit area. */
+  if (!d.moved) {
+    bgFit(d.svg);
+    if (bgPast(d.month)) { bgTipHide(); return; }   // history is not editable
+    bgTipPin = { slug: d.row.slug, month: d.month };
+    bgTipShow(d.row, d.month, null, e.clientX, e.clientY);
+    const box = bgTipEl && bgTipEl.querySelector('#bg-tip-input');
+    if (box) { box.focus(); box.select(); }
+    return;
+  }
   bgTipHide();
-  if (!d.moved) { bgFit(d.svg); return; }
   d.row.pinned[d.month] = Math.round(d.row.pinned[d.month] / 100) * 100;
   bgSave({ slug: d.row.slug, month: d.month, amount: d.row.pinned[d.month] });
   /* Only now: the scale is free to change again, and the row below needs its
@@ -8735,6 +8820,59 @@ $('bg-list').addEventListener('pointerout', (e) => {
 
 // A block reached by keyboard gets the same box, anchored to itself.
 $('bg-list').addEventListener('focusout', (e) => { if (bgSeg(e)) bgTipHide(); });
+
+/* The field inside a pinned readout.
+ *
+ * Enter commits, Escape closes without committing, and clicking anywhere
+ * outside commits what is in the box — because a figure typed and then left
+ * alone was meant, and throwing it away on a stray click would be the kind of
+ * loss that teaches people not to use a control.
+ */
+function bgTipCommit() {
+  const box = bgTipEl && bgTipEl.querySelector('#bg-tip-input');
+  if (!box || !bgTipPin) return;
+  const row = bgRow(bgTipPin.slug);
+  const month = bgTipPin.month;
+  if (!row || bgPast(month)) { bgTipUnpin(false); return; }
+  const raw = box.value.trim();
+  /* Emptied on purpose means "go back to the plan", which is the same thing
+     the month boxes below already do with an empty field. */
+  if (raw === '') {
+    delete row.pinned[month];
+    bgSave({ slug: row.slug, month: month, amount: null });
+  } else {
+    const cents = Math.round(Number(raw) * 100);
+    if (!isFinite(cents) || cents < 0) { bgTipUnpin(false); return; }
+    row.pinned[month] = cents;
+    bgSave({ slug: row.slug, month: month, amount: cents });
+  }
+  bgTipUnpin(true);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!bgTipPin) return;
+  if (e.key === 'Enter') { e.preventDefault(); bgTipCommit(); }
+  else if (e.key === 'Escape') { e.preventDefault(); bgTipUnpin(false); }
+});
+
+/* Pointerdown rather than click, so the readout is gone before whatever was
+   pressed underneath it acts -- otherwise pressing a block to move the pin
+   would commit and then immediately be re-pinned by that same press. */
+document.addEventListener('pointerdown', (e) => {
+  if (!bgTipPin || !bgTipEl) return;
+  if (bgTipEl.contains(e.target)) return;
+  bgTipCommit();
+}, true);
+
+/* Reset inside the readout: drop the pin and go back to what history says,
+   the same thing Delete does on a focused block. */
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('[data-bg-unpin]');
+  if (!b || !bgTipPin) return;
+  const row = bgRow(bgTipPin.slug), month = bgTipPin.month;
+  if (row) { delete row.pinned[month]; bgSave({ slug: row.slug, month: month, amount: null }); }
+  bgTipUnpin(true);
+});
 
 /* Moves focus within a chart and keeps the single tab stop on whatever was
    last used, so tabbing back returns to where the reader was. */
