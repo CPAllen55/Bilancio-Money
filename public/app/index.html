@@ -1564,6 +1564,47 @@
             padding:16px 18px; margin-top:14px; }
   /* The head is the control. A whole card is a big target, and the alternative
      — a chevron somebody has to aim at — is the thing people miss. */
+  /* The header and the metric switches, in one row. The header keeps taking
+     the whole click it always took by flexing to fill what the switches leave. */
+  .bg-headrow{ display:flex; align-items:center; gap:12px; width:100%; }
+  .bg-headrow > .bg-head{ flex:1 1 auto; width:auto; min-width:0; }
+
+  /* Three switches for three benchmarks. Each carries its own line's colour in
+     a swatch rather than colouring its label, so an unlit one still reads as
+     text and the colour only means "this is the line you would get". */
+  .bg-metrics{ display:flex; align-items:center; gap:5px; flex:none; }
+  .bg-metric{ display:inline-flex; align-items:center; gap:6px;
+              font:400 11px/1 inherit; padding:5px 9px 5px 7px;
+              border:1px solid var(--hair); border-radius:5px;
+              background:none; color:var(--muted); cursor:pointer; white-space:nowrap;
+              transition:color .12s ease, border-color .12s ease, background .12s ease; }
+  .bg-metric i{ width:12px; height:0; flex:none;
+                border-top:2px solid var(--mline); opacity:.45; }
+  .bg-metric:hover{ color:var(--ink); border-color:var(--hair-strong); }
+  .bg-metric.on{ color:var(--ink); border-color:var(--mline); background:var(--row-alt); }
+  .bg-metric.on i{ opacity:1; }
+  .bg-metric:focus-visible{ outline:2px solid var(--mint-dim); outline-offset:1px; }
+
+  /* The lines themselves. non-scaling-stroke for the same reason everything
+     else on this plot uses it: the chart stretches to its card, so a stroke in
+     user units would be a different weight on every window.
+
+     None of them take the pointer. They lie over the blocks, and a line that
+     swallowed a click would make the middle of a bar undraggable for no
+     reason the reader could see. */
+  .bg-line{ pointer-events:none; stroke-width:2; fill:none; }
+  /* Dashed, because it is one number rather than a series — a solid rule
+     across a chart of months reads as a value that was measured each month. */
+  .bg-line.avg{ stroke:var(--line-average); stroke-dasharray:6 4; }
+  .bg-line.trend{ stroke:var(--line-trend); stroke-linecap:round; stroke-linejoin:round; }
+  .bg-line.yoy{ stroke:var(--line-previous); stroke-dasharray:2 3; stroke-linecap:round; }
+
+  @media (max-width:720px){
+    /* Below this the switches and a category name cannot share a line. */
+    .bg-headrow{ flex-wrap:wrap; }
+    .bg-metrics{ width:100%; padding:0 0 8px 26px; }
+  }
+
   .bg-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; width:100%;
             background:none; border:0; padding:0; margin:0; color:inherit;
             font:inherit; text-align:left; cursor:pointer; }
@@ -7347,8 +7388,13 @@ function drawBudgeting() {
     const perMonth = bgData.months.map(m =>
       kids.reduce((s, r) => s + bgPlanOf(r)[m], 0));
 
+    /* The header is a button, so the metric toggles cannot live inside it —
+       a button within a button is neither valid nor clickable. They sit
+       beside it in a flex row instead, which also means they never overlap a
+       long category name the way an absolutely-placed group would. */
     return '<div class="bg-card' + (open ? '' : ' shut') + '" data-parent="' +
         escapeHtml(p.slug) + '">' +
+      '<div class="bg-headrow">' +
       '<button class="bg-head" type="button" data-bg-card="' + escapeHtml(p.slug) + '" ' +
         'aria-expanded="' + open + '">' +
         '<span class="bg-chev" aria-hidden="true">' + (open ? '▾' : '▸') + '</span>' +
@@ -7359,6 +7405,10 @@ function drawBudgeting() {
         '<span class="bg-annual">' + money(year) + ' a year</span>' +
         (open ? '' : '<span class="bg-avg">' + money0(year / 12) + ' a month</span>') +
       '</button>' +
+      /* Only on an open card: there is no chart to draw a line across when it
+         is shut, and a control that does nothing is worse than no control. */
+      (open && shown.length ? bgMetricsHtml(p.slug, bgLineData(shown)) : '') +
+      '</div>' +
       (open
         ? (shown.length
             ? bgChart(shown, p.slug) + bgLegend(shown) +
@@ -7486,12 +7536,104 @@ function bgYearOf(rows) {
   }, 0);
 }
 
-function bgScaleOf(rows) {
+/**
+ * The three benchmark lines a card can show, worked out from what was
+ * actually spent rather than from the plan.
+ *
+ * That is the point of them. The bars are the plan; a line fitted to the plan
+ * would only tell you what you already drew. These say what the months
+ * actually cost, so the plan has something to be judged against.
+ *
+ *   average   the mean of the months that have happened, flat across the year
+ *   trend     a least-squares fit through those same months, carried on
+ *   year ago  what each month cost twelve months earlier
+ *
+ * Only months with a figure count. A category with no spending in March is
+ * one thing; a March that has not happened yet is another, and averaging the
+ * second in as a zero would drag every line down by however much of the year
+ * is still ahead.
+ */
+function bgLineData(rows) {
+  const months = bgData.months;
+  const actual = months.map(m => rows.reduce((s, r) => s + ((r.spent || {})[m] || 0), 0));
+  const yoy = months.map(m => rows.reduce((s, r) => s + ((r.priorSpent || {})[m] || 0), 0));
+
+  /* A month counts as lived when any category on the card has a figure for
+     it. Reading bgPast would be wrong here: a month can be behind us and
+     still have no record, and a mean over months with no record is a mean
+     over nothing. */
+  const lived = [];
+  actual.forEach((v, i) => { if ((rows.some(r => (r.spent || {})[months[i]] !== undefined)) ) lived.push(i); });
+
+  const withFigure = lived.filter(i => actual[i] > 0);
+  const avg = withFigure.length
+    ? withFigure.reduce((s, i) => s + actual[i], 0) / withFigure.length
+    : null;
+
+  /* Least squares over the lived months, then carried across the whole year.
+     Under three points there is no line worth fitting -- two points always fit
+     perfectly and say nothing about direction. */
+  let trend = null;
+  if (withFigure.length >= 3) {
+    const n = withFigure.length;
+    const mx = withFigure.reduce((s, i) => s + i, 0) / n;
+    const my = withFigure.reduce((s, i) => s + actual[i], 0) / n;
+    let num = 0, den = 0;
+    for (const i of withFigure) { num += (i - mx) * (actual[i] - my); den += (i - mx) ** 2; }
+    if (den > 0) {
+      const slope = num / den, intercept = my - slope * mx;
+      /* Floored at zero: a falling line extended far enough goes negative, and
+         a budget line below the axis is not a forecast, it is an artefact. */
+      trend = months.map((_, i) => Math.max(0, intercept + slope * i));
+    }
+  }
+
+  return {
+    avg: avg,
+    trend: trend,
+    yoy: yoy.some(v => v > 0) ? yoy : null,
+  };
+}
+
+/* Which lines are showing, per card. Keyed by category so opening two cards
+   does not force them to agree -- what is worth comparing against differs
+   between a category that is seasonal and one that is flat. */
+const bgLines = new Set();
+const BG_METRICS = [
+  { id: 'avg',   label: 'Average',  colour: 'var(--line-average)' },
+  { id: 'trend', label: 'Trend',    colour: 'var(--line-trend)' },
+  { id: 'yoy',   label: 'Year ago', colour: 'var(--line-previous)' },
+];
+const bgLineOn = (slug, id) => bgLines.has(slug + ':' + id);
+
+function bgMetricsHtml(slug, data) {
+  return '<div class="bg-metrics">' + BG_METRICS.map(m => {
+    /* A control for a line that cannot be drawn is a control that does
+       nothing when pressed. Under three lived months there is no trend, and a
+       category new this year has no year-ago figures. */
+    const have = m.id === 'avg' ? data.avg !== null
+      : m.id === 'trend' ? !!data.trend : !!data.yoy;
+    if (!have) return '';
+    const on = bgLineOn(slug, m.id);
+    return '<button type="button" class="bg-metric' + (on ? ' on' : '') + '" ' +
+      'style="--mline:' + m.colour + '" data-bg-line="' + escapeHtml(slug) + ':' + m.id + '" ' +
+      'aria-pressed="' + on + '" title="' + m.label + '">' +
+      '<i aria-hidden="true"></i>' + m.label + '</button>';
+  }).join('') + '</div>';
+}
+
+function bgScaleOf(rows, lines) {
   let hi = 1;
   for (const m of bgData.months) {
     const total = rows.reduce((s, r) => s + bgPlanOf(r)[m], 0);
     if (total > hi) hi = total;
   }
+  /* A line that is switched on gets to raise the ceiling, the same way the
+     Trend chart lets its overlays raise theirs. Clipping one instead would
+     draw a year-ago line flat along the top of the plot and call it a
+     comparison. A line switched off does not, so turning it off gives the
+     bars their height back. */
+  if (lines) for (const v of lines) if (v > hi) hi = v;
   return hi * BG_HEADROOM;
 }
 
@@ -7847,7 +7989,15 @@ function bgVsFit(svg) {
 }
 
 function bgChart(kids, parentSlug) {
-  const hi = bgScaleOf(kids);
+  /* Worked out before the scale, because a line that is showing has to be
+     able to raise the ceiling it is drawn against. */
+  const lineData = bgLineData(kids);
+  const onFor = (id) => bgLineOn(parentSlug, id);
+  const reach = [];
+  if (onFor('avg') && lineData.avg !== null) reach.push(lineData.avg);
+  if (onFor('trend') && lineData.trend) reach.push(Math.max(...lineData.trend));
+  if (onFor('yoy') && lineData.yoy) reach.push(Math.max(...lineData.yoy));
+  const hi = bgScaleOf(kids, reach);
   const band = (BG_W - BG_PL * 2) / bgData.months.length;
   const barW = Math.min(52, band * 0.74);
   const plans = kids.map(bgPlanOf);
@@ -7901,9 +8051,49 @@ function bgChart(kids, parentSlug) {
   });
   /* One handle for the chart, parked on whichever block is being held. Drawn
      last so it sits over the stack, and moved rather than recreated. */
+  /* Over the bars, because a benchmark you have to look through the stack to
+     find is not a benchmark. Under the divider and the grab handle, which are
+     furniture rather than data. */
+  svg += bgLinesSvg(lineData, onFor, band, base => base, hi);
   svg += bgNowLine(BG_H - BG_PB) +
     '<text class="bg-grab" text-anchor="middle" style="display:none">⇕</text>';
   return svg + '</svg>';
+}
+
+/**
+ * The benchmark lines themselves.
+ *
+ * Each is drawn across the full width at the month centres, so a point sits
+ * over the column it belongs to rather than at the edge between two.
+ *
+ * The average is flat and dashed: it is one number, and a dashed rule reads as
+ * a level rather than as a series. The other two are solid, because they are
+ * a value per month and joining them is the whole information.
+ *
+ * Every one is pointer-transparent. They lie over the blocks, and a line that
+ * swallowed a click would make the middle of a bar undraggable for no reason
+ * the reader could see.
+ */
+function bgLinesSvg(data, onFor, band, _unused, hi) {
+  const base = BG_PT + BG_PLOT;
+  const y = (v) => base - Math.max(0, Math.min(1, v / hi)) * BG_PLOT;
+  const cx = (i) => BG_PL + band * i + band / 2;
+  let out = '';
+
+  if (onFor('avg') && data.avg !== null) {
+    const yy = y(data.avg).toFixed(1);
+    out += '<line class="bg-line avg" vector-effect="non-scaling-stroke" x1="' +
+      BG_PL + '" y1="' + yy + '" x2="' + (BG_W - BG_PL) + '" y2="' + yy + '"/>';
+  }
+  const series = (id, vals) => {
+    if (!onFor(id) || !vals) return;
+    const pts = vals.map((v, i) => cx(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+    out += '<polyline class="bg-line ' + id + '" vector-effect="non-scaling-stroke" ' +
+      'points="' + pts + '" fill="none"/>';
+  };
+  series('trend', data.trend);
+  series('yoy', data.yoy);
+  return out;
 }
 
 function bgLegend(kids) {
@@ -7933,7 +8123,17 @@ function bgFit(svg) {
   /* Frozen only for the chart being dragged. Every other chart re-fits, so a
      figure typed into a month box still rescales its own year. */
   const frozen = !!(bgDrag && bgDrag.svg === svg);
-  const hi = (frozen ? Number(svg.dataset.hi) : bgScaleOf(rows)) || 1;
+  /* The same headroom the builder gave it. This recomputes the scale when a
+     figure is typed elsewhere, and computing it without the lines would drop
+     whatever headroom they were given -- the bars would jump the moment an
+     unrelated month was edited, and the line would end up outside the plot. */
+  const parent = svg.dataset.parent || '';
+  const lineData = bgLineData(rows);
+  const reach = [];
+  if (bgLineOn(parent, 'avg') && lineData.avg !== null) reach.push(lineData.avg);
+  if (bgLineOn(parent, 'trend') && lineData.trend) reach.push(Math.max(...lineData.trend));
+  if (bgLineOn(parent, 'yoy') && lineData.yoy) reach.push(Math.max(...lineData.yoy));
+  const hi = (frozen ? Number(svg.dataset.hi) : bgScaleOf(rows, reach)) || 1;
   if (!frozen) svg.dataset.hi = hi.toFixed(2);
   const plans = rows.map(bgPlanOf);
 
@@ -8368,6 +8568,16 @@ function bgLive() {
 }
 
 $('bg-list').addEventListener('click', (e) => {
+  /* Checked first. It sits in the header row beside the card's own button,
+     and a metric being switched on is not a request to close the card. */
+  const line = e.target.closest('[data-bg-line]');
+  if (line) {
+    const key = line.dataset.bgLine;
+    if (bgLines.has(key)) bgLines.delete(key); else bgLines.add(key);
+    drawBudgeting();
+    return;
+  }
+
   const card = e.target.closest('[data-bg-card]');
   if (card) {
     const slug = card.dataset.bgCard;

@@ -100,10 +100,24 @@ budget.get("/budget", async (c) => {
         learn.filter((m) => planMonths.includes(m))
           .map((m) => [m, buckets.get(m)?.byCategory[cat.slug] ?? 0]),
       );
+      /* The same calendar months a year earlier, keyed by the month they are
+         being compared WITH -- so the client can put January 2025 under
+         January 2026 without doing date arithmetic to find it.
+
+         Nothing extra is read for this. The learn window already reaches two
+         calendar years back because that is what the shape is fitted from, so
+         these buckets are in hand; they were simply being filtered out. */
+      const priorSpent = Object.fromEntries(
+        planMonths.map((m) => {
+          const [y, mo] = m.split("-");
+          return [m, buckets.get(`${Number(y) - 1}-${mo}`)?.byCategory[cat.slug] ?? 0];
+        }),
+      );
       return {
         id: cat.id, slug: cat.slug, label: cat.label, colour: cat.colour,
         parentSlug: cat.parentSlug,
         spent,
+        priorSpent,
         // Before the reader's edits, so a Reset has something to go back to.
         computed: shape.plan,
         plan: applyOverride(shape, planMonths, over),
