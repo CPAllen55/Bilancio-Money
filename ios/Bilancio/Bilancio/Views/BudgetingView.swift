@@ -60,6 +60,8 @@ final class BudgetingModel {
 
 struct BudgetingView: View {
     @State private var model = BudgetingModel()
+    /// The category whose plan is being edited.
+    @State private var editing: BudgetResponse.Row?
 
     var body: some View {
         NavigationStack {
@@ -96,6 +98,31 @@ struct BudgetingView: View {
         }
         .tint(Theme.accent)
         .task { await model.load() }
+        .sheet(item: $editing) { row in
+            BudgetEditorView(row: row,
+                             month: editingMonth,
+                             monthLabel: monthLabel) {
+                Task { await model.load() }
+            }
+        }
+    }
+
+    /// Whichever month the strip is showing. Never the row's own slug, which
+    /// an earlier version fell back to — a category name where a `YYYY-MM` is
+    /// expected pins nothing and silently edits no month at all.
+    private var editingMonth: String {
+        if let chosen = model.month { return chosen }
+        if case .loaded(let data) = model.state { return data.currentMonth }
+        return ""
+    }
+
+    /// The same month, named the way the strip names it.
+    private var monthLabel: String {
+        guard case .loaded(let data) = model.state,
+              let i = data.months.firstIndex(of: editingMonth),
+              data.labels.indices.contains(i)
+        else { return "this month" }
+        return data.labels[i]
     }
 
     private func content(_ data: BudgetResponse) -> some View {
@@ -132,7 +159,7 @@ struct BudgetingView: View {
                     }
                 }
 
-                CategoryPlanCard(rows: data.categories, month: month, live: live)
+                CategoryPlanCard(rows: data.categories, month: month, live: live, editing: $editing)
 
                 Text("Only subcategories are budgeted, so anything filed straight onto a top-level category — and everything in Unsorted — is spending with no line here. The plan is shaped from \(data.monthsOfHistory) month\(data.monthsOfHistory == 1 ? "" : "s") of history.")
                     .font(Theme.note)
@@ -184,6 +211,7 @@ private struct CategoryPlanCard: View {
     let rows: [BudgetResponse.Row]
     let month: String
     let live: [String: Int]
+    @Binding var editing: BudgetResponse.Row?
 
     private func spent(_ row: BudgetResponse.Row) -> Int {
         live[row.slug] ?? row.spent[month] ?? 0
@@ -213,7 +241,13 @@ private struct CategoryPlanCard: View {
                 Card(padding: 0) {
                     VStack(spacing: 0) {
                         ForEach(Array(ordered.enumerated()), id: \.element.id) { i, row in
-                            PlanRow(row: row, month: month, spent: spent(row))
+                            Button {
+                                editing = row
+                            } label: {
+                                PlanRow(row: row, month: month, spent: spent(row))
+                            }
+                            .buttonStyle(.plain)
+
                             if i < ordered.count - 1 {
                                 Divider().padding(.leading, 14)
                             }
@@ -256,11 +290,25 @@ private struct PlanRow: View {
                         .font(Theme.body)
                         .monospacedDigit()
                         .foregroundStyle(over ? Theme.negative : Theme.text)
-                    Text("of \(plan.asShortMoney)")
-                        .font(.caption2)
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.quietText)
+                    HStack(spacing: 3) {
+                        // A pinned month and a shaped one read identically and
+                        // behave completely differently when the shape moves
+                        // underneath them, so the pin is worth one glyph.
+                        if row.isPinned(month) {
+                            Image(systemName: "pin.fill")
+                                .font(.system(size: 8))
+                                .foregroundStyle(Theme.accent)
+                        }
+                        Text("of \(plan.asShortMoney)")
+                            .monospacedDigit()
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(Theme.quietText)
                 }
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.quietText)
             }
 
             GeometryReader { geo in
@@ -280,5 +328,6 @@ private struct PlanRow: View {
         .padding(.vertical, 9)
         .padding(.trailing, 14)
         .padding(.leading, 14)
+        .contentShape(.rect)
     }
 }
