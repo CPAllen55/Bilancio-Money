@@ -6,9 +6,15 @@ call below — when this document and that file disagree, the file is right.
 
 ## The short version
 
-**No server changes are needed to build the app.** Authentication is a bearer
+**No server changes are needed to read anything.** Authentication is a bearer
 token rather than a browser session, and every screen the web app draws is
 built from these endpoints. A native client is just another caller.
+
+The exception is Plaid, and only the OAuth hand-off: the Worker sends a single
+`redirect_uri` to every caller, and a native client needs its own. See
+**Onboarding a bank**. Everything else in this document a native client can use
+exactly as the web app does — the sign-in and Overview screens were built
+against it without touching `src/`.
 
 ---
 
@@ -70,10 +76,30 @@ else is an aggregate ending today.
 whose login has expired; `GET /api/plaid/items` lists connections and their
 health; `DELETE /api/plaid/items/:id` removes one.
 
-**`PLAID_REDIRECT_URI` is configured for the web OAuth flow.** Native Link
-uses a different mechanism, so the Plaid dashboard needs an iOS redirect and
-a bundle identifier registered before OAuth banks will work in the app. This
-is the one piece of setup the app cannot inherit from the web.
+**`PLAID_REDIRECT_URI` is configured for the web OAuth flow**, and native Link
+cannot use it as it stands. Three things are true and are easy to conflate:
+
+- **There is no iOS bundle-identifier field in the Plaid dashboard.** Android
+  has one ("Allowed Android package names"); iOS does not. On iOS the app
+  proves it owns the redirect URL through
+  `public/.well-known/apple-app-site-association`, which is where the bundle
+  identifier is actually declared. Typing a bundle identifier into **Allowed
+  redirect URIs** is a category error — that field takes URLs.
+- **The iOS redirect must be a universal link.** Plaid does not accept custom
+  URI schemes, and a universal link only works once the association file above
+  is served as `application/json` (it has no extension, so `public/_headers`
+  sets that) and the target has the Associated Domains capability
+  (`applinks:bilanciomoney.com`).
+- **The Worker sends one redirect URI to every caller.** `src/plaid.ts` adds
+  `redirect_uri` from `PLAID_REDIRECT_URI` on both `/link/token/create` calls,
+  so an iOS caller currently receives the *web* URL. Native Link needs its own,
+  which means this is the one place the claim above — that no server changes
+  are needed — stops being true.
+
+Order matters, because Plaid will happily save a redirect URI that cannot
+work: serve the association file, add the capability, then register the URL,
+then teach the Worker which one to send. `PLAID_ENV` is `production`, so
+every one of these steps is against real bank linking.
 
 `POST /api/plaid/webhook` is Plaid calling us. The app must never call it.
 

@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["Z9C3CA95C7.com.bilanciomoney.Bilancio"],
+        "components": [
+          {
+            "/": "/app/oauth/*",
+            "comment": "Where Plaid returns the browser after an OAuth bank hand-off. Claimed narrowly on purpose: claiming /app/* would make the web sign-in page open the app on every tap."
+          }
+        ]
+      }
+    ]
+  }
+}
