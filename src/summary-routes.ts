@@ -831,6 +831,10 @@ summary.get("/transactions", async (c) => {
     // per row from an override, a merchant rule, or Plaid's guess. So the range
     // is read whole and filtered here, exactly as the totals are.
     const bucket = c.req.query("bucket") ?? null;
+    /* Only the bucketed path can answer this. The other one pages in SQL and
+       never has the whole set in hand, so it returns an empty list rather
+       than a wrong one built from a page. */
+    let vendors: { key: string; name: string; logo: string | null; cents: number; count: number }[] = [];
 
     // Filter on the description as the reader sees it: the merchant name where
     // Plaid supplies one, the raw bank string otherwise. Matching on the raw
@@ -1029,6 +1033,51 @@ summary.get("/transactions", async (c) => {
         const signed = -Number(r.amount);   // normalised: positive is money in
         if (signed > 0) moneyIn += signed; else moneyOut += -signed;
       }
+
+      /* Who the money went to, over the WHOLE filtered set rather than the
+         page of it that is returned.
+
+         This is the reason it is worked out here and not in the browser. The
+         client is handed fifty rows out of a hundred and twenty-six; a chart
+         built from those fifty would look like an answer and be a sample,
+         and the biggest vendor of the year could be missing from it entirely
+         because their last visit was in March. Every row is already in hand
+         at this point — the loop above walks all of them — so the rollup
+         costs one more pass over an array that is already in memory.
+
+         Grouped by merchantKey rather than by the printed name, so STARBUCKS
+         #1234 and SQ *STARBUCKS are one vendor. That is the same key a
+         merchant rule matches on, so the grouping a reader sees here is the
+         grouping the app already acts on. */
+      const byVendor = new Map<
+        string,
+        { key: string; name: string; logo: string | null; cents: number; count: number }
+      >();
+      for (const r of matching) {
+        const signed = -Number(r.amount);
+        // Money coming back is a refund, not a vendor this category spent at.
+        if (signed >= 0) continue;
+        const key = merchantKey(r.merchantName, r.name) || "—";
+        const at = byVendor.get(key);
+        if (at) {
+          at.cents += -signed;
+          at.count += 1;
+          // A logo on any of a vendor's rows stands for all of them.
+          if (!at.logo) at.logo = logoFile(r.logoUrl);
+        } else {
+          byVendor.set(key, {
+            key,
+            /* The name as it is printed, taken from the first row seen, which
+               is the most recent — a shop that renamed itself is shown under
+               the name it uses now. */
+            name: r.merchantName ?? r.name,
+            logo: logoFile(r.logoUrl),
+            cents: -signed,
+            count: 1,
+          });
+        }
+      }
+      vendors = [...byVendor.values()].sort((a, b) => b.cents - a.cents);
     } else {
       const [pageRows, totals] = await Promise.all([
         page.limit(limit).offset(offset),
@@ -1054,6 +1103,9 @@ summary.get("/transactions", async (c) => {
       total,
       // Across everything matched, in the reader's convention: positive is in.
       sum: { in: moneyIn, out: moneyOut, net: moneyIn - moneyOut },
+      /* Who the money went to, biggest first, over the whole filtered set.
+         Empty on the unbucketed path, which never has the whole set. */
+      vendors,
       merchants: periodNames,
       categories: ctx.list,
       transactions: (rows as Drilled[]).map((r) => {

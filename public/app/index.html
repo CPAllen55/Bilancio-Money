@@ -1862,6 +1862,31 @@
   :root[data-theme="light"] .ps1{ stop-opacity:.06; }
   :root[data-theme="light"] .ps2{ stop-opacity:.10; }
   :root[data-theme="light"] .ph0{ stop-opacity:.13; }
+  /* The second donut, under the first and in the same column, because it is
+     a breakdown of whatever that one is showing rather than a chart beside
+     it. Same width, so the two read as one stack. */
+  .pie-vendors{ margin-top:18px; padding-top:16px;
+                border-top:1px solid var(--hair); max-width:300px; }
+  .pie-vendors .eyebrow{ margin:0 0 8px; }
+  .pv-svg{ display:block; width:192px; max-width:100%; height:auto; margin:0 auto; }
+  /* The same gesture the slices above answer, at the same strength: these are
+     the same kind of thing one level further in. */
+  .pv-slice{ cursor:default; transform-box:fill-box; transform-origin:center;
+             transition:filter .12s ease, transform .12s ease; }
+  .pv-slice:hover{ filter:brightness(1.35) drop-shadow(0 0 7px currentColor);
+                   transform:scale(1.04); }
+
+  .pv-key{ display:flex; flex-direction:column; gap:1px; margin-top:10px; }
+  .pv-row{ display:flex; align-items:center; gap:8px; padding:4px 2px;
+           font-size:12px; }
+  .pv-row i{ width:9px; height:9px; border-radius:2px; flex:none; }
+  /* The name gives up its width first: an amount that wraps is unreadable,
+     and a shop name that is cut is still recognisable from its start. */
+  .pv-name{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
+            white-space:nowrap; color:var(--ink-soft); }
+  .pv-amt{ font-family:var(--font-num); font-size:11.5px; color:var(--ink);
+           flex:none; }
+
   .pie-tx{ flex:1 1 auto; min-width:0; }
   .pie-tx .hint{ font-size:12.5px; color:var(--muted); }
   /* Fixed layout with the two narrow columns pinned, so the description gets
@@ -8965,6 +8990,19 @@ $('bud-list').addEventListener('click', (e) => {
 let pieSel = null;      // the slice whose transactions are listed
 let pieTxCache = {};
 
+/* One request per range-and-bucket, however many panels want it. */
+function pieTx(range, bucket) {
+  const key = range + '|' + bucket;
+  if (!pieTxCache[key]) {
+    pieTxCache[key] = authed('/api/transactions?range=' + encodeURIComponent(range) +
+      '&bucket=' + encodeURIComponent(bucket) + '&limit=50')
+      /* A failed request must not be remembered as the answer, or the panel
+         stays broken until the range changes. */
+      .catch(err => { delete pieTxCache[key]; throw err; });
+  }
+  return pieTxCache[key];
+}
+
 /* Only months that happened. A projection has no transactions behind it, and a
    pie of forecast figures next to a list of real ones would invite comparing
    them. */
@@ -9217,7 +9255,8 @@ function drawPie() {
   // A donut beside a list of the transactions behind whatever is picked from
   // it, which is the whole point of this panel.
   const body = '<div class="pie-wrap">' +
-    '<div class="pie-chart">' + donut + '<div class="pie-key">' + legend + '</div></div>' +
+    '<div class="pie-chart">' + donut + '<div class="pie-key">' + legend + '</div>' +
+      '<div class="pie-vendors" id="pie-vendors"></div></div>' +
     '<div class="pie-tx" id="pie-tx"></div>' +
   '</div>';
 
@@ -9236,6 +9275,102 @@ function drawPie() {
     '</div>' + body;
 
   drawPieTx();
+  drawPieVendors();
+}
+
+/**
+ * The second donut: who the money went to.
+ *
+ * The one above splits a category into its parts; this one splits whichever
+ * part is being looked at into the shops it was spent at. Picking a slice
+ * above changes what this answers, and with nothing picked it answers for the
+ * whole category — the same subject the donut above is drawn for.
+ *
+ * The totals come from the server because they have to. The list beside this
+ * is fifty rows of a hundred and twenty-six; a chart built from those fifty
+ * would look like an answer and be a sample, and a vendor whose last visit
+ * was in March could be missing from it entirely. The endpoint has every row
+ * in hand and rolls them up there.
+ *
+ * Slices are tints of the category's own colour rather than a dozen unrelated
+ * hues. Everything in this donut is inside that category, and a fresh palette
+ * would imply a set of things that stand beside it instead of within it.
+ */
+const PV_MAX = 8;
+
+async function drawPieVendors() {
+  const host = $('pie-vendors');
+  if (!host) return;
+  const subject = pieSel || pieParent();
+  const w = pieWindow();
+  if (!subject || !w.months.length) { host.innerHTML = ''; return; }
+
+  const range = 'span:' + w.months[0].month + '..' + w.months[w.months.length - 1].month;
+  host.innerHTML = '<p class="hint">Loading…</p>';
+  try {
+    const r = await pieTx(range, subject);
+    /* The subject can change while this is in flight — a second slice picked
+       before the first came back. Whatever arrives for a subject nobody is
+       looking at any more is dropped rather than drawn. */
+    if ((pieSel || pieParent()) !== subject) return;
+
+    const all = r.vendors || [];
+    if (!all.length) { host.innerHTML = ''; return; }
+
+    /* A donut with thirty slices is a colour wheel. The ones past the cut are
+       kept as one wedge rather than dropped, so the ring is still the whole
+       of what was spent and the shares below it still add up. */
+    const top = all.slice(0, PV_MAX);
+    const restCents = all.slice(PV_MAX).reduce((s, v) => s + v.cents, 0);
+    const shown = restCents > 0
+      ? top.concat([{ key: '__rest__', name: (all.length - PV_MAX) + ' others',
+                      logo: null, cents: restCents, count: 0 }])
+      : top;
+    const total = all.reduce((s, v) => s + v.cents, 0) || 1;
+
+    const base = colourOf(subject);
+    /* Lightest first, so the biggest wedge is the palest and the ring reads
+       clockwise from most to least without needing the key to say so. */
+    const tint = (i) => shift(base, 0.42 - (i * 0.84) / Math.max(1, shown.length - 1));
+    const colours = shown.map((_, i) => tint(i));
+
+    const R = 84, CX = 96, CY = 96, HOLE = 46;
+    let angle = -Math.PI / 2;
+    const arcs = shown.map((v, i) => {
+      const a0 = angle, a1 = angle + (v.cents / total) * Math.PI * 2;
+      angle = a1;
+      return '<path class="pv-slice" d="' + arcPath(CX, CY, R, a0, a1) + '" ' +
+        'fill="' + relief('pv', colours[i]) + '" style="color:' + colours[i] + '" ' +
+        tipAttrs(v.name, null, v.cents, total, {
+          when: w.label,
+          of: 'of ' + labelOfSlug(subject),
+          note: v.count ? v.count + ' transaction' + (v.count === 1 ? '' : 's') : '',
+          ink: colours[i],
+        }) + '></path>';
+    }).join('');
+
+    host.innerHTML =
+      '<p class="eyebrow">Where it was spent · ' + escapeHtml(labelOfSlug(subject)) + '</p>' +
+      '<svg class="pv-svg" viewBox="0 0 192 192" role="img" aria-label="Spending by vendor">' +
+        reliefDefs('pv', colours) + arcs +
+        '<circle class="pie-sheen" cx="' + CX + '" cy="' + CY + '" r="' + R + '"/>' +
+        '<circle class="pie-hole" cx="' + CX + '" cy="' + CY + '" r="' + (HOLE + 14) + '"/>' +
+        '<circle cx="' + CX + '" cy="' + CY + '" r="' + HOLE + '" fill="var(--surface)"/>' +
+        '<text x="' + CX + '" y="' + (CY - 2) + '" text-anchor="middle" font-size="14" ' +
+          'fill="var(--ink)">' + escapeHtml(money0(total)) + '</text>' +
+        '<text x="' + CX + '" y="' + (CY + 14) + '" text-anchor="middle" font-size="10" ' +
+          'fill="var(--muted)">' + all.length + ' vendor' + (all.length === 1 ? '' : 's') + '</text>' +
+      '</svg>' +
+      '<div class="pv-key">' + shown.map((v, i) =>
+        '<div class="pv-row">' +
+          '<i style="background:' + colours[i] + '"></i>' +
+          '<span class="pv-name" title="' + escapeHtml(v.name) + '">' +
+            escapeHtml(v.name) + '</span>' +
+          '<span class="pv-amt">' + escapeHtml(money0(v.cents)) + '</span>' +
+        '</div>').join('') + '</div>';
+  } catch (err) {
+    host.innerHTML = '<p class="hint">' + escapeHtml(err.message) + '</p>';
+  }
 }
 
 async function drawPieTx() {
@@ -9253,11 +9388,11 @@ async function drawPieTx() {
 
   box.innerHTML = '<p class="hint">Loading…</p>';
   try {
-    if (!pieTxCache[key]) {
-      pieTxCache[key] = await authed('/api/transactions?range=' + encodeURIComponent(range) +
-        '&bucket=' + encodeURIComponent(pieSel) + '&limit=50');
-    }
-    const r = pieTxCache[key];
+    /* The promise is cached, not the result. Two panels now read this same
+       request — the list here and the vendor donut beside it — and both run
+       on the same draw. Caching the result lets both find nothing and both
+       ask; caching the promise means the second one waits for the first. */
+    const r = await pieTx(range, pieSel);
     if (pieSel === null) return;
 
     if (!r.transactions.length) {
