@@ -629,6 +629,11 @@
 
   /* ---------- overview ---------- */
   .fig{ font-size:46px; line-height:1.05; font-weight:600; letter-spacing:-.02em; margin:10px 0 2px; }
+  /* A period that went backwards says so in the figure, not only in the line
+     under it — the same way the headline on Budgeting does. Nothing is added
+     for a positive one: black is what a number looks like, and colouring every
+     good month green would leave the red meaning nothing. */
+  .fig.down{ color:var(--coral); }
   .fig-sub{ font-size:13px; color:var(--ink-soft); margin:0 0 18px; }
   .fig-sub b{ color:var(--ink); font-weight:600; }
   .meter-track{ position:relative; height:10px; border-radius:2px; background:var(--grid); }
@@ -3391,12 +3396,12 @@ function budgetTiles(t, b) {
      was planned to be. Reordering one row alone would leave every tile sitting
      under a budget for something else. */
   return [
-    plan('Net Balance · budget', money(b.net),   b.net,     t.net,     'down',
-         haveIn, haveIn ? null : 'needs income', 'signed'),
     plan('Income · budget',   money(b.income),  b.income,  t.income,  'down',
          haveIn, haveIn ? null : 'no income linked', 'in'),
     plan('Expenses · budget', money(b.expense), b.expense, t.expense, 'up',
          haveOut, null, 'out'),
+    plan('Net Balance · budget', money(b.net),   b.net,     t.net,     'down',
+         haveIn, haveIn ? null : 'needs income', 'signed'),
     plan('Net Balance Rate · budget',
          b.savingsRate === null ? '—' : b.savingsRate.toFixed(1) + '%',
          b.savingsRate || 0, rate, 'down',
@@ -3522,10 +3527,26 @@ async function renderOverview() {
 
   $('ov-safe').innerHTML =
     '<p class="eyebrow">' + escapeHtml(perfLabel) + '</p>' +
-    '<p class="fig">' + money(safe.remaining) + '</p>' +
-    '<p class="fig-sub">' + (safe.daysLeft > 0
-      ? 'That is about <b>' + money(safe.perDay) + ' a day</b> for the ' + safe.daysLeft + ' days left.'
-      : 'This period is complete.') + '</p>' +
+    /* Income less expenses, and allowed to be negative.
+
+       It used to read safeToSpend.remaining, which is the same subtraction
+       with Math.max(0, …) around it — so a period that spent more than it
+       earned reported $0.00 under the word "performance". Zero is not what
+       happened; it is the arithmetic declining to say what happened. t.net
+       carries the sign, and it is the same number the Net Balance tile below
+       shows, so the headline and the row cannot disagree.
+
+       The floor still belongs where it was, in the per-day line: money left
+       to spend cannot be negative, and "about −$40 a day for the 9 days left"
+       is not advice. */
+    '<p class="fig' + (t.net < 0 ? ' down' : '') + '">' + money(t.net) + '</p>' +
+    '<p class="fig-sub">' + (
+      safe.daysLeft <= 0 ? 'This period is complete.'
+      : t.net < 0
+        ? 'That is ' + money(-t.net) + ' more out than in, with ' + safe.daysLeft +
+          ' days still to go.'
+        : 'That is about <b>' + money(safe.perDay) + ' a day</b> for the ' +
+          safe.daysLeft + ' days left.') + '</p>' +
     // Income above, spending directly beneath it, on the same scale. The
     // difference in their lengths is the money kept — visible without reading
     // a single number.
@@ -3576,26 +3597,18 @@ async function renderOverview() {
   try { sp = (await authed('/api/trend?months=12')).sparklines; } catch (e) { /* cosmetic only */ }
   const line = (arr, colour) => (arr && arr.some(v => v) ? sparkline(arr, colour) : '');
 
-  /* What came in less what went out, first.
-
-     It was third, behind the two figures it is made of, which put the answer
-     after the working. This is the one number on the row that says whether the
-     period went well — the other two are how it got there — and it is the only
-     one whose colour means anything on its own, since it takes its tone from
-     its own sign.
-
-     Every figure here is already scoped to the range menu beside it: one
-     historical month reads that month, and a trailing selection reads the
-     whole span summed, because spanRange asks the server for month:YYYY-MM or
-     span:A..B and the totals come back for whichever was asked. */
+  /* In the order the ledger reads: what came in, what went out, what is left,
+     and what that is as a share. The figure at the top of the card above is
+     the same net, so the answer already leads the page — these are the row it
+     is worked out from and they follow their own sequence. */
   $('ov-tiles').innerHTML = [
-    tile('Net Balance', money(t.net),   t.net,     p.net,     'up',
-         line(sp && sp.net, t.net < 0 ? 'var(--coral)' : 'var(--mint)'),
-         { tone: toneFor('signed', t.net) }),
     tile('Income',    money(t.income),  t.income,  p.income,  'up',
          line(sp && sp.income,  'var(--mint)'), { tone: toneFor('in') }),
     tile('Expenses',  money(t.expense), t.expense, p.expense, 'down',
          line(sp && sp.expense, 'var(--coral)'), { tone: toneFor('out') }),
+    tile('Net Balance', money(t.net),   t.net,     p.net,     'up',
+         line(sp && sp.net, t.net < 0 ? 'var(--coral)' : 'var(--mint)'),
+         { tone: toneFor('signed', t.net) }),
     tile('Net Balance Rate',
          t.income ? ((t.net / t.income) * 100).toFixed(1) + '%' : '—',
          t.income ? (t.net / t.income) * 100 : 0,
