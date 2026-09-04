@@ -10,6 +10,22 @@
 declare global {
   interface Env {
     /**
+     * Verifies Clerk session tokens and reads the user behind them.
+     * `wrangler secret put CLERK_SECRET_KEY`.
+     */
+    CLERK_SECRET_KEY: string;
+
+    /**
+     * Wraps every stored Plaid access token. Losing it means every user
+     * re-links every bank, so it is backed up somewhere outside Cloudflare.
+     */
+    TOKEN_ENCRYPTION_KEY: string;
+
+    /** Plaid API credentials. Must both belong to the same PLAID_ENV. */
+    PLAID_CLIENT_ID: string;
+    PLAID_SECRET: string;
+
+    /**
      * The one Clerk user id allowed to reach /api/admin/*.
      *
      * Optional on purpose. Unset — which is what every environment looks like
