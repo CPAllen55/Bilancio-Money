@@ -5486,7 +5486,31 @@ async function renderTrend() {
       ({ month: m.month, byParent: m.byParent || {}, byCategory: {},
          expense: m.expense, income: m.income || 0, projected: true })));
 
-  trendData = { all: all, prior: prior, budget: budgetBy,
+  /* The year-ago figure for every column, including the projected ones.
+
+     It used to be priorSeries straight through, which is the actual months
+     shifted back a year and therefore exactly as long as the actual months.
+     Turn the projection on and `all` grows while it does not, so the dashed
+     line stopped dead at today — at the very point the comparison starts
+     being useful, because a projected month has nothing to be read against
+     except what that month cost last year.
+
+     Nothing needs fetching. December 2026's counterpart is December 2025,
+     which is already on the client in the actual series; the two arrays
+     between them cover two years, and the projection runs at most one year
+     out. So they are put in one keyed map and each column asks for its own
+     month minus a year. Null where there is genuinely no record — the far
+     end of a long projection — and every consumer skips those rather than
+     drawing a line to zero, which would read as a year with no spending. */
+  const known = new Map();
+  for (const m of prior.concat(actual)) known.set(m.month, m);
+  const yearBefore = (ym) => {
+    const [y, mo] = ym.split('-');
+    return (Number(y) - 1) + '-' + mo;
+  };
+  const priorFor = all.map(m => known.get(yearBefore(m.month)) || null);
+
+  trendData = { all: all, prior: priorFor, budget: budgetBy,
                 currentMonth: fc ? fc.months.find(m => m.actualSoFar)?.month : null };
   // A new range is a new question, so the view resets to the whole of it.
   trendVisible = all.length;
@@ -5526,9 +5550,11 @@ function drawTrend() {
   const n = trendData.all.length;
   const from = trendOffset, to = trendOffset + trendVisible;
   const all = trendData.all.slice(from, to);
-  // The year-ago series is indexed against the actual months, so it is windowed
-  // with the same slice and truncated where the window runs into the forecast.
+  /* One entry per column, in the same order, with a null where that month has
+     no counterpart a year back. Same slice as the bars, so the two stay
+     aligned however the window is panned. */
   const prior = trendData.prior.slice(from, to);
+  const priorAt = prior.filter(Boolean);
 
   $('trend-zoom').hidden = false;
   $('trend-zoom-label').textContent = trendVisible === n
@@ -5550,7 +5576,7 @@ function drawTrend() {
      drifts out of line with the bars it describes. Suppressed where the columns
      are too narrow to hold a figure: past about a year it becomes two dozen
      numbers in the space of twelve. */
-  const showTable = prior.length > 0 && band >= 46;
+  const showTable = priorAt.length > 0 && band >= 46;
   const FIGURE_ROWS = 5;   // this year, last year, change, budget, vs budget
   const PB = 34 + type.month + (showTable ? type.step * FIGURE_ROWS + 10 : 0);
   const H = PT + plotH + PB;
@@ -5586,7 +5612,7 @@ function drawTrend() {
   const windowPeak = Math.max(
     highest(all.map(m => shownTotal(trendSegments(m), trendOff))),
     layerOn('income') ? highest(all.map(m => m.income)) : 0,
-    layerOn('prior') ? highest(prior.map(priorShown)) : 0
+    layerOn('prior') ? highest(priorAt.map(priorShown)) : 0
   );
 
   // A window with nothing in it would otherwise be given an axis running $0 to
@@ -5659,9 +5685,9 @@ function drawTrend() {
   });
 
   const priorTotals = {};
-  const countedPrior = trendMonth
+  const countedPrior = (trendMonth
     ? prior.filter((p, i) => all[i] && all[i].month === trendMonth)
-    : prior;
+    : prior).filter(Boolean);
   countedPrior.forEach(m => { const seg = trendSegments(m); Object.keys(seg).forEach(id => {
     if (seg[id] > 0) priorTotals[id] = (priorTotals[id] || 0) + seg[id];
   }); });
@@ -5926,10 +5952,23 @@ function drawTrend() {
      under the axis stay: this key is a legend for the marks on the chart, and
      those rows are a table with their own labels. Hiding them from here would
      mean a swatch in the key silently governing figures nowhere near it. */
-  if (layerOn('prior') && prior.length) {
-    const pts = prior.map((p, i) => (PL + band * i + band / 2).toFixed(1) + ',' + y(priorShown(p)).toFixed(1));
-    svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--ink)" stroke-width="2" ' +
-           'stroke-dasharray="5 4" opacity="' + (trendSel ? '.25' : '.78') + '"/>';
+  if (layerOn('prior') && priorAt.length) {
+    /* Drawn as runs rather than as one polyline. A month with no record a year
+       back breaks the line rather than being joined across, because a straight
+       segment over a gap is a claim about months there is no record for. In
+       practice the gap only opens at the far end of a long projection. */
+    const runs = [];
+    let run = [];
+    prior.forEach((p, i) => {
+      if (!p) { if (run.length) runs.push(run); run = []; return; }
+      run.push((PL + band * i + band / 2).toFixed(1) + ',' + y(priorShown(p)).toFixed(1));
+    });
+    if (run.length) runs.push(run);
+    for (const r of runs) {
+      if (r.length < 2) continue;                 // a lone point is its own dot
+      svg += '<polyline points="' + r.join(' ') + '" fill="none" stroke="var(--ink)" stroke-width="2" ' +
+             'stroke-dasharray="5 4" opacity="' + (trendSel ? '.25' : '.78') + '"/>';
+    }
     /* "Everything" only when it is everything. Selecting a category dims the
        chart without changing what it holds, so the line stays the whole month
        and the label says so. Going inside a category changes what the chart
@@ -5940,6 +5979,7 @@ function drawTrend() {
       ? labelOfSlug(trendFocus) + ', a year earlier'
       : 'Everything, a year earlier';
     prior.forEach((p, i) => {
+      if (!p) return;
       svg += priorDot((PL + band * i + band / 2).toFixed(1), y(priorShown(p)).toFixed(1),
         priorWhat, p.month, priorShown(p), !!trendSel);
     });
@@ -6049,7 +6089,7 @@ function drawTrend() {
         (layerOn(name) ? 'Hide ' : 'Show ') + escapeHtml(label) + '"></button>' +
     '</div>';
 
-  const dashNote = layerRow('prior', 'dash', 'Same month, last year', prior.length > 0);
+  const dashNote = layerRow('prior', 'dash', 'Same month, last year', priorAt.length > 0);
 
   const hasIncome = all.some(m => m.income > 0);
   const extras =
@@ -6212,7 +6252,16 @@ function drawTrend() {
        what it has no business showing is a comparison. wasSum stays zero and
        the delta line is left off, exactly as it is for a window that runs past
        the end of last year's record. */
-    const span = at >= 0 ? [at] : Array.from({ length: Math.min(all.length, prior.length) }, (_, i) => i);
+    /* Actual months that have a counterpart, and only those.
+
+       This used to be capped by prior.length, which came to the same thing
+       back when the year-ago series only covered the actual months. It no
+       longer does -- it now reaches across the projection -- so the cap has
+       to be said rather than inherited, or the card would add projected
+       spending to this year while the far end of the projection contributed
+       nothing to last year, and report the difference as a saving. */
+    const span = at >= 0 ? [at]
+      : all.map((_, i) => i).filter(i => prior[i] && !all[i].projected);
     let nowSum = 0, wasSum = 0;
     for (const i of span) {
       nowSum += shownTotal(trendSegments(all[i]), trendOff);
@@ -8845,9 +8894,15 @@ async function drawBudgetTx(slug) {
       '<p class="eyebrow">' + escapeHtml(labelOfSlug(slug)) + escapeHtml(period) + ' · ' +
         r.total + ' transaction' + (r.total === 1 ? '' : 's') + '</p>' +
       '<table class="data pie-table"><tbody>' +
+      /* The same cell the Transactions table and the donut's list build, from
+         the same helper. The logo is already on the row -- /api/transactions
+         returns it and this list was discarding it -- so the picture costs no
+         request and no extra byte of JSON, and a logo already fetched on
+         another tab is a cache hit here. */
       r.transactions.map(tx =>
         '<tr><td class="num date">' + tx.date + '</td>' +
-        '<td>' + escapeHtml(tx.name) + '</td>' +
+        '<td>' + avatar(tx) + '<span class="tx-name" title="' + escapeHtml(tx.name) +
+          '">' + escapeHtml(tx.name) + '</span></td>' +
         '<td class="num' + (tx.amount > 0 ? ' in' : '') + '">' +
           (tx.amount > 0 ? '+' : '') + money(tx.amount) + '</td></tr>').join('') +
       '</tbody></table>' +
