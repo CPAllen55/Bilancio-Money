@@ -42,7 +42,7 @@ struct TransactionsResponse: Decodable {
         let kind: String
     }
 
-    struct Row: Decodable, Identifiable {
+    struct Row: Decodable, Identifiable, Hashable {
         let id: String
         let date: String
         let name: String
@@ -57,7 +57,26 @@ struct TransactionsResponse: Decodable {
         let categorySource: String?
         /// A filename, never a URL — see MerchantLogo.
         let logo: String?
+        /// The parts this transaction has been carved into, if any.
+        ///
+        /// Only the carved-off pieces are stored; the remainder is computed and
+        /// keeps whatever the row itself resolved to. Storing both halves would
+        /// mean two numbers that have to agree, and two numbers that have to
+        /// agree eventually do not.
+        let splits: [Part]?
+
+        struct Part: Decodable, Hashable {
+            let categoryId: String
+            /// Reader's convention, the same way round as `amount`.
+            let amount: Int
+        }
     }
+}
+
+extension TransactionsResponse.Category {
+    /// Transactions belong to leaves. A parent is a rollup, and filing a row on
+    /// one would double-count it against its own children.
+    var isLeaf: Bool { parentSlug != nil }
 }
 
 extension APIClient {
@@ -76,6 +95,36 @@ extension APIClient {
         ]
         if let bucket { query.append(URLQueryItem(name: "bucket", value: bucket)) }
         return try await get("/api/transactions", query: query)
+    }
+}
+
+struct SplitsResponse: Decodable {
+    let splits: [TransactionsResponse.Row.Part]
+    /// What is left on the original category. Zero means fully reassigned.
+    let remainder: Int
+}
+
+extension APIClient {
+    /// Replaces the whole set of parts for a transaction.
+    ///
+    /// Wholesale rather than incremental, because that is what the Worker does:
+    /// clearing the editor and saving has to leave nothing behind, and a part
+    /// moved between categories must not linger under both. An empty array
+    /// removes every split.
+    ///
+    /// Amounts go in the reader's convention — the same way round as the
+    /// transaction's own `amount` — and every part must carry that sign. The
+    /// Worker refuses a mixed set rather than storing arithmetic that holds
+    /// while the meaning does not.
+    func saveSplits(
+        transactionId: String,
+        parts: [TransactionsResponse.Row.Part]
+    ) async throws -> SplitsResponse {
+        try await send(
+            "PUT",
+            "/api/transactions/\(transactionId)/splits",
+            body: ["splits": parts.map { ["categoryId": $0.categoryId, "amount": $0.amount] }]
+        )
     }
 }
 

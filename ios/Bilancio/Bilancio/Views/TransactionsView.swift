@@ -36,6 +36,9 @@ final class TransactionsModel {
 
 struct TransactionsView: View {
     @State private var model = TransactionsModel()
+    /// The row whose split editor is open. Held here rather than per row so
+    /// only one sheet can ever exist.
+    @State private var editing: TransactionsResponse.Row?
 
     var body: some View {
         NavigationStack {
@@ -71,6 +74,18 @@ struct TransactionsView: View {
         }
         .tint(Theme.accent)
         .task { await model.load() }
+        .sheet(item: $editing) { row in
+            SplitTransactionView(row: row, categories: allCategories) {
+                Task { await model.load() }
+            }
+        }
+    }
+
+    /// The category tree arrives with every page of transactions, so the sheet
+    /// reads it from whatever is already loaded rather than fetching its own.
+    private var allCategories: [TransactionsResponse.Category] {
+        if case .loaded(let data) = model.state { return data.categories }
+        return []
     }
 
     private func list(_ data: TransactionsResponse) -> some View {
@@ -91,7 +106,7 @@ struct TransactionsView: View {
                     VendorCard(vendors: Array(data.vendors.prefix(5)))
                 }
 
-                LedgerCard(rows: data.transactions, categories: byslug)
+                LedgerCard(rows: data.transactions, categories: byslug, editing: $editing)
             }
             .padding()
         }
@@ -193,6 +208,7 @@ private struct VendorCard: View {
 private struct LedgerCard: View {
     let rows: [TransactionsResponse.Row]
     let categories: [String: TransactionsResponse.Category]
+    @Binding var editing: TransactionsResponse.Row?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -249,6 +265,11 @@ private struct LedgerRow: View {
                     if row.pending {
                         Text("·")
                         Text("Pending").foregroundStyle(Theme.caution)
+                    }
+                    if let parts = row.splits, !parts.isEmpty {
+                        Text("·")
+                        Label("Split \(parts.count)", systemImage: "arrow.triangle.branch")
+                            .foregroundStyle(Theme.accent)
                     }
                 }
                 .font(.caption2)

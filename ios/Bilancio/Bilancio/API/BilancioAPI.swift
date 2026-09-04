@@ -58,6 +58,29 @@ struct APIClient {
     let baseURL: URL
     let token: () async throws -> String?
 
+    /// A write. The body is encoded as JSON; the response is decoded like any
+    /// other. Kept beside `get` rather than folded into it because a caller
+    /// that mistypes a verb should not silently send a GET with a body.
+    func send<T: Decodable>(
+        _ method: String,
+        _ path: String,
+        body: [String: Any]
+    ) async throws -> T {
+        guard let url = URL(string: path, relativeTo: baseURL) else {
+            throw APIError.transport("Could not build a URL for \(path).")
+        }
+        guard let bearer = try await token() else { throw APIError.notSignedIn }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        return try await run(request)
+    }
+
     func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
         guard var components = URLComponents(
             url: baseURL.appendingPathComponent(path),
@@ -76,6 +99,12 @@ struct APIClient {
         request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
+        return try await run(request)
+    }
+
+    /// Send, check, decode. Shared so the error handling cannot drift between
+    /// reads and writes.
+    private func run<T: Decodable>(_ request: URLRequest) async throws -> T {
         let data: Data
         let response: URLResponse
         do {
@@ -86,8 +115,14 @@ struct APIClient {
 
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
-            if status == 401, let body = try? JSONDecoder().decode(APIErrorBody.self, from: data) {
-                throw APIError.unauthorized(reason: body.reason ?? body.error)
+            if let body = try? JSONDecoder().decode(APIErrorBody.self, from: data) {
+                if status == 401 {
+                    throw APIError.unauthorized(reason: body.reason ?? body.error)
+                }
+                // The Worker's 400s explain themselves — "the parts add up to
+                // more than the transaction" is the whole message a person
+                // needs, and burying it under a status code helps nobody.
+                throw APIError.http(status: status, body: body.reason ?? body.error)
             }
             throw APIError.http(status: status, body: String(data: data, encoding: .utf8) ?? "")
         }
