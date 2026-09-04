@@ -55,6 +55,29 @@ enum Theme {
         cents < 0 ? negative : positive
     }
 
+    /// Colours for slices of one thing — vendors inside a category, and
+    /// anything else where the parts have no colour of their own.
+    ///
+    /// Ordered and fixed, never generated. A chart whose colours depend on the
+    /// order data happens to arrive in gives the same vendor a different colour
+    /// on every launch, which is a bug this app has already had once.
+    ///
+    /// Not shades of the category's own colour, tempting as that is: six tints
+    /// of one hue are elegant in a legend and indistinguishable in a slice.
+    static let series: [Color] = [
+        Color(red: 0.20, green: 0.47, blue: 0.85),
+        Color(red: 0.85, green: 0.45, blue: 0.15),
+        Color(red: 0.16, green: 0.63, blue: 0.45),
+        Color(red: 0.62, green: 0.35, blue: 0.78),
+        Color(red: 0.83, green: 0.25, blue: 0.38),
+        Color(red: 0.42, green: 0.55, blue: 0.20),
+        Color(red: 0.45, green: 0.45, blue: 0.50),
+    ]
+
+    /// What is left after the named slices. Deliberately the quietest colour
+    /// on the wheel: it is a remainder, not a finding.
+    static var seriesRest: Color { Color(.systemGray3) }
+
     // MARK: Type
     //
     // System fonts, so the app inherits Dynamic Type and looks native. The web

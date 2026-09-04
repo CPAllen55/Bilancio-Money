@@ -9,6 +9,7 @@
 //  rows made it heavy.
 //
 
+import Charts
 import ClerkKit
 import SwiftUI
 
@@ -126,24 +127,7 @@ struct CategoryMonthView: View {
                 // rollup over the whole set rather than the empty list it sends
                 // for an unbucketed page.
                 if !data.vendors.isEmpty {
-                    Card {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Who it went to")
-                                .font(Theme.tileLabel)
-                                .foregroundStyle(Theme.quietText)
-
-                            ForEach(data.vendors.prefix(6)) { v in
-                                HStack(spacing: 10) {
-                                    MerchantLogo(file: v.logo, name: v.name, size: 26)
-                                    Text(v.name).font(Theme.note).lineLimit(1)
-                                    Spacer(minLength: 8)
-                                    Text(v.cents.asShortMoney)
-                                        .font(Theme.note)
-                                        .monospacedDigit()
-                                }
-                            }
-                        }
-                    }
+                    VendorPie(vendors: data.vendors, total: data.sum.out)
                 }
 
                 Card(padding: 0) {
@@ -166,5 +150,147 @@ struct CategoryMonthView: View {
             .padding()
         }
         .background(Theme.background)
+    }
+}
+
+// MARK: - Who it went to
+
+/// Vendors inside one category and one month, as a share of the whole.
+///
+/// A donut rather than a bar list because the question this screen opens on is
+/// proportion — was this month one big charge or forty small ones — and that is
+/// the one question a pie answers better than a list. The list is underneath
+/// anyway, because a pie cannot carry six exact figures.
+private struct VendorPie: View {
+    let vendors: [TransactionsResponse.Vendor]
+    /// The category's own total for the month, so the middle of the ring agrees
+    /// with the headline above it rather than with the sum of the slices drawn.
+    let total: Int
+
+    /// Six named, then a remainder.
+    ///
+    /// Beyond about six the slices are thinner than their own borders and the
+    /// legend is longer than the chart. The rest is one grey wedge, which is
+    /// honest — "and forty others" is a real answer to where the money went.
+    private static let named = 6
+
+    private struct Slice: Identifiable {
+        let name: String
+        let cents: Int
+        let colour: Color
+        let logo: String?
+        let isRest: Bool
+        var id: String { name }
+    }
+
+    private var slices: [Slice] {
+        let sorted = vendors.sorted { $0.cents > $1.cents }
+        let head = sorted.prefix(Self.named).enumerated().map { i, v in
+            Slice(name: v.name, cents: v.cents,
+                  colour: Theme.series[i % Theme.series.count],
+                  logo: v.logo, isRest: false)
+        }
+        let restCents = sorted.dropFirst(Self.named).reduce(0) { $0 + $1.cents }
+        guard restCents > 0 else { return head }
+        let restCount = sorted.count - head.count
+        return head + [Slice(name: "\(restCount) other\(restCount == 1 ? "" : "s")",
+                             cents: restCents, colour: Theme.seriesRest,
+                             logo: nil, isRest: true)]
+    }
+
+    private var drawn: Int { slices.reduce(0) { $0 + $1.cents } }
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Who it went to")
+                    .font(Theme.tileLabel)
+                    .foregroundStyle(Theme.quietText)
+
+                let parts = slices
+
+                Chart(parts) { slice in
+                    SectorMark(
+                        angle: .value("Spend", Double(slice.cents) / 100),
+                        innerRadius: .ratio(0.60),
+                        angularInset: 1.5
+                    )
+                    .cornerRadius(3)
+                    .foregroundStyle(by: .value("Vendor", slice.name))
+                }
+                // Stated, never inferred. A scale built from the order marks
+                // arrive in gives the same vendor a different colour on every
+                // launch — which is a bug this app has already had once.
+                .chartForegroundStyleScale(
+                    domain: parts.map(\.name),
+                    range: parts.map(\.colour)
+                )
+                .chartLegend(.hidden)
+                .frame(height: 190)
+                .overlay { centre }
+
+                VStack(spacing: 8) {
+                    ForEach(parts) { slice in
+                        HStack(spacing: 9) {
+                            if slice.isRest {
+                                // No logo to show, and a monogram of "3 others"
+                                // would be a letter that means nothing.
+                                Circle().fill(slice.colour).frame(width: 10, height: 10)
+                                    .frame(width: 26)
+                            } else {
+                                MerchantLogo(file: slice.logo, name: slice.name,
+                                             size: 26, tint: slice.colour)
+                            }
+
+                            Text(slice.name)
+                                .font(Theme.note)
+                                .foregroundStyle(slice.isRest ? Theme.quietText : Theme.text)
+                                .lineLimit(1)
+
+                            Spacer(minLength: 8)
+
+                            Text(share(slice))
+                                .font(.caption2)
+                                .monospacedDigit()
+                                .foregroundStyle(Theme.quietText)
+                                .frame(width: 40, alignment: .trailing)
+
+                            Text(slice.cents.asShortMoney)
+                                .font(Theme.note)
+                                .monospacedDigit()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Split out because the whole card was one expression the type checker
+    /// would not finish, which it reports as a timeout rather than as a
+    /// mistake — the fix is always to name a piece of it.
+    private var centre: some View {
+        let noun = vendors.count == 1 ? "merchant" : "merchants"
+        return VStack(spacing: 1) {
+            Text(total.asShortMoney)
+                .font(.system(.title3, design: .rounded).weight(.semibold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+            Text("\(vendors.count) \(noun)")
+                .font(.caption2)
+                .foregroundStyle(Theme.quietText)
+        }
+        .padding(.horizontal, 40)
+    }
+
+    /// Against what is drawn, not against the category total.
+    ///
+    /// Splits mean a transaction can sit partly in another category, so the
+    /// vendor rollup for this bucket need not add up to the bucket's own total.
+    /// Shares that do not sum to 100% on a pie look like an arithmetic error.
+    private func share(_ slice: Slice) -> String {
+        guard drawn > 0 else { return "" }
+        let pct = Double(slice.cents) / Double(drawn) * 100
+        return pct.formatted(.number.precision(.fractionLength(pct < 10 ? 1 : 0))) + "%"
     }
 }
