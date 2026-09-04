@@ -177,32 +177,49 @@ struct Sparkline: Shape {
 
 // MARK: - Proportion bar
 
-/// One figure drawn as a share of a larger one, with its amount printed inside
-/// the bar and, optionally, the figure it was planned to be marked on it.
+/// One figure against what it was planned to be, with its amount printed
+/// inside the bar.
 ///
-/// Both bars on a card are drawn against one scale, so the difference in their
-/// lengths is the money kept — visible without reading either number.
+/// This is the web's `meter`, and the three rules it encodes are all ones that
+/// look like details and are not:
 ///
-/// The amount is drawn twice: once on the track, once clipped to the fill. The
-/// ink then changes colour exactly where the colour under it does, which is
-/// what lets the number sit inside the bar at any length instead of jumping
-/// outside it when the bar gets short.
+/// **The scale is the bar's own.** A bar with a plan runs to whichever of the
+/// two is larger, so passing the plan is what fills the track. Only when
+/// neither side has a plan do both bars fall back to a shared scale.
+///
+/// **The mark appears only once the plan has been passed.** Below it, the end
+/// of the track *is* the plan, and a mark sitting on the end marks nothing.
+///
+/// **The caption is rounded to the dollar.** The plan is a shaped estimate, so
+/// quoting it to the penny claims a precision it does not have. The exact
+/// figures, cents and all, are in the tiles below.
 struct ProportionBar: View {
     let label: String
     let amount: Int
-    let of: Int
+    /// What this figure was budgeted to be, or 0 when there is no plan.
+    var planned: Int = 0
+    /// Used only when there is no plan, so the two bars on a card can still be
+    /// read against one another.
+    var fallbackScale: Int = 0
     let tint: Color
-    /// What this figure was budgeted to be, drawn as a tick. Nil when there is
-    /// no plan to draw — a mark at zero would read as a budget of nothing
-    /// rather than as the absence of one.
-    var marker: Int?
+    /// "earned" or "spent" — the caption reads "$793 spent of $8,777".
+    var verb: String
 
     private static let corner: CGFloat = 3
     private static let inset: CGFloat = 9
 
+    private var scale: Int { planned > 0 ? max(amount, planned) : fallbackScale }
+    private var isOver: Bool { planned > 0 && amount > planned }
+
     private func fraction(_ value: Int) -> Double {
-        guard of > 0 else { return 0 }
-        return min(1, Double(value) / Double(of))
+        guard scale > 0 else { return 0 }
+        return min(1, Double(value) / Double(scale))
+    }
+
+    private var captionText: String {
+        planned > 0
+            ? "\(amount.asShortMoney) \(verb) of \(planned.asShortMoney)"
+            : "\(amount.asShortMoney) \(verb)"
     }
 
     var body: some View {
@@ -219,21 +236,22 @@ struct ProportionBar: View {
                     RoundedRectangle(cornerRadius: Self.corner).fill(tint.opacity(0.16))
                     RoundedRectangle(cornerRadius: Self.corner).fill(tint).frame(width: fill)
 
+                    // Drawn twice: once on the track, once clipped to the fill,
+                    // so the ink changes colour exactly where the colour under
+                    // it does. That is what lets the figure sit inside a bar of
+                    // any length rather than jumping outside when it is short.
                     caption(width: geo.size.width).foregroundStyle(Theme.text)
                     caption(width: geo.size.width)
                         .foregroundStyle(.white)
                         .frame(width: fill, alignment: .leading)
                         .clipped()
 
-                    if let marker, marker > 0, marker < of {
-                        // Outlined, because it crosses both the filled and
-                        // unfilled parts of the track and has to stay visible
-                        // against either.
+                    if isOver {
                         Rectangle()
                             .fill(Theme.text)
                             .frame(width: 2)
                             .overlay(Rectangle().stroke(Theme.surface, lineWidth: 1))
-                            .offset(x: geo.size.width * fraction(marker) - 1)
+                            .offset(x: geo.size.width * fraction(planned) - 1)
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: Self.corner))
@@ -241,13 +259,14 @@ struct ProportionBar: View {
             .frame(height: 21)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label) \(amount.asMoney)")
+        .accessibilityLabel("\(label), \(captionText)")
     }
 
     private func caption(width: CGFloat) -> some View {
-        Text(amount.asMoney)
+        Text(captionText)
             .font(.system(size: 12, weight: .medium))
             .monospacedDigit()
+            .lineLimit(1)
             .padding(.leading, Self.inset)
             .frame(width: width, alignment: .leading)
     }

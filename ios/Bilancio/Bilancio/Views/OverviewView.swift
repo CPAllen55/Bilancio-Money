@@ -170,19 +170,18 @@ private struct StandingCard: View {
                         .foregroundStyle(Theme.quietText)
                 }
 
-                // Both bars, and both budget marks, share one scale — so the
-                // difference in their lengths is the money kept, and the marks
-                // can be read against each other rather than each bar filling
-                // its own row and looking equal.
-                let scale = max(summary.totals.income, summary.totals.expense,
-                                budget?.income ?? 0, budget?.expense ?? 0)
+                // Each bar runs to whichever is larger of its own figure and
+                // its own plan, so passing the plan is what fills the track.
+                // Only when neither has a plan do the two share a scale, and
+                // then it is so they can still be read against each other.
+                let noPlanScale = max(summary.totals.income, summary.totals.expense)
                 VStack(spacing: 12) {
                     ProportionBar(label: "Income", amount: summary.totals.income,
-                                  of: scale, tint: Theme.incomeTint,
-                                  marker: plannedIncome)
+                                  planned: plannedIncome, fallbackScale: noPlanScale,
+                                  tint: Theme.incomeTint, verb: "earned")
                     ProportionBar(label: "Expenses", amount: summary.totals.expense,
-                                  of: scale, tint: Theme.expenseTint,
-                                  marker: plannedExpense)
+                                  planned: plannedExpense, fallbackScale: noPlanScale,
+                                  tint: Theme.expenseTint, verb: "spent")
                 }
 
                 if let status = budgetStatus {
@@ -199,15 +198,11 @@ private struct StandingCard: View {
         return b
     }
 
-    private var plannedIncome: Int? {
-        guard let b = budget, b.income > 0 else { return nil }
-        return b.income
-    }
-
-    private var plannedExpense: Int? {
-        guard let b = budget, b.expense > 0 else { return nil }
-        return b.expense
-    }
+    /// 0 rather than nil for "no plan", which is how the Worker guards it too:
+    /// a budget of zero is the absence of the information, not a plan to earn
+    /// or spend nothing, and both read as "no ‘of ...’ clause".
+    private var plannedIncome: Int { max(0, budget?.income ?? 0) }
+    private var plannedExpense: Int { max(0, budget?.expense ?? 0) }
 
     /// What the headline figure means, in the terms the reader is in.
     ///

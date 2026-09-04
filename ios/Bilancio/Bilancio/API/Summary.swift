@@ -86,7 +86,13 @@ struct TrendResponse: Decodable {
         let month: String
         let income: Int
         let expense: Int
-        let net: Int
+
+        /// Worked out, not decoded. The trend buckets carry `total`, `income`,
+        /// `expense` and the per-category breakdown, and no `net` — declaring
+        /// one here failed the decode of the whole response, and because the
+        /// sparklines are deliberately fetched with `try?` it failed silently:
+        /// the tiles simply lost their lines with nothing logged anywhere.
+        var net: Int { income - expense }
 
         var id: String { month }
 
