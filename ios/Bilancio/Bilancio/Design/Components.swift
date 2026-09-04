@@ -252,3 +252,69 @@ struct ProportionBar: View {
             .frame(width: width, alignment: .leading)
     }
 }
+
+// MARK: - Merchant logo
+
+/// A merchant's logo, fetched from our own origin.
+///
+/// The API sends a filename, never a URL, and it has to stay that way. Plaid
+/// returns a logo_url pointing at its own CDN; loading that directly would work
+/// and would quietly break something written down in SECURITY.md and in the
+/// published privacy policy — that the application makes no third-party
+/// requests. Forty logos is forty requests to Plaid, each carrying the reader's
+/// IP address and, by the filename, the name of a merchant they bank with.
+/// Plaid already has the transaction; what they would gain is when it is being
+/// looked at and from where.
+///
+/// `/api/logo/:file` needs no bearer token — it serves public merchant art
+/// behind a strict filename allowlist — so this can be an ordinary AsyncImage
+/// and gets URLSession's caching for free.
+struct MerchantLogo: View {
+    let file: String?
+    let name: String
+    var size: CGFloat = 28
+    var tint: Color = Theme.accent
+
+    private var url: URL? {
+        guard let file, !file.isEmpty else { return nil }
+        return Bilancio.apiBaseURL.appendingPathComponent("/api/logo/\(file)")
+    }
+
+    var body: some View {
+        Group {
+            if let url {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFit()
+                    default:
+                        // Covers loading, and covers the 404 the Worker caches
+                        // for merchants Plaid has no art for — which is many of
+                        // them, so this is the ordinary case and not an error.
+                        monogram
+                    }
+                }
+            } else {
+                monogram
+            }
+        }
+        .frame(width: size, height: size)
+        .background(Theme.background)
+        .clipShape(.rect(cornerRadius: size * 0.24))
+        .overlay(
+            RoundedRectangle(cornerRadius: size * 0.24)
+                .stroke(Theme.hairline.opacity(0.5), lineWidth: 0.5)
+        )
+    }
+
+    /// The first letter, which is what a person uses to find a row in a list
+    /// they are scanning rather than reading.
+    private var monogram: some View {
+        ZStack {
+            tint.opacity(0.14)
+            Text(String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
+                .font(.system(size: size * 0.45, weight: .semibold, design: .rounded))
+                .foregroundStyle(tint)
+        }
+    }
+}

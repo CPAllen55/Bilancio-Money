@@ -161,22 +161,26 @@ private struct VendorCard: View {
 
                 let largest = vendors.map(\.cents).max() ?? 0
                 ForEach(vendors) { v in
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack {
-                            Text(v.name).lineLimit(1)
-                            Spacer(minLength: 8)
-                            Text(v.cents.asShortMoney).monospacedDigit()
-                        }
-                        .font(Theme.note)
+                    HStack(spacing: 10) {
+                        MerchantLogo(file: v.logo, name: v.name, size: 30)
 
-                        GeometryReader { geo in
-                            Capsule()
-                                .fill(Theme.accent.opacity(0.75))
-                                .frame(width: largest > 0
-                                       ? max(2, geo.size.width * Double(v.cents) / Double(largest))
-                                       : 2)
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack {
+                                Text(v.name).lineLimit(1)
+                                Spacer(minLength: 8)
+                                Text(v.cents.asShortMoney).monospacedDigit()
+                            }
+                            .font(Theme.note)
+
+                            GeometryReader { geo in
+                                Capsule()
+                                    .fill(Theme.accent.opacity(0.75))
+                                    .frame(width: largest > 0
+                                           ? max(2, geo.size.width * Double(v.cents) / Double(largest))
+                                           : 2)
+                            }
+                            .frame(height: 4)
                         }
-                        .frame(height: 4)
                     }
                 }
             }
@@ -214,13 +218,22 @@ private struct LedgerRow: View {
     let row: TransactionsResponse.Row
     let category: TransactionsResponse.Category?
 
+    private var categoryTint: Color {
+        category.map { Color(hex: $0.colour) } ?? Theme.hairline
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             // The category down the left edge, as on the web: colour carries
             // the category so the row does not need a second line to say it.
             RoundedRectangle(cornerRadius: 1.5)
-                .fill(category.map { Color(hex: $0.colour) } ?? Theme.hairline)
+                .fill(categoryTint)
                 .frame(width: 3)
+
+            // Tinted to the row's category, so a merchant with no logo still
+            // carries the same colour the stripe does rather than falling back
+            // to a generic accent that means nothing.
+            MerchantLogo(file: row.logo, name: row.name, tint: categoryTint)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.name)

@@ -28,6 +28,8 @@ struct TransactionsResponse: Decodable {
         let name: String
         let cents: Int
         let count: Int
+        /// A filename, never a URL — see MerchantLogo.
+        let logo: String?
         var id: String { key }
     }
 
@@ -53,6 +55,8 @@ struct TransactionsResponse: Decodable {
         let category: String?
         /// Which of the three decided: "user", "rule" or "plaid".
         let categorySource: String?
+        /// A filename, never a URL — see MerchantLogo.
+        let logo: String?
     }
 }
 
