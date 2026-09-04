@@ -39,6 +39,8 @@ final class TrendModel {
 
 struct TrendView: View {
     @State private var model = TrendModel()
+    /// The parent category being looked inside, or nil for all of them.
+    @State private var drilled: String?
 
     var body: some View {
         NavigationStack {
@@ -78,8 +80,12 @@ struct TrendView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: model.months) { Task { await model.load() } }
+                .onChange(of: model.months) { drilled = nil }
 
-                InOutChart(series: data.series)
+                CategoryTrendChart(series: data.series,
+                                   prior: data.priorSeries,
+                                   categories: data.categories,
+                                   drilled: $drilled)
                 NetChart(series: data.series)
                 RunningTotalChart(series: data.series)
                 YearAgoCard(now: data.series, before: data.priorSeries)
@@ -90,46 +96,171 @@ struct TrendView: View {
     }
 }
 
-// MARK: - What came in against what went out
+// MARK: - Spend, stacked by category
 
-private struct InOutChart: View {
+/// Monthly spend stacked by category, against the same month last year.
+///
+/// Parents by default and subcategories on drilling in, which is the only way
+/// this fits on a phone: thirty-one leaves in a stack is a band of colour with
+/// no readable segments, and the question "what is big" is answered by the
+/// parents anyway. The leaves answer the next question, which is "big because
+/// of what".
+private struct CategoryTrendChart: View {
     let series: [TrendResponse.Month]
+    let prior: [TrendResponse.Month]
+    let categories: [TransactionsResponse.Category]
+    @Binding var drilled: String?
+
+    /// Slug to label and colour for whichever level is being drawn.
+    private var visible: [TransactionsResponse.Category] {
+        if let drilled {
+            return categories.filter { $0.parentSlug == drilled }
+        }
+        return categories.filter { $0.kind == "spend" && $0.parentSlug == nil }
+    }
+
+    /// One bar segment: a month, a category, and the money in it.
+    private struct Segment: Identifiable {
+        let id = UUID()
+        let month: String
+        let label: String
+        let colour: Color
+        let cents: Int
+    }
+
+    private var segments: [Segment] {
+        let lookup = Dictionary(uniqueKeysWithValues: visible.map { ($0.slug, $0) })
+        return series.flatMap { m -> [Segment] in
+            let source = drilled == nil ? (m.byParent ?? [:]) : (m.byCategory ?? [:])
+            return source.compactMap { slug, cents in
+                guard cents > 0, let cat = lookup[slug] else { return nil }
+                return Segment(month: m.shortLabel, label: cat.label,
+                               colour: Color(hex: cat.colour), cents: cents)
+            }
+        }
+    }
+
+    /// The same months a year earlier, summed over whatever is on screen — so
+    /// drilling in compares like with like rather than against the whole year.
+    private var yearAgo: [(label: String, cents: Int)] {
+        let slugs = Set(visible.map(\.slug))
+        return zip(series, prior).map { now, before in
+            let source = drilled == nil ? (before.byParent ?? [:]) : (before.byCategory ?? [:])
+            let total = source.filter { slugs.contains($0.key) }.values.reduce(0, +)
+            return (now.shortLabel, total)
+        }
+    }
+
+    /// Stable colours, so a category keeps its colour as months scroll past.
+    private var palette: KeyValuePairs<String, Color> { [:] }
 
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Income and expenses")
-                    .font(Theme.tileLabel)
-                    .foregroundStyle(Theme.quietText)
-
-                Chart {
-                    ForEach(series) { m in
-                        // Paired rather than stacked: the question is which of
-                        // the two was larger in a given month, and a stack
-                        // answers a different one.
-                        BarMark(
-                            x: .value("Month", m.shortLabel),
-                            y: .value("Amount", Double(m.income) / 100)
-                        )
-                        .foregroundStyle(by: .value("Side", "Income"))
-                        .position(by: .value("Side", "Income"))
-
-                        BarMark(
-                            x: .value("Month", m.shortLabel),
-                            y: .value("Amount", Double(m.expense) / 100)
-                        )
-                        .foregroundStyle(by: .value("Side", "Expenses"))
-                        .position(by: .value("Side", "Expenses"))
+                HStack {
+                    Text(drilled == nil ? "Spend by category" : "Inside \(drilledLabel)")
+                        .font(Theme.tileLabel)
+                        .foregroundStyle(Theme.quietText)
+                    Spacer()
+                    if drilled != nil {
+                        Button {
+                            drilled = nil
+                        } label: {
+                            Label("All categories", systemImage: "chevron.left")
+                                .font(Theme.tileLabel)
+                        }
                     }
                 }
-                .chartForegroundStyleScale([
-                    "Income": Theme.incomeTint,
-                    "Expenses": Theme.expenseTint,
-                ])
-                .chartLegend(position: .top, alignment: .leading)
-                .chartYAxis { AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0))) }
-                .frame(height: 220)
+
+                let marks = segments
+                let ago = yearAgo
+
+                if marks.isEmpty {
+                    Text("Nothing recorded in these months.")
+                        .font(Theme.note)
+                        .foregroundStyle(Theme.quietText)
+                        .frame(maxWidth: .infinity, minHeight: 120)
+                } else {
+                    Chart {
+                        ForEach(marks) { seg in
+                            BarMark(
+                                x: .value("Month", seg.month),
+                                y: .value("Spend", Double(seg.cents) / 100)
+                            )
+                            .foregroundStyle(by: .value("Category", seg.label))
+                        }
+
+                        // Last year as a rule across each month rather than a
+                        // second stack: the comparison is one number, and a
+                        // second stack beside the first doubles the ink to say
+                        // something a line already says.
+                        ForEach(ago, id: \.label) { point in
+                            if point.cents > 0 {
+                                RuleMark(
+                                    x: .value("Month", point.label),
+                                    yStart: .value("Last year", Double(point.cents) / 100),
+                                    yEnd: .value("Last year", Double(point.cents) / 100)
+                                )
+                                .lineStyle(.init(lineWidth: 1.5, dash: [3, 2]))
+                                .foregroundStyle(Theme.quietText)
+                            }
+                        }
+                    }
+                    .chartForegroundStyleScale(range: visible.map { Color(hex: $0.colour) })
+                    .chartLegend(position: .bottom, alignment: .leading, spacing: 8)
+                    .chartYAxis {
+                        AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
+                    }
+                    .frame(height: 260)
+
+                    Text("Dashed rule is the same month a year earlier.")
+                        .font(Theme.note)
+                        .foregroundStyle(Theme.quietText)
+                }
+
+                if drilled == nil {
+                    DrillStrip(parents: visible, onPick: { drilled = $0 })
+                }
             }
+        }
+    }
+
+    private var drilledLabel: String {
+        categories.first { $0.slug == drilled }?.label ?? drilled ?? ""
+    }
+}
+
+/// Tapping a chart segment on a phone is a coin toss at this size, so the way
+/// in is a row of names rather than the bars themselves.
+private struct DrillStrip: View {
+    let parents: [TransactionsResponse.Category]
+    let onPick: (String) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(parents) { cat in
+                    Button {
+                        onPick(cat.slug)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(Color(hex: cat.colour))
+                                .frame(width: 7, height: 7)
+                            Text(cat.label)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(Theme.quietText)
+                        }
+                        .font(Theme.note)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Theme.background, in: .capsule)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 1)
         }
     }
 }
@@ -250,10 +381,16 @@ private struct YearAgoCard: View {
 
                     if lastYear > 0 {
                         let change = Double(thisYear - lastYear) / Double(lastYear) * 100
+                        // A tenth of a point below ten, whole numbers above.
+                        // Rounding 0.46% to "0%" reports a real difference as
+                        // no difference, which is the one thing the card exists
+                        // to say either way.
+                        let digits = abs(change) < 10 ? 1 : 0
+                        let size = abs(change).formatted(.number.precision(.fractionLength(digits)))
                         Label(
                             change >= 0
-                                ? "\(change.formatted(.number.precision(.fractionLength(0))))% more than a year ago"
-                                : "\((-change).formatted(.number.precision(.fractionLength(0))))% less than a year ago",
+                                ? "\(size)% more than a year ago"
+                                : "\(size)% less than a year ago",
                             systemImage: change >= 0 ? "arrow.up.right" : "arrow.down.right"
                         )
                         .font(Theme.note)

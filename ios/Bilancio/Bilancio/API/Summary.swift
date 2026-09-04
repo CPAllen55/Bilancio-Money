@@ -84,12 +84,19 @@ struct TrendResponse: Decodable {
     let series: [Month]
     /// The same months a year earlier, for the year-ago comparison.
     let priorSeries: [Month]
+    /// The category tree, for labels and colours.
+    let categories: [TransactionsResponse.Category]
 
     struct Month: Decodable, Identifiable {
         /// `YYYY-MM`.
         let month: String
         let income: Int
         let expense: Int
+        /// Spending per leaf category slug.
+        let byCategory: [String: Int]?
+        /// The same rolled up to parents. A parent maps to itself when it has
+        /// no children, so this always sums to the month's expense.
+        let byParent: [String: Int]?
 
         /// Worked out, not decoded. The trend buckets carry `total`, `income`,
         /// `expense` and the per-category breakdown, and no `net` — declaring
