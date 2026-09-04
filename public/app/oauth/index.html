@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Returning to Bilancio</title>
+<meta name="robots" content="noindex">
+<!--
+  Where Plaid sends the browser back after an OAuth bank.
+
+  On an iPhone with the app installed this page is never seen: the URL is a
+  universal link, claimed in /.well-known/apple-app-site-association, so iOS
+  hands it straight to Bilancio. Everyone who reads this got here another way —
+  the app is not installed, or a desktop browser followed the link — and the
+  only useful thing to say is what happened and where to go next.
+
+  Deliberately static. Nothing here reads the query string or touches the Plaid
+  exchange: the app completes the link over the API, and a second actor trying
+  to finish the same flow is how a link gets exchanged twice.
+-->
+<link rel="icon" href="/brand/icon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+    --display:'Space Grotesk',var(--sans);
+    --page:#F9F4E4; --panel:#FFFFFF; --ink:#12253F;
+    --body:rgba(18,37,63,.72); --gold:#A07026; --tint:#F1E7CD;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --page:#05080B; --panel:#0D1319; --ink:#E7EEF3;
+           --body:rgba(231,238,243,.72); --gold:#E7C567; --tint:#161d25; }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100dvh; background:var(--page); color:var(--ink);
+    font-family:var(--sans); font-size:16px; line-height:1.55;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .card{
+    background:var(--panel); border:1px solid var(--tint); border-radius:16px;
+    padding:32px; max-width:26rem; width:100%; text-align:center;
+  }
+  img{width:56px;height:56px;margin:0 auto 20px;display:block}
+  h1{font-family:var(--display); font-size:1.4rem; font-weight:600; margin:0 0 12px}
+  p{margin:0 0 16px; color:var(--body)}
+  p:last-of-type{margin-bottom:0}
+  a{
+    display:inline-block; margin-top:20px; padding:11px 22px; border-radius:999px;
+    background:var(--gold); color:var(--page); font-weight:500; text-decoration:none;
+  }
+</style>
+</head>
+<body>
+  <main class="card">
+    <img src="/brand/dbowl-mark.png" alt="">
+    <h1>You can close this page</h1>
+    <p>Your bank sent you back here after signing in. Bilancio finishes
+       connecting the account itself — there is nothing left to do in the
+       browser.</p>
+    <p>If you started in the app on your iPhone, switch back to it. If the
+       connection did not appear, open the app and try linking the bank again.</p>
+    <a href="/app/">Go to Bilancio on the web</a>
+  </main>
+</body>
+</html>

@@ -103,6 +103,22 @@
     // old behaviour — it fails every link attempt, OAuth or not.
     "PLAID_REDIRECT_URI": "https://bilanciomoney.com/app/",
 
+    // The same thing for the iOS app, and necessarily a different URL: it has
+    // to be a universal link, which means the host is named in the app's
+    // Associated Domains entitlement and the path is claimed by
+    // public/.well-known/apple-app-site-association. Sending the web value
+    // above to a native client returns Link into Safari, where it stops.
+    //
+    // www rather than the apex, deliberately. Both hosts serve this site and
+    // neither redirects today, but CNAME and the canonical tag both say www is
+    // the real one — so the apex is the host an SEO tidy-up is most likely to
+    // start redirecting one day, and a redirect here breaks OAuth silently.
+    //
+    // NOT YET REGISTERED with Plaid. Until it is, /link/token/create rejects
+    // every request carrying it, so the iOS app cannot link at all. Register
+    // it before shipping a build that sends platform: "ios".
+    "PLAID_REDIRECT_URI_IOS": "https://www.bilanciomoney.com/app/oauth/",
+
     // Where Plaid posts when an Item has news — most importantly that more
     // history has finished loading. Must be publicly reachable and HTTPS;
     // Plaid will not deliver to localhost, so this stays empty in .dev.vars

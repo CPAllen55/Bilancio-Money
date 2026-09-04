@@ -20,6 +20,7 @@ import {
   PlaidError,
   createLinkToken,
   createUpdateLinkToken,
+  platformFrom,
   exchangePublicToken,
   getAccounts,
   getInstitution,
@@ -67,7 +68,8 @@ plaid.post("/link-token/update", async (c) => {
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
 
     let itemId: unknown;
-    try { ({ itemId } = await c.req.json()); }
+    let platform: unknown;
+    try { ({ itemId, platform } = await c.req.json()); }
     catch { return c.json({ error: "bad_request", reason: "body must be JSON" }, 400); }
     if (typeof itemId !== "string" || !itemId) {
       return c.json({ error: "bad_request", reason: "itemId is required" }, 400);
@@ -83,8 +85,11 @@ plaid.post("/link-token/update", async (c) => {
 
     try {
       const token = await openToken(c.env, item.accessTokenCiphertext, item.accessTokenIv);
+      // Repairing a connection lands on the same redirect as making one, so
+      // a native client has to say so here too or update mode returns into
+      // Safari and strands the repair it was opened to perform.
       const { link_token, expiration } = await createUpdateLinkToken(
-        c.env, auth.user.clerkUserId, token,
+        c.env, auth.user.clerkUserId, token, platformFrom(platform),
       );
       return c.json({ linkToken: link_token, expiration, institution: item.institutionName });
     } catch (err) {
@@ -102,7 +107,17 @@ plaid.post("/link-token", async (c) => {
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
 
-    const { link_token, expiration } = await createLinkToken(c.env, auth.user.clerkUserId);
+    // The web app posts no body at all, so an unparseable one means "web"
+    // rather than a bad request. Only a native client has any reason to say
+    // which platform it is, and only because the OAuth redirect differs.
+    const body = await c.req.json().catch(() => ({}));
+    const platform = platformFrom((body as { platform?: unknown }).platform);
+
+    const { link_token, expiration } = await createLinkToken(
+      c.env,
+      auth.user.clerkUserId,
+      platform,
+    );
     return c.json({ linkToken: link_token, expiration });
   } catch (err) {
     return c.json(plaidFailure(err), 502);
