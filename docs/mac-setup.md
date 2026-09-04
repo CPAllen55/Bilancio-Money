@@ -46,17 +46,33 @@ reach TestFlight.
 |---|---|
 | Product Name | `Bilancio` |
 | Team | the one from step 1 |
-| Organization Identifier | `com.guardianodelfaro` |
-| Bundle Identifier | fills itself in as `com.guardianodelfaro.Bilancio` |
+| Organization Identifier | see below |
+| Bundle Identifier | Xcode fills this in as organisation identifier + product name |
 | Interface | SwiftUI |
 | Language | Swift |
 | Storage | None |
 
 Save it **inside this repository**, in a folder called `ios`.
 
-**Write the bundle identifier down.** Plaid needs it registered before OAuth
-banks will work in the app, and changing it later means redoing that
-registration.
+### Choosing the organisation identifier
+
+It is reverse-DNS: a domain you control, written backwards, so that no two
+developers can collide. The rule is that it should be a domain you actually
+own — Apple does not verify it, which is exactly why claiming one you do not
+hold is worth avoiding.
+
+We own **bilanciomoney.com**, so `com.bilanciomoney` is the safe choice and
+the bundle identifier becomes `com.bilanciomoney.Bilancio`. Namespacing by
+the company instead would need guardianodelfaro.com to be ours.
+
+**Write the resulting bundle identifier down.** It is registered with Plaid,
+App Store Connect ties the app record to it, and provisioning profiles are
+issued against it. Changing it after submission means a new app record.
+
+### The Team
+
+Guardiano del Faro LLC, not a personal team. The App Store lists the Team as
+the seller, so this is what appears on the listing.
 
 ## 3. Packages
 
