@@ -46,7 +46,7 @@ private struct SessionGate: View {
             if !clerk.isLoaded {
                 ProgressView("Restoring session…")
             } else if clerk.user != nil {
-                OverviewView()
+                SignedIn()
             } else {
                 SignedOutView { showingAuth = true }
             }
@@ -54,6 +54,24 @@ private struct SessionGate: View {
         .sheet(isPresented: $showingAuth) {
             // Dismissible, so it closes itself once the session is active.
             AuthView()
+        }
+    }
+}
+
+/// The dashboards, one per tab.
+///
+/// A tab bar rather than the web's horizontal switcher: nine views do not fit
+/// across a phone, and the ones that are built are the ones that appear —
+/// an empty tab is a worse answer than an absent one.
+private struct SignedIn: View {
+    var body: some View {
+        TabView {
+            Tab("Overview", systemImage: "chart.pie") {
+                OverviewView()
+            }
+            Tab("Transactions", systemImage: "list.bullet") {
+                TransactionsView()
+            }
         }
     }
 }
