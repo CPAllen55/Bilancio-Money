@@ -310,7 +310,7 @@ private struct MonthBreakdown: View {
                 } else {
                     ForEach(rows, id: \.0.id) { cat, cents in
                         NavigationLink {
-                            CategoryMonthView(slug: cat.slug, month: chosen.month,
+                            CategoryMonthView(slug: cat.slug, range: .month(chosen.month),
                                               title: cat.label, monthLabel: chosen.shortLabel)
                         } label: {
                             HStack(spacing: 8) {

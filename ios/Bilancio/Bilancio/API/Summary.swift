@@ -80,6 +80,9 @@ struct SummaryResponse: Decodable {
         let savingsRate: Double?
         /// What each parent category was expected to cost.
         let byParent: [String: Int]?
+        /// The same per leaf, which is where the plan actually lives — only
+        /// subcategories are budgeted.
+        let byCategory: [String: Int]?
     }
 
     /// The category tree, so the Tracker can label and colour its rows.

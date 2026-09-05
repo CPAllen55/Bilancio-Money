@@ -20,16 +20,19 @@ final class CategoryMonthModel {
     private(set) var state: State = .loading
 
     let slug: String
-    let month: String
+    /// Any range the API understands, not just a single month — the Tracker
+    /// can be showing several months trailing, and a drill-down that silently
+    /// narrowed to one of them would not add up to the bar it came from.
+    let range: SummaryRange
 
     private let client = APIClient(baseURL: Bilancio.apiBaseURL) {
         guard let session = Clerk.shared.session else { return nil }
         return try await session.getToken()
     }
 
-    init(slug: String, month: String) {
+    init(slug: String, range: SummaryRange) {
         self.slug = slug
-        self.month = month
+        self.range = range
     }
 
     func load() async {
@@ -38,7 +41,7 @@ final class CategoryMonthModel {
             // filtering happens where the category is resolved rather than here
             // against rows that have already been paged.
             state = .loaded(try await client.transactions(
-                range: .month(month), bucket: slug, limit: 200
+                range: range, bucket: slug, limit: 200
             ))
         } catch {
             state = .failed(error.localizedDescription)
@@ -52,8 +55,8 @@ struct CategoryMonthView: View {
     let title: String
     let monthLabel: String
 
-    init(slug: String, month: String, title: String, monthLabel: String) {
-        _model = State(initialValue: CategoryMonthModel(slug: slug, month: month))
+    init(slug: String, range: SummaryRange, title: String, monthLabel: String) {
+        _model = State(initialValue: CategoryMonthModel(slug: slug, range: range))
         self.title = title
         self.monthLabel = monthLabel
     }
