@@ -42,9 +42,19 @@ enum Theme {
     static var negative: Color { Color(.systemRed) }
     static var caution: Color { Color(.systemOrange) }
 
-    /// The one piece of the brand that survives into a native look. Gold on
-    /// the web; here it tints controls and nothing else.
-    static var accent: Color { Color(red: 0.63, green: 0.44, blue: 0.15) }
+    /// The one piece of the brand that survives into a native look.
+    ///
+    /// Two golds, not one. The deep gold that reads as gold on paper goes
+    /// muddy on black, and the pale gold that glows on black is illegible on
+    /// white — this is the same split the web makes between --gold-1 in each
+    /// theme, and a single value cannot serve both.
+    static var accent: Color {
+        Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.79, green: 0.64, blue: 0.15, alpha: 1)
+                : UIColor(red: 0.63, green: 0.44, blue: 0.15, alpha: 1)
+        })
+    }
 
     /// Money in and money out, wherever the two appear side by side.
     static var incomeTint: Color { positive }

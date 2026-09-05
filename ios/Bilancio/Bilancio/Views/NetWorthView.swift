@@ -68,6 +68,7 @@ struct NetWorthView: View {
                 }
             }
             .navigationTitle("Net Worth")
+            .owlMark()
             .refreshable { await model.load() }
         }
         .tint(Theme.accent)

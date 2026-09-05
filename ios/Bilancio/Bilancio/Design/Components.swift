@@ -342,3 +342,34 @@ struct MerchantLogo: View {
         }
     }
 }
+
+// MARK: - The mark
+
+/// The owl, above a dashboard's title.
+///
+/// A toolbar's principal slot rather than the screen's content: with a large
+/// title the bar sits above it, which is exactly where this belongs, and it
+/// stays put when the content scrolls under it.
+///
+/// The asset carries both a gold and an outlined version and the catalogue
+/// picks between them, so nothing here has to know which appearance is on.
+struct OwlMark: View {
+    var height: CGFloat = 26
+
+    var body: some View {
+        Image("OwlMark")
+            .resizable()
+            .scaledToFit()
+            .frame(height: height)
+            .accessibilityHidden(true)
+    }
+}
+
+extension View {
+    /// Puts the mark above a dashboard's title.
+    func owlMark() -> some View {
+        toolbar {
+            ToolbarItem(placement: .principal) { OwlMark() }
+        }
+    }
+}

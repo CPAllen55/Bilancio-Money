@@ -64,6 +64,7 @@ struct TrendView: View {
                 }
             }
             .navigationTitle("Trend")
+            .owlMark()
             .refreshable { await model.load() }
         }
         .tint(Theme.accent)

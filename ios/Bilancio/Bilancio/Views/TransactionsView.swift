@@ -70,6 +70,7 @@ struct TransactionsView: View {
                 }
             }
             .navigationTitle("Transactions")
+            .owlMark()
             .refreshable { await model.load() }
         }
         .tint(Theme.accent)

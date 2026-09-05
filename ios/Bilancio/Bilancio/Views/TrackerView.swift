@@ -97,6 +97,7 @@ struct TrackerView: View {
                 }
             }
             .navigationTitle("Against the plan")
+            .owlMark()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

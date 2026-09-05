@@ -77,6 +77,7 @@ struct OverviewView: View {
                 }
             }
             .navigationTitle("Overview")
+            .owlMark()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     // Banks is where sign-out lives too. Both are about the
