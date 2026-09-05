@@ -152,6 +152,8 @@ enum SummaryRange: Hashable, CaseIterable {
     case month(String)
     /// An explicit run of whole months, inclusive. Both `YYYY-MM`.
     case span(from: String, to: String)
+    /// Everything. The Worker applies no window at all for this one.
+    case all
 
     /// Only the three a period picker offers. `month:` is reached by drilling
     /// into a chart, never by choosing it from a list, and putting twelve of
@@ -165,6 +167,7 @@ enum SummaryRange: Hashable, CaseIterable {
         case .yearToDate:     return "ytd"
         case .month(let ym):  return "month:\(ym)"
         case .span(let a, let b): return "span:\(a)..\(b)"
+        case .all: return "all"
         }
     }
 
@@ -175,6 +178,7 @@ enum SummaryRange: Hashable, CaseIterable {
         case .yearToDate:     return "Year to date"
         case .month(let ym):  return ym
         case .span(let a, let b): return "\(a)..\(b)"
+        case .all: return "All time"
         }
     }
 }

@@ -19,6 +19,26 @@ final class TransactionsModel {
 
     private(set) var state: State = .loading
     var range: SummaryRange = .thisMonth
+    /// What is typed in the search field. Applied on submit rather than on
+    /// every keystroke — each one is a round trip, and a ledger that reloads
+    /// eight times while somebody types "Central" is slower than one that
+    /// waits for them to finish.
+    var merchant: String = ""
+
+    /// The last twelve months, newest first, for the period menu.
+    var recentMonths: [String] {
+        let cal = Calendar(identifier: .gregorian)
+        var out: [String] = []
+        var date = Date()
+        for _ in 0..<12 {
+            let c = cal.dateComponents([.year, .month], from: date)
+            if let y = c.year, let m = c.month {
+                out.append(String(format: "%04d-%02d", y, m))
+            }
+            date = cal.date(byAdding: .month, value: -1, to: date) ?? date
+        }
+        return out
+    }
 
     private let client = APIClient(baseURL: Bilancio.apiBaseURL) {
         guard let session = Clerk.shared.session else { return nil }
@@ -27,7 +47,7 @@ final class TransactionsModel {
 
     func load() async {
         do {
-            state = .loaded(try await client.transactions(range: range))
+            state = .loaded(try await client.transactions(range: range, merchant: merchant))
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -59,11 +79,22 @@ struct TransactionsView: View {
 
                 case .loaded(let data):
                     if data.transactions.isEmpty {
-                        ContentUnavailableView(
-                            "Nothing in this period",
-                            systemImage: "tray",
-                            description: Text("No transactions were recorded for \(model.range.label.lowercased()).")
-                        )
+                        // A period with nothing in it and a search that matched
+                        // nothing are different problems with different fixes,
+                        // and the raw range key ("2026-02") is not a sentence.
+                        if model.merchant.isEmpty {
+                            ContentUnavailableView(
+                                "Nothing in this period",
+                                systemImage: "tray",
+                                description: Text("No transactions were recorded.")
+                            )
+                        } else {
+                            ContentUnavailableView(
+                                "No matches",
+                                systemImage: "magnifyingglass",
+                                description: Text("Nothing matching “\(model.merchant)” in this period. Try a shorter word, or a wider period.")
+                            )
+                        }
                     } else {
                         list(data)
                     }
@@ -71,6 +102,18 @@ struct TransactionsView: View {
             }
             .navigationTitle("Transactions")
             .owlMark()
+            // Submit rather than live: every keystroke is a round trip, and
+            // the Worker matches a substring so a partial word already works.
+            .searchable(text: Bindable(model).merchant,
+                        placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Merchant")
+            .onSubmit(of: .search) { Task { await model.load() } }
+            .onChange(of: model.merchant) { _, new in
+                // Clearing the field is the one change worth acting on without
+                // a submit: nobody presses return to say "show me everything
+                // again", they just empty the box and expect it back.
+                if new.isEmpty { Task { await model.load() } }
+            }
             .refreshable { await model.load() }
         }
         .tint(Theme.accent)
@@ -95,11 +138,10 @@ struct TransactionsView: View {
 
         return ScrollView {
             VStack(spacing: Theme.sectionGap) {
-                Picker("Period", selection: Bindable(model).range) {
-                    ForEach(SummaryRange.allCases, id: \.self) { Text($0.label).tag($0) }
+                PeriodMenu(range: Bindable(model).range,
+                           months: model.recentMonths) {
+                    Task { await model.load() }
                 }
-                .pickerStyle(.segmented)
-                .onChange(of: model.range) { Task { await model.load() } }
 
                 SumCard(sum: data.sum, count: data.total, shown: data.transactions.count)
 
@@ -319,5 +361,62 @@ extension Color {
             green: Double((value >> 8) & 0xFF) / 255,
             blue: Double(value & 0xFF) / 255
         )
+    }
+}
+
+// MARK: - Choosing a period
+
+/// This month, last month, the year, everything — or any of the last twelve
+/// months by name.
+///
+/// A menu rather than a segmented control. Three segments fit across a phone
+/// and sixteen do not, and the named months are the reason this exists: a
+/// ledger that can only show the current month is a ledger you cannot check
+/// last February with.
+private struct PeriodMenu: View {
+    @Binding var range: SummaryRange
+    let months: [String]
+    let onChange: () -> Void
+
+    var body: some View {
+        Menu {
+            Picker("Period", selection: $range) {
+                Text("This month").tag(SummaryRange.thisMonth)
+                Text("Last month").tag(SummaryRange.lastMonth)
+                Text("Year to date").tag(SummaryRange.yearToDate)
+                Text("All time").tag(SummaryRange.all)
+
+                Section("Months") {
+                    ForEach(months, id: \.self) { m in
+                        Text(monthName(m)).tag(SummaryRange.month(m))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text(label)
+                    .font(Theme.body)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundStyle(Theme.accent)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onChange(of: range) { onChange() }
+    }
+
+    /// The named months read as "February 2026"; the aggregates keep their own
+    /// wording, which already says what they are.
+    private var label: String {
+        if case .month(let ym) = range { return monthName(ym) }
+        return range.label
+    }
+
+    private func monthName(_ ym: String) -> String {
+        let parts = ym.split(separator: "-")
+        guard parts.count == 2, let m = Int(parts[1]), (1...12).contains(m) else { return ym }
+        let names = ["January","February","March","April","May","June",
+                     "July","August","September","October","November","December"]
+        return "\(names[m - 1]) \(parts[0])"
     }
 }

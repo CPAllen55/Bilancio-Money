@@ -14,6 +14,10 @@ struct TransactionsResponse: Decodable {
     /// Rolled up over the whole set, not the page — a merchant breakdown is
     /// built from this rather than by grouping the rows on screen.
     let vendors: [Vendor]
+    /// Every merchant name seen in the period, up to 400 — the Worker builds
+    /// this over the whole window rather than the page, so it is a complete
+    /// menu rather than a description of what happens to be loaded.
+    let merchants: [String]?
     let categories: [Category]
     let transactions: [Row]
 
@@ -83,6 +87,11 @@ extension APIClient {
     func transactions(
         range: SummaryRange = .thisMonth,
         bucket: String? = nil,
+        /// Matched as a substring against the name as displayed — the merchant
+        /// name where Plaid supplies one, the raw bank string otherwise. The
+        /// Worker filters on what is on screen rather than on the raw column,
+        /// so a search matches what a reader can actually see.
+        merchant: String? = nil,
         limit: Int = 100,
         offset: Int = 0
     ) async throws -> TransactionsResponse {
@@ -94,6 +103,9 @@ extension APIClient {
             URLQueryItem(name: "offset", value: String(offset)),
         ]
         if let bucket { query.append(URLQueryItem(name: "bucket", value: bucket)) }
+        if let merchant, !merchant.isEmpty {
+            query.append(URLQueryItem(name: "merchant", value: merchant))
+        }
         return try await get("/api/transactions", query: query)
     }
 }
