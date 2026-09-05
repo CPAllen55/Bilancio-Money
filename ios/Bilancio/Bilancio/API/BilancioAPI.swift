@@ -64,7 +64,7 @@ struct APIClient {
     func send<T: Decodable>(
         _ method: String,
         _ path: String,
-        body: [String: Any]
+        body: [String: Any]? = nil
     ) async throws -> T {
         guard let url = URL(string: path, relativeTo: baseURL) else {
             throw APIError.transport("Could not build a URL for \(path).")
@@ -74,9 +74,11 @@ struct APIClient {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
 
         return try await run(request)
     }
@@ -132,5 +134,32 @@ struct APIClient {
         } catch {
             throw APIError.decoding(error.localizedDescription)
         }
+    }
+}
+
+// MARK: - Erasing the account
+
+/// What DELETE /api/account answers.
+struct AccountDeletion: Decodable {
+    /// How many bank connections were revoked at Plaid on the way through.
+    let banksRevoked: Int
+}
+
+extension APIClient {
+    /// Deletes everything.
+    ///
+    /// Not a soft delete: the Worker revokes every bank at Plaid, removes the
+    /// user row and everything cascading from it, and then deletes the Clerk
+    /// identity. There is nothing to undo afterwards and nothing to sign back
+    /// into.
+    ///
+    /// Every bank is revoked before anything local is touched, and if one fails
+    /// the Worker deletes nothing and answers 502. That failure has to reach
+    /// the reader rather than being swallowed into a cheerful confirmation:
+    /// "your banks are disconnected" when they are still live at Plaid is the
+    /// one wrong thing this screen could say.
+    @discardableResult
+    func deleteAccount() async throws -> AccountDeletion {
+        try await send("DELETE", "/api/account")
     }
 }
