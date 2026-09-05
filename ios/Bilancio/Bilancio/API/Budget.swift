@@ -29,8 +29,13 @@ struct BudgetResponse: Decodable {
         let label: String
         let colour: String
         let parentSlug: String?
-        /// Keyed by `YYYY-MM`. Only months already elapsed appear.
+        /// Keyed by `YYYY-MM`. Only months already elapsed appear — a month
+        /// still running is planned, not learned from.
         let spent: [String: Int]
+        /// The same calendar months a year earlier, keyed by the month they are
+        /// being compared *with*, so January 2025 sits under January 2026
+        /// without any date arithmetic here.
+        let priorSpent: [String: Int]?
         /// What the plan says each month should cost, after the reader's edits.
         let plan: [String: Int]
         /// The same before any edits, so a reset has something to return to.
