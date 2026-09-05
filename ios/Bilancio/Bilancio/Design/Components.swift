@@ -224,10 +224,15 @@ struct ProportionBar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(label.uppercased())
-                .font(.system(size: 11, weight: .medium))
-                .tracking(0.8)
-                .foregroundStyle(Theme.quietText)
+            // Skipped when the caller has already named the row above the bar,
+            // which the Tracker does — a heading and a label saying the same
+            // word twice is one of them wasted.
+            if !label.isEmpty {
+                Text(label.uppercased())
+                    .font(.system(size: 11, weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(Theme.quietText)
+            }
 
             GeometryReader { geo in
                 let fill = max(2, geo.size.width * fraction(amount))

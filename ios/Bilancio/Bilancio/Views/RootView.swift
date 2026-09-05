@@ -75,8 +75,12 @@ private struct SignedIn: View {
             Tab("Trend", systemImage: "chart.bar") {
                 TrendView()
             }
-            Tab("Budgeting", systemImage: "chart.pie.fill") {
-                BudgetingView()
+            // Tracker rather than Budgeting, because the two are read at very
+            // different rates: performance against the plan is a daily
+            // question, editing the plan is an occasional one. Budgeting is a
+            // push away from here, the way Forecast is a push away from it.
+            Tab("Tracker", systemImage: "target") {
+                TrackerView()
             }
             Tab("Net Worth", systemImage: "building.columns") {
                 NetWorthView()

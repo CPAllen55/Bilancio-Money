@@ -59,13 +59,35 @@ final class BudgetingModel {
 }
 
 struct BudgetingView: View {
+    /// True when this is pushed onto somebody else's stack. A NavigationStack
+    /// inside a NavigationStack swallows the back button and leaves the screen
+    /// with no way out of it.
+    var embedded = false
+
     @State private var model = BudgetingModel()
     /// The category whose plan is being edited.
     @State private var editing: BudgetResponse.Row?
 
     var body: some View {
-        NavigationStack {
-            Group {
+        Group {
+            if embedded {
+                inner
+            } else {
+                NavigationStack { inner }.tint(Theme.accent)
+            }
+        }
+        .task { await model.load() }
+        .sheet(item: $editing) { row in
+            BudgetEditorView(row: row,
+                             month: editingMonth,
+                             monthLabel: monthLabel) {
+                Task { await model.load() }
+            }
+        }
+    }
+
+    private var inner: some View {
+        Group {
                 switch model.state {
                 case .loading:
                     ProgressView("Loading…")
@@ -84,27 +106,18 @@ struct BudgetingView: View {
                     content(data)
                 }
             }
-            .navigationTitle("Budgeting")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        ForecastView()
-                    } label: {
-                        Label("The year ahead", systemImage: "calendar")
-                    }
+        .navigationTitle("Budgeting")
+        .navigationBarTitleDisplayMode(embedded ? .inline : .large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    ForecastView()
+                } label: {
+                    Label("The year ahead", systemImage: "calendar")
                 }
             }
-            .refreshable { await model.load() }
         }
-        .tint(Theme.accent)
-        .task { await model.load() }
-        .sheet(item: $editing) { row in
-            BudgetEditorView(row: row,
-                             month: editingMonth,
-                             monthLabel: monthLabel) {
-                Task { await model.load() }
-            }
-        }
+        .refreshable { await model.load() }
     }
 
     /// Whichever month the strip is showing. Never the row's own slug, which

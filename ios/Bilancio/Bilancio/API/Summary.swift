@@ -18,6 +18,7 @@ struct SummaryResponse: Decodable {
     /// Spending accounts the figures were built from. Zero means no bank has
     /// been linked yet, which is a different thing from a month of no activity.
     let accountsCounted: Int
+    let categories: [TransactionsResponse.Category]?
 
     struct Period: Decodable {
         let label: String
@@ -38,6 +39,12 @@ struct SummaryResponse: Decodable {
         /// month in progress, which `/api/budget` deliberately does not report
         /// spending for.
         let byCategory: [String: Int]?
+        /// The same rolled up to parents — what the Tracker measures.
+        let byParent: [String: Int]?
+        /// Income by its source. Salary, dividends and interest are top-level
+        /// slugs of their own rather than children of "income", so they roll up
+        /// here and expand the way a spending parent's children do.
+        let byIncomeParent: [String: Int]?
 
         /// Not a field on the response. The Worker puts `savingsRate` on
         /// `budget` and nowhere else, so the one for the actual period is
@@ -71,7 +78,12 @@ struct SummaryResponse: Decodable {
         let expense: Int
         let net: Int
         let savingsRate: Double?
+        /// What each parent category was expected to cost.
+        let byParent: [String: Int]?
     }
+
+    /// The category tree, so the Tracker can label and colour its rows.
+    var categoryList: [TransactionsResponse.Category] { categories ?? [] }
 }
 
 /// GET /api/trend — twelve months of each figure, for the sparklines.
@@ -135,6 +147,8 @@ enum SummaryRange: Hashable, CaseIterable {
     case yearToDate
     /// One named calendar month, whole. `YYYY-MM`.
     case month(String)
+    /// An explicit run of whole months, inclusive. Both `YYYY-MM`.
+    case span(from: String, to: String)
 
     /// Only the three a period picker offers. `month:` is reached by drilling
     /// into a chart, never by choosing it from a list, and putting twelve of
@@ -147,6 +161,7 @@ enum SummaryRange: Hashable, CaseIterable {
         case .lastMonth:      return "last-month"
         case .yearToDate:     return "ytd"
         case .month(let ym):  return "month:\(ym)"
+        case .span(let a, let b): return "span:\(a)..\(b)"
         }
     }
 
@@ -156,6 +171,7 @@ enum SummaryRange: Hashable, CaseIterable {
         case .lastMonth:      return "Last month"
         case .yearToDate:     return "Year to date"
         case .month(let ym):  return ym
+        case .span(let a, let b): return "\(a)..\(b)"
         }
     }
 }
