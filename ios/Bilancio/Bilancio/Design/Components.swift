@@ -351,25 +351,50 @@ struct MerchantLogo: View {
 /// title the bar sits above it, which is exactly where this belongs, and it
 /// stays put when the content scrolls under it.
 ///
-/// The asset carries both a gold and an outlined version and the catalogue
-/// picks between them, so nothing here has to know which appearance is on.
+/// The head and ears rather than the whole badge. The full mark is a framed
+/// owl standing over a bar chart, which is a great deal of drawing to fit in a
+/// navigation bar — at that size it reads as a smudge. The face survives being
+/// made small; the bar chart under it does not.
+///
+/// One outlined shape, tinted, rather than two pieces of artwork. The gold
+/// mark is drawn on an opaque gold ground, so a head cropped out of it is a
+/// gold box with a face in it. The outlined one is drawn on transparency and
+/// takes whatever colour the theme hands it.
 struct OwlMark: View {
-    var height: CGFloat = 26
+    var height: CGFloat = 38
 
     var body: some View {
         Image("OwlMark")
+            .renderingMode(.template)
             .resizable()
             .scaledToFit()
             .frame(height: height)
+            .foregroundStyle(Theme.markTint)
             .accessibilityHidden(true)
     }
 }
 
 extension View {
-    /// Puts the mark above a dashboard's title.
+    /// Puts the mark above the start of a dashboard's title.
+    ///
+    /// Leading rather than centred: a large title starts at the left margin, so
+    /// centring the mark left it hanging over the middle of a word with nothing
+    /// under it. Above the first letters it reads as part of the heading rather
+    /// than as decoration that happened to land there.
+    ///
+    /// Only ever used on the tab roots, which have no back button to displace.
     func owlMark() -> some View {
         toolbar {
-            ToolbarItem(placement: .principal) { OwlMark() }
+            // The toolbar otherwise wraps this in the glass capsule every bar
+            // button gets, which puts a chip behind a mark that is not a
+            // control and should not look like one. Guarded because the
+            // modifier is iOS 26 and this app runs from 18.
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .topBarLeading) { OwlMark() }
+                    .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .topBarLeading) { OwlMark() }
+            }
         }
     }
 }

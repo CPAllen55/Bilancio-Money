@@ -74,6 +74,7 @@ final class TrackerModel {
 
 struct TrackerView: View {
     @State private var model = TrackerModel()
+    @State private var editingPlan = false
 
     var body: some View {
         NavigationStack {
@@ -101,8 +102,12 @@ struct TrackerView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink {
-                        BudgetingView(embedded: true)
+                    // A sheet rather than a push. Pushed onto this stack the
+                    // plan editor took the tab bar with it, leaving no way back
+                    // to any other dashboard — and a screen you can only leave
+                    // by finding a back chevron is a screen people get stuck in.
+                    Button {
+                        editingPlan = true
                     } label: {
                         Label("Edit the plan", systemImage: "slider.horizontal.3")
                     }
@@ -112,6 +117,13 @@ struct TrackerView: View {
         }
         .tint(Theme.accent)
         .task { await model.load() }
+        .sheet(isPresented: $editingPlan) {
+            BudgetingView(onDone: { editingPlan = false })
+                // Changing the plan changes what this screen measures against,
+                // so it reloads on the way out rather than showing yesterday's
+                // budget beside today's spending.
+                .onDisappear { Task { await model.load() } }
+        }
     }
 
     private func content(_ data: SummaryResponse) -> some View {

@@ -77,6 +77,8 @@ struct BudgetingView: View {
     /// inside a NavigationStack swallows the back button and leaves the screen
     /// with no way out of it.
     var embedded = false
+    /// Set when this is presented as a sheet, which needs a way out of its own.
+    var onDone: (() -> Void)?
 
     @State private var model = BudgetingModel()
     /// The category whose plan is being edited.
@@ -138,6 +140,11 @@ struct BudgetingView: View {
                     ForecastView()
                 } label: {
                     Label("The year ahead", systemImage: "calendar")
+                }
+            }
+            if let onDone {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done", action: onDone)
                 }
             }
         }

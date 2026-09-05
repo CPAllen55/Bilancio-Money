@@ -65,6 +65,23 @@ enum Theme {
         cents < 0 ? negative : positive
     }
 
+    /// The owl, in whichever colour the theme calls for.
+    ///
+    /// One shape, tinted, rather than two pieces of artwork. The gold mark is
+    /// drawn on an opaque gold ground, so cropping the head out of it leaves a
+    /// gold box with a face in it — obvious the moment you look. The outlined
+    /// mark is drawn on transparency, so it is the one that can be any colour
+    /// at all, and template rendering makes it both.
+    ///
+    /// Mint in the dark, which is the green the web app uses for the same mark.
+    static var markTint: Color {
+        Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.00, green: 0.94, blue: 0.66, alpha: 1)
+                : UIColor(red: 0.63, green: 0.44, blue: 0.15, alpha: 1)
+        })
+    }
+
     /// Colours for slices of one thing — vendors inside a category, and
     /// anything else where the parts have no colour of their own.
     ///
