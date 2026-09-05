@@ -13,6 +13,9 @@ import SwiftUI
 
 struct RootView: View {
     @State private var bootstrap = ClerkBootstrap()
+    /// Applied at the root so it reaches sheets and pushed screens too — set
+    /// deeper it would colour the tab that changed it and nothing else.
+    @AppStorage("appearance") private var appearance: Appearance = .system
 
     var body: some View {
         Group {
@@ -31,6 +34,7 @@ struct RootView: View {
             }
         }
         .task { await bootstrap.start() }
+        .preferredColorScheme(appearance.colorScheme)
     }
 }
 
@@ -82,8 +86,12 @@ private struct SignedIn: View {
             Tab("Tracker", systemImage: "target") {
                 TrackerView()
             }
-            Tab("Net Worth", systemImage: "building.columns") {
-                NetWorthView()
+            // A tab bar holds five. There are seven dashboards, so the fifth
+            // slot is the way to the rest rather than one more of them — which
+            // is better than letting iOS build its own overflow list, and
+            // better than leaving Budgeting reachable only from inside Tracker.
+            Tab("More", systemImage: "ellipsis.circle") {
+                MoreView()
             }
         }
     }

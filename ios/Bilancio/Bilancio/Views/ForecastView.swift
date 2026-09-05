@@ -28,6 +28,7 @@ final class ForecastModel {
 
 struct ForecastView: View {
     @State private var model = ForecastModel()
+    @State private var picked: String?
 
     var body: some View {
         Group {
@@ -89,6 +90,17 @@ struct ForecastView: View {
                                 x: .value("Month", m.shortLabel),
                                 y: .value("Net", Double(m.net) / 100)
                             )
+                            .annotation(position: .top, spacing: 2) {
+                                if picked == m.shortLabel {
+                                    VStack(spacing: 0) {
+                                        Text(m.net.asShortMoney)
+                                        if m.projected { Text("projected").opacity(0.7) }
+                                    }
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .monospacedDigit()
+                                    .foregroundStyle(Theme.tint(forNet: m.net))
+                                }
+                            }
                             // Projected months are drawn faintly. A forecast
                             // that looks exactly like a record invites being
                             // read as one.
@@ -96,10 +108,12 @@ struct ForecastView: View {
                                 Theme.tint(forNet: m.net).opacity(m.projected ? 0.4 : 1)
                             )
                         }
+                        .chartXSelection(value: $picked)
                         .chartYAxis {
                             AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
                         }
                         .frame(height: 210)
+                        .animation(.snappy(duration: 0.2), value: picked)
 
                         if data.firstProjectedMonth != nil {
                             Text("Faded months are projected from the plan, not recorded.")

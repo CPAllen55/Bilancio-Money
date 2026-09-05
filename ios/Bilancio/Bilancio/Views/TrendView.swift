@@ -112,6 +112,10 @@ private struct CategoryTrendChart: View {
     let categories: [TransactionsResponse.Category]
     @Binding var drilled: String?
 
+    /// The month a finger is on, as its short label — which is what the chart
+    /// uses for its x values.
+    @State private var picked: String?
+
     /// Slug to label and colour for whichever level is being drawn.
     private var visible: [TransactionsResponse.Category] {
         if let drilled {
@@ -203,6 +207,14 @@ private struct CategoryTrendChart: View {
                         // second stack: the comparison is one number, and a
                         // second stack beside the first doubles the ink to say
                         // something a line already says.
+                        // Marks where the finger is, drawn behind the bars so
+                        // it never obscures the thing being asked about.
+                        if let picked {
+                            RuleMark(x: .value("Month", picked))
+                                .foregroundStyle(Theme.quietText.opacity(0.25))
+                                .lineStyle(.init(lineWidth: 22))
+                        }
+
                         ForEach(ago, id: \.label) { point in
                             if point.cents > 0 {
                                 RuleMark(
@@ -216,15 +228,24 @@ private struct CategoryTrendChart: View {
                         }
                     }
                     .chartForegroundStyleScale(domain: domain, range: range)
+                    .chartXSelection(value: $picked)
                     .chartLegend(position: .bottom, alignment: .leading, spacing: 8)
                     .chartYAxis {
                         AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
                     }
                     .frame(height: 260)
 
-                    Text("Dashed rule is the same month a year earlier.")
-                        .font(Theme.note)
-                        .foregroundStyle(Theme.quietText)
+                    // What is inside the month under the finger. The stack
+                    // already shows the proportions; what it cannot show is the
+                    // figures, and reading a segment's height against an axis
+                    // is guesswork.
+                    if let picked, let month = series.first(where: { $0.shortLabel == picked }) {
+                        MonthDetail(month: month, visible: visible, drilled: drilled)
+                    } else {
+                        Text("Dashed rule is the same month a year earlier. Touch a month for its figures.")
+                            .font(Theme.note)
+                            .foregroundStyle(Theme.quietText)
+                    }
                 }
 
                 if drilled == nil {
@@ -375,6 +396,7 @@ private struct DrillStrip: View {
 
 private struct NetChart: View {
     let series: [TrendResponse.Month]
+    @State private var picked: String?
 
     var body: some View {
         Card {
@@ -392,9 +414,23 @@ private struct NetChart: View {
                         y: .value("Net", Double(m.net) / 100)
                     )
                     .foregroundStyle(Theme.tint(forNet: m.net))
+                    // Everything else steps back rather than the chosen bar
+                    // stepping forward: a bar already at full strength has
+                    // nowhere brighter to go.
+                    .opacity(picked == nil || picked == m.shortLabel ? 1 : 0.3)
+                    .annotation(position: .top, spacing: 2) {
+                        if picked == m.shortLabel {
+                            Text(m.net.asShortMoney)
+                                .font(.system(size: 10, weight: .semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(Theme.tint(forNet: m.net))
+                        }
+                    }
                 }
+                .chartXSelection(value: $picked)
                 .chartYAxis { AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0))) }
                 .frame(height: 180)
+                .animation(.snappy(duration: 0.2), value: picked)
 
             }
         }
@@ -520,5 +556,55 @@ private struct YearAgoCard: View {
                 .minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - The month under the finger
+
+/// What one month is made of, for the month a finger is on.
+///
+/// The stack above already shows the proportions. What it cannot show is the
+/// figures — reading a segment's height against an axis is guesswork, and the
+/// question "how much was that" is the one a stacked bar always provokes.
+private struct MonthDetail: View {
+    let month: TrendResponse.Month
+    let visible: [TransactionsResponse.Category]
+    let drilled: String?
+
+    private var rows: [(TransactionsResponse.Category, Int)] {
+        let source = drilled == nil ? (month.byParent ?? [:]) : (month.byCategory ?? [:])
+        return visible
+            .compactMap { cat in
+                guard let cents = source[cat.slug], cents > 0 else { return nil }
+                return (cat, cents)
+            }
+            .sorted { $0.1 > $1.1 }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(month.shortLabel).font(Theme.tileLabel)
+                Spacer()
+                Text(month.expense.asShortMoney)
+                    .font(Theme.tileLabel)
+                    .monospacedDigit()
+            }
+            .foregroundStyle(Theme.quietText)
+
+            ForEach(rows, id: \.0.id) { cat, cents in
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(Color(hex: cat.colour))
+                        .frame(width: 7, height: 7)
+                    Text(cat.label).font(Theme.note).lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(cents.asShortMoney)
+                        .font(Theme.note)
+                        .monospacedDigit()
+                }
+            }
+        }
+        .padding(.top, 2)
     }
 }

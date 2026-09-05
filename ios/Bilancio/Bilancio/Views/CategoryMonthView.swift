@@ -170,6 +170,10 @@ private struct VendorPie: View {
     /// with the headline above it rather than with the sum of the slices drawn.
     let total: Int
 
+    @State private var selectedAngle: Double?
+
+    private var selected: Slice? { slice(at: selectedAngle) }
+
     /// Six named, then a remainder.
     ///
     /// Beyond about six the slices are thinner than their own borders and the
@@ -203,6 +207,22 @@ private struct VendorPie: View {
 
     private var drawn: Int { slices.reduce(0) { $0 + $1.cents } }
 
+    /// Which slice an angle lands in.
+    ///
+    /// Swift Charts reports the selection as a position along the summed
+    /// values rather than as the mark itself, so the slices are walked and
+    /// accumulated until the total passes it. Same order they were drawn in,
+    /// or the answer would point at a different wedge than the finger did.
+    private func slice(at angle: Double?) -> Slice? {
+        guard let angle, angle >= 0 else { return nil }
+        var running = 0.0
+        for slice in slices {
+            running += Double(slice.cents) / 100
+            if angle <= running { return slice }
+        }
+        return nil
+    }
+
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 14) {
@@ -216,10 +236,16 @@ private struct VendorPie: View {
                     SectorMark(
                         angle: .value("Spend", Double(slice.cents) / 100),
                         innerRadius: .ratio(0.60),
+                        // The chosen wedge stands slightly proud of the rest,
+                        // which is the whole feedback that a tap landed — a
+                        // colour change alone is invisible on the slice you are
+                        // covering with a finger.
+                        outerRadius: selected?.id == slice.id ? .ratio(1.0) : .ratio(0.92),
                         angularInset: 1.5
                     )
                     .cornerRadius(3)
                     .foregroundStyle(by: .value("Vendor", slice.name))
+                    .opacity(selected == nil || selected?.id == slice.id ? 1 : 0.35)
                 }
                 // Stated, never inferred. A scale built from the order marks
                 // arrive in gives the same vendor a different colour on every
@@ -229,8 +255,10 @@ private struct VendorPie: View {
                     range: parts.map(\.colour)
                 )
                 .chartLegend(.hidden)
+                .chartAngleSelection(value: $selectedAngle)
                 .frame(height: 190)
                 .overlay { centre }
+                .animation(.snappy(duration: 0.2), value: selected?.id)
 
                 VStack(spacing: 8) {
                     ForEach(parts) { slice in
@@ -274,14 +302,32 @@ private struct VendorPie: View {
     private var centre: some View {
         let noun = vendors.count == 1 ? "merchant" : "merchants"
         return VStack(spacing: 1) {
-            Text(total.asShortMoney)
-                .font(.system(.title3, design: .rounded).weight(.semibold))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-            Text("\(vendors.count) \(noun)")
-                .font(.caption2)
-                .foregroundStyle(Theme.quietText)
+            // The middle of a ring is the one place a detail can go without
+            // covering the thing it describes, so the selection is shown there
+            // rather than in a callout beside it.
+            if let selected {
+                Text(selected.name)
+                    .font(.caption2)
+                    .foregroundStyle(Theme.quietText)
+                    .lineLimit(1)
+                Text(selected.cents.asShortMoney)
+                    .font(.system(.title3, design: .rounded).weight(.semibold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                Text(share(selected) + " of it")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.quietText)
+            } else {
+                Text(total.asShortMoney)
+                    .font(.system(.title3, design: .rounded).weight(.semibold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                Text("\(vendors.count) \(noun)")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.quietText)
+            }
         }
         .padding(.horizontal, 40)
     }

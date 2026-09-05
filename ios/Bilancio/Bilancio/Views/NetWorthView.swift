@@ -36,11 +36,21 @@ final class NetWorthModel {
 }
 
 struct NetWorthView: View {
+    /// True when pushed onto somebody else's stack — a NavigationStack inside a
+    /// NavigationStack swallows the back button.
+    var embedded = false
+
     @State private var model = NetWorthModel()
 
     var body: some View {
-        NavigationStack {
-            Group {
+        Group {
+            if embedded { inner } else { NavigationStack { inner }.tint(Theme.accent) }
+        }
+        .task { await model.load() }
+    }
+
+    private var inner: some View {
+        Group {
                 switch model.state {
                 case .loading:
                     ProgressView("Loading…")
@@ -67,12 +77,10 @@ struct NetWorthView: View {
                     }
                 }
             }
-            .navigationTitle("Net Worth")
-            .owlMark()
-            .refreshable { await model.load() }
-        }
-        .tint(Theme.accent)
-        .task { await model.load() }
+        .navigationTitle("Net Worth")
+        .navigationBarTitleDisplayMode(embedded ? .inline : .large)
+        .modifier(MarkWhenRoot(on: !embedded))
+        .refreshable { await model.load() }
     }
 
     private func content(_ data: NetWorthResponse) -> some View {

@@ -273,6 +273,7 @@ struct MoneyField: View {
 /// to compare within a month — only across them.
 private struct PlanHistoryChart: View {
     let editor: BudgetEditor
+    @State private var picked: String?
 
     private struct Bar: Identifiable {
         let month: String
@@ -314,8 +315,16 @@ private struct PlanHistoryChart: View {
                 // the whole chart exists to keep them apart. The annotation
                 // below is emphasis enough.
                 .foregroundStyle(colour.opacity(bar.isSpent ? 1 : 0.35))
+                .opacity(picked == nil || picked == bar.label ? 1 : 0.35)
                 .annotation(position: .top, spacing: 2) {
-                    if bar.isEdited {
+                    if picked == bar.label {
+                        VStack(spacing: 0) {
+                            Text(bar.amount.asShortMoney)
+                            Text(bar.isSpent ? "spent" : "plan").opacity(0.7)
+                        }
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(colour)
+                    } else if bar.isEdited && picked == nil {
                         VStack(spacing: 0) {
                             Text(bar.amount.asShortMoney)
                             if !bar.isSpent { Text("plan").opacity(0.7) }
@@ -325,6 +334,8 @@ private struct PlanHistoryChart: View {
                     }
                 }
             }
+            .chartXSelection(value: $picked)
+            .animation(.snappy(duration: 0.2), value: picked)
             .chartYAxis {
                 AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
             }

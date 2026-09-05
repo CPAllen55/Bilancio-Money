@@ -398,3 +398,15 @@ extension View {
         }
     }
 }
+
+/// The mark, but only when the screen is its stack's root.
+///
+/// A pushed screen already has a back button in that corner, and a mark beside
+/// it reads as a second control rather than as a heading.
+struct MarkWhenRoot: ViewModifier {
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        if on { content.owlMark() } else { content }
+    }
+}
