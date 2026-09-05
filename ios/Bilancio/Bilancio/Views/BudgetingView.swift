@@ -37,6 +37,15 @@ final class BudgetingModel {
     /// where the Overview gets the same number.
     private(set) var spentThisMonth: [String: Int] = [:]
 
+    /// Parents, by slug.
+    ///
+    /// /api/budget returns leaves only — it has no parent rows because parents
+    /// are not budgeted — so a parent's name and colour have to come from the
+    /// category tree. Title-casing the slug instead gave "Giving Work" and
+    /// "Food", which are not what those categories are called anywhere else in
+    /// the product.
+    private(set) var parents: [String: TransactionsResponse.Category] = [:]
+
     private let client = APIClient(baseURL: Bilancio.apiBaseURL) {
         guard let session = Clerk.shared.session else { return nil }
         return try await session.getToken()
@@ -46,8 +55,13 @@ final class BudgetingModel {
         do {
             let data = try await client.budget()
             state = .loaded(data)
-            spentThisMonth = (try? await client.summary(range: .thisMonth))?
-                .totals.byCategory ?? [:]
+            let summary = try? await client.summary(range: .thisMonth)
+            spentThisMonth = summary?.totals.byCategory ?? [:]
+            parents = Dictionary(
+                uniqueKeysWithValues: (summary?.categoryList ?? [])
+                    .filter { $0.parentSlug == nil }
+                    .map { ($0.slug, $0) }
+            )
             // Opens on the month in progress, which is the one a person came
             // to look at. Any other default is a click before the screen is
             // showing what was asked for.
@@ -67,6 +81,8 @@ struct BudgetingView: View {
     @State private var model = BudgetingModel()
     /// The category whose plan is being edited.
     @State private var editing: BudgetResponse.Row?
+    /// The parent whose whole plan is being shared out.
+    @State private var editingGroup: ParentGroup?
 
     var body: some View {
         Group {
@@ -81,6 +97,14 @@ struct BudgetingView: View {
             BudgetEditorView(row: row,
                              month: editingMonth,
                              monthLabel: monthLabel) {
+                Task { await model.load() }
+            }
+        }
+        .sheet(item: $editingGroup) { group in
+            BudgetGroupEditorView(parentLabel: group.label,
+                                  rows: group.rows,
+                                  month: editingMonth,
+                                  monthLabel: monthLabel) {
                 Task { await model.load() }
             }
         }
@@ -172,7 +196,9 @@ struct BudgetingView: View {
                     }
                 }
 
-                CategoryPlanCard(rows: data.categories, month: month, live: live, editing: $editing)
+                CategoryPlanCard(rows: data.categories, month: month, live: live,
+                                 parents: model.parents,
+                                 editing: $editing, editingGroup: $editingGroup)
 
                 Text("Only subcategories are budgeted, so anything filed straight onto a top-level category — and everything in Unsorted — is spending with no line here. The plan is shaped from \(data.monthsOfHistory) month\(data.monthsOfHistory == 1 ? "" : "s") of history.")
                     .font(Theme.note)
@@ -220,21 +246,54 @@ private struct MonthStrip: View {
     }
 }
 
+/// A parent and the subcategories under it, gathered for editing together.
+struct ParentGroup: Identifiable {
+    let slug: String
+    let label: String
+    let colour: String
+    let rows: [BudgetResponse.Row]
+    var id: String { slug }
+}
+
 private struct CategoryPlanCard: View {
     let rows: [BudgetResponse.Row]
     let month: String
     let live: [String: Int]
+    let parents: [String: TransactionsResponse.Category]
     @Binding var editing: BudgetResponse.Row?
+    @Binding var editingGroup: ParentGroup?
+
+    @State private var expanded: Set<String> = []
 
     private func spent(_ row: BudgetResponse.Row) -> Int {
         live[row.slug] ?? row.spent[month] ?? 0
     }
 
-    /// Biggest plan first. A budget is read to find what dominates it, and
-    /// alphabetical order buries that under whatever begins with an A.
-    private var ordered: [BudgetResponse.Row] {
-        rows.filter { ($0.plan[month] ?? 0) > 0 || spent($0) > 0 }
-            .sorted { ($0.plan[month] ?? 0) > ($1.plan[month] ?? 0) }
+    /// Grouped by parent, biggest plan first.
+    ///
+    /// A budget is read to find what dominates it, and alphabetical order
+    /// buries that under whatever begins with an A. Inside a parent the same
+    /// rule applies for the same reason.
+    private var groups: [(ParentGroup, Int, Int)] {
+        let live = rows.filter { ($0.plan[month] ?? 0) > 0 || spent($0) > 0 }
+        let byParent = Dictionary(grouping: live) { $0.parentSlug ?? $0.slug }
+
+        return byParent.map { parent, kids in
+            let ordered = kids.sorted { ($0.plan[month] ?? 0) > ($1.plan[month] ?? 0) }
+            let plan = ordered.reduce(0) { $0 + ($1.plan[month] ?? 0) }
+            let used = ordered.reduce(0) { $0 + spent($1) }
+            // The tree's own name and colour, falling back to the slug only
+            // when a parent is somehow missing from it.
+            let known = parents[parent]
+            let group = ParentGroup(
+                slug: parent,
+                label: known?.label ?? parent.replacingOccurrences(of: "-", with: " ").capitalized,
+                colour: known?.colour ?? ordered.first?.colour ?? "#888888",
+                rows: ordered
+            )
+            return (group, plan, used)
+        }
+        .sorted { $0.1 > $1.1 }
     }
 
     var body: some View {
@@ -244,31 +303,131 @@ private struct CategoryPlanCard: View {
                 .foregroundStyle(Theme.quietText)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if ordered.isEmpty {
+            let list = groups
+
+            if list.isEmpty {
                 Card {
                     Text("Nothing planned or spent in this month.")
                         .font(Theme.note)
                         .foregroundStyle(Theme.quietText)
                 }
             } else {
-                Card(padding: 0) {
-                    VStack(spacing: 0) {
-                        ForEach(Array(ordered.enumerated()), id: \.element.id) { i, row in
-                            Button {
-                                editing = row
-                            } label: {
-                                PlanRow(row: row, month: month, spent: spent(row))
+                ForEach(list, id: \.0.id) { group, plan, used in
+                    Card(padding: 0) {
+                        VStack(spacing: 0) {
+                            ParentRow(group: group, plan: plan, spent: used,
+                                      open: expanded.contains(group.slug)) {
+                                if expanded.contains(group.slug) {
+                                    expanded.remove(group.slug)
+                                } else {
+                                    expanded.insert(group.slug)
+                                }
                             }
-                            .buttonStyle(.plain)
 
-                            if i < ordered.count - 1 {
+                            if expanded.contains(group.slug) {
                                 Divider().padding(.leading, 14)
+
+                                Button {
+                                    editingGroup = group
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "square.split.2x1")
+                                            .font(.system(size: 12))
+                                        Text("Set a total for \(group.label)")
+                                            .font(Theme.note)
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .foregroundStyle(Theme.quietText)
+                                    }
+                                    .foregroundStyle(Theme.accent)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .contentShape(.rect)
+                                }
+                                .buttonStyle(.plain)
+
+                                ForEach(group.rows) { row in
+                                    Divider().padding(.leading, 14)
+                                    Button {
+                                        editing = row
+                                    } label: {
+                                        PlanRow(row: row, month: month, spent: spent(row))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/// The parent line: what it costs in total, and the way into what is inside it.
+private struct ParentRow: View {
+    let group: ParentGroup
+    let plan: Int
+    let spent: Int
+    let open: Bool
+    let toggle: () -> Void
+
+    private var over: Bool { plan > 0 && spent > plan }
+
+    var body: some View {
+        Button(action: toggle) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.quietText)
+                        .rotationEffect(.degrees(open ? 90 : 0))
+
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color(hex: group.colour))
+                        .frame(width: 3, height: 20)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(group.label).font(Theme.body).lineLimit(1)
+                        Text("\(group.rows.count) subcategor\(group.rows.count == 1 ? "y" : "ies")")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.quietText)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(spent.asShortMoney)
+                            .font(Theme.body)
+                            .monospacedDigit()
+                            .foregroundStyle(over ? Theme.negative : Theme.text)
+                        Text("of \(plan.asShortMoney)")
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.quietText)
+                    }
+                }
+
+                GeometryReader { geo in
+                    let scale = max(plan, spent)
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Theme.hairline.opacity(0.4))
+                        Capsule()
+                            .fill(over ? Theme.negative : Color(hex: group.colour))
+                            .frame(width: scale > 0
+                                   ? max(2, geo.size.width * Double(spent) / Double(scale))
+                                   : 2)
+                    }
+                }
+                .frame(height: 5)
+                .padding(.leading, 30)
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
     }
 }
 
