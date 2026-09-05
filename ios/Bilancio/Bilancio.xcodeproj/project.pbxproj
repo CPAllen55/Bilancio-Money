@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		83AC6F04304B61BE0013405E /* ClerkKit in Frameworks */ = {isa = PBXBuildFile; productRef = 83AC6F02304B61BE0013405E /* ClerkKit */; };
 		83AC6F05304B61BE0013405E /* ClerkKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = 83AC6F03304B61BE0013405E /* ClerkKitUI */; };
+		83AC6F12304B61BE0013405E /* LinkKit in Frameworks */ = {isa = PBXBuildFile; productRef = 83AC6F11304B61BE0013405E /* LinkKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 			files = (
 				83AC6F04304B61BE0013405E /* ClerkKit in Frameworks */,
 				83AC6F05304B61BE0013405E /* ClerkKitUI in Frameworks */,
+				83AC6F12304B61BE0013405E /* LinkKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,6 +76,7 @@
 			packageProductDependencies = (
 				83AC6F02304B61BE0013405E /* ClerkKit */,
 				83AC6F03304B61BE0013405E /* ClerkKitUI */,
+				83AC6F11304B61BE0013405E /* LinkKit */,
 			);
 			productName = Bilancio;
 			productReference = 83AC6EBD304B61BE0013405E /* Bilancio.app */;
@@ -105,6 +108,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				83AC6F01304B61BE0013405E /* XCRemoteSwiftPackageReference "clerk-ios" */,
+				83AC6F10304B61BE0013405E /* XCRemoteSwiftPackageReference "plaid-link-ios-spm" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 83AC6EBE304B61BE0013405E /* Products */;
@@ -356,6 +360,14 @@
 				minimumVersion = 1.5.2;
 			};
 		};
+		83AC6F10304B61BE0013405E /* XCRemoteSwiftPackageReference "plaid-link-ios-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/plaid/plaid-link-ios-spm";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.1.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -368,6 +380,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 83AC6F01304B61BE0013405E /* XCRemoteSwiftPackageReference "clerk-ios" */;
 			productName = ClerkKitUI;
+		};
+		83AC6F11304B61BE0013405E /* LinkKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 83AC6F10304B61BE0013405E /* XCRemoteSwiftPackageReference "plaid-link-ios-spm" */;
+			productName = LinkKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

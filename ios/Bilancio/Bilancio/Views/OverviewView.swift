@@ -120,14 +120,21 @@ struct OverviewView: View {
 
                 // Zero accounts is not zero spending. Without saying so, an
                 // untouched install looks identical to a broken one.
+                // Nothing linked is not an error, but it is the one state
+                // where the whole screen is zeros and the only useful thing on
+                // it is the way out.
                 if s.accountsCounted == 0 {
-                    Label(
-                        "No bank accounts linked yet, so every figure here is zero.",
-                        systemImage: "info.circle"
-                    )
-                    .font(Theme.note)
-                    .foregroundStyle(Theme.quietText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Card {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("No banks connected yet")
+                                .font(Theme.body)
+                            Text("Every figure here is zero until an account is linked.")
+                                .font(Theme.note)
+                                .foregroundStyle(Theme.quietText)
+                            ConnectBankButton(onConnected: { Task { await model.load() } })
+                                .padding(.top, 2)
+                        }
+                    }
                 }
             }
             .padding()

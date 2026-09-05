@@ -73,6 +73,12 @@ struct BanksView: View {
                             .foregroundStyle(Theme.quietText)
                     }
 
+                    Section {
+                        ConnectBankButton(onConnected: { Task { await model.load() } },
+                                          label: "Connect a bank",
+                                          prominent: false)
+                    }
+
                     ForEach(items) { item in
                         Section {
                             ForEach(item.accounts) { account in
