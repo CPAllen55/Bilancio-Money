@@ -219,7 +219,13 @@ struct SplitTransactionView: View {
 
                 Section {
                     Picker("Category", selection: $editor.categoryId) {
-                        Text("Unset").tag(String?.none)
+                        // In its own section rather than loose above them.
+                        // A Picker that mixes bare rows with sections flattens
+                        // the lot, which is how a hierarchy built out of
+                        // Sections comes out as one long alphabetical list.
+                        Section {
+                            Text("Unset").tag(String?.none)
+                        }
 
                         ForEach(editor.groupedPickable, id: \.parent.id) { group in
                             Section(group.parent.label) {
@@ -254,7 +260,9 @@ struct SplitTransactionView: View {
                     ForEach($editor.drafts) { $draft in
                         VStack(alignment: .leading, spacing: 8) {
                             Picker("Category", selection: $draft.categoryId) {
-                                Text("Choose…").tag(String?.none)
+                                Section {
+                                    Text("Choose…").tag(String?.none)
+                                }
                                 ForEach(editor.groupedPickable, id: \.parent.id) { group in
                                     Section(group.parent.label) {
                                         ForEach(group.children) { cat in

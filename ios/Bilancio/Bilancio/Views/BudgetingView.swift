@@ -197,11 +197,7 @@ struct BudgetingView: View {
                            selection: Bindable(model).month)
 
                 PlanHero(data: data, month: month, spent: spent)
-                MoneyOverTime(data: data, month: month)
-
-                if let trend = model.trend {
-                    YearOverYear(data: data, trend: trend)
-                }
+                MoneyOverTime(data: data, month: month, trend: model.trend)
 
                 if let incomeRow = data.incomeRow {
                     VStack(alignment: .leading, spacing: 8) {
@@ -620,6 +616,14 @@ private struct PlanHero: View {
 private struct MoneyOverTime: View {
     let data: BudgetResponse
     let month: String
+    /// Last year, when it is wanted. Nil when the fetch failed, which leaves
+    /// the chart exactly as it was rather than failing the screen.
+    let trend: TrendResponse?
+
+    /// Remembered rather than reset each visit. Somebody who turned the lines
+    /// off found them too busy, and showing them again tomorrow is not a
+    /// feature — it is the same complaint on a loop.
+    @AppStorage("budgetShowLastYear") private var showLastYear = false
 
     private struct Point: Identifiable {
         let month: String
@@ -630,6 +634,24 @@ private struct MoneyOverTime: View {
         /// happened, and are drawn faintly to say so.
         let projected: Bool
         var id: String { month }
+    }
+
+    /// Last year's actuals, keyed by the month they are compared with.
+    ///
+    /// priorSeries is positionally aligned with series — entry *i* is the same
+    /// calendar month a year earlier — so the pairing is by index and the key
+    /// comes from the present one.
+    private var lastYear: [String: (income: Int, expense: Int)] {
+        guard let trend else { return [:] }
+        var out: [String: (Int, Int)] = [:]
+        for (now, before) in zip(trend.series, trend.priorSeries) {
+            out[now.month] = (before.income, before.expense)
+        }
+        return out
+    }
+
+    private var hasLastYear: Bool {
+        lastYear.values.contains { $0.income > 0 || $0.expense > 0 }
     }
 
     private var points: [Point] {
@@ -659,8 +681,16 @@ private struct MoneyOverTime: View {
                         .font(Theme.tileLabel)
                         .foregroundStyle(Theme.quietText)
                     Spacer()
-                    legend
+                    if hasLastYear {
+                        Toggle("Last year", isOn: $showLastYear)
+                            .toggleStyle(.button)
+                            .font(Theme.tileLabel)
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+                    }
                 }
+
+                legend
 
                 Chart {
                     ForEach(points) { p in
@@ -685,6 +715,41 @@ private struct MoneyOverTime: View {
                         .foregroundStyle(Theme.expenseTint.opacity(p.projected ? 0.4 : 0.95))
                         .cornerRadius(2)
                     }
+
+                    // Last year over the top, and only when asked for. Lines
+                    // rather than more bars: three bars per month would be a
+                    // picket fence, and the question these answer is "higher or
+                    // lower than then", which is a shape rather than a size.
+                    if showLastYear {
+                        ForEach(points) { p in
+                            if let before = lastYear[p.month] {
+                                if before.expense > 0 {
+                                    LineMark(
+                                        x: .value("Month", p.label),
+                                        y: .value("Amount", Double(before.expense) / 100),
+                                        series: .value("Series", "Spending last year")
+                                    )
+                                    .foregroundStyle(Theme.expenseTint)
+                                    .lineStyle(.init(lineWidth: 2, dash: [4, 3]))
+                                    .interpolationMethod(.monotone)
+                                    .symbol(.circle)
+                                    .symbolSize(18)
+                                }
+                                if before.income > 0 {
+                                    LineMark(
+                                        x: .value("Month", p.label),
+                                        y: .value("Amount", Double(before.income) / 100),
+                                        series: .value("Series", "Income last year")
+                                    )
+                                    .foregroundStyle(Theme.incomeTint)
+                                    .lineStyle(.init(lineWidth: 2, dash: [4, 3]))
+                                    .interpolationMethod(.monotone)
+                                    .symbol(.circle)
+                                    .symbolSize(18)
+                                }
+                            }
+                        }
+                    }
                 }
                 .chartYAxis {
                     AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
@@ -695,9 +760,12 @@ private struct MoneyOverTime: View {
                         AxisValueLabel { if let s = value.as(String.self) { Text(s) } }
                     }
                 }
-                .frame(height: 190)
+                .frame(height: showLastYear ? 220 : 190)
+                .animation(.snappy(duration: 0.25), value: showLastYear)
 
-                Text("Faded months are the plan; solid months already happened. Where the narrow bar rises above the wide one, the month spent more than it earned.")
+                Text(showLastYear
+                     ? "Faded months are the plan; solid months already happened. Where the narrow bar rises above the wide one, the month spent more than it earned. Dashed lines are the same months a year ago."
+                     : "Faded months are the plan; solid months already happened. Where the narrow bar rises above the wide one, the month spent more than it earned.")
                     .font(.caption2)
                     .foregroundStyle(Theme.quietText)
             }
@@ -705,9 +773,21 @@ private struct MoneyOverTime: View {
     }
 
     private var legend: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             swatch(Theme.incomeTint.opacity(0.3), "Income", wide: true)
             swatch(Theme.expenseTint.opacity(0.95), "Spending", wide: false)
+            if showLastYear {
+                HStack(spacing: 4) {
+                    // A dash rather than a block, because that is what is drawn.
+                    Rectangle()
+                        .fill(Theme.quietText)
+                        .frame(width: 12, height: 2)
+                    Text("Last year")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.quietText)
+                }
+            }
+            Spacer(minLength: 0)
         }
     }
 
@@ -719,149 +799,6 @@ private struct MoneyOverTime: View {
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(Theme.quietText)
-        }
-    }
-}
-
-// MARK: - This year against last
-
-/// One figure, three lines: what it is doing this year, what it did last year,
-/// and what the plan says it should be.
-///
-/// Expenses and income are separate charts rather than six lines on one. Three
-/// lines is a comparison; six is a plate of spaghetti, and the question being
-/// asked is about one of them at a time — "is spending running above last
-/// year", then "is income".
-private struct YearOverYear: View {
-    let data: BudgetResponse
-    let trend: TrendResponse
-
-    private enum Side: String, CaseIterable, Identifiable {
-        case expenses, income
-        var id: String { rawValue }
-        var label: String { self == .expenses ? "Expenses" : "Income" }
-    }
-
-    @State private var side: Side = .expenses
-
-    private struct Point: Identifiable {
-        let month: String
-        let label: String
-        let series: String
-        let cents: Int
-        var id: String { month + series }
-    }
-
-    /// Actuals and prior-year actuals, keyed by the month they belong to.
-    ///
-    /// priorSeries is positionally aligned with series — entry *i* is the same
-    /// calendar month a year earlier — so the pairing is by index and the key
-    /// comes from the present one.
-    private var actuals: [String: (now: Int, before: Int)] {
-        var out: [String: (Int, Int)] = [:]
-        for (now, before) in zip(trend.series, trend.priorSeries) {
-            out[now.month] = side == .expenses
-                ? (now.expense, before.expense)
-                : (now.income, before.income)
-        }
-        return out
-    }
-
-    private var points: [Point] {
-        let byMonth = actuals
-        return data.months.enumerated().flatMap { i, m -> [Point] in
-            let label = data.labels.indices.contains(i)
-                ? String(data.labels[i].prefix(3)) : m
-            let planned = side == .expenses
-                ? data.plannedExpense(m)
-                : data.plannedIncome(m)
-
-            var rows = [Point(month: m, label: label, series: "Plan", cents: planned)]
-
-            // Months with no record contribute nothing rather than a zero. A
-            // line dropping to the axis for a month that has not happened reads
-            // as a collapse, which is the opposite of what it means.
-            if let pair = byMonth[m] {
-                // The month in progress is excluded from this year's line. Four
-                // days of September against eleven whole months is not a fall
-                // in spending, it is a month that has not finished — the same
-                // reason the Worker keeps partial months out of the window it
-                // learns from. Last year's figure for that month is whole and
-                // stays, so the comparison it belongs to survives.
-                if m != data.currentMonth {
-                    rows.append(Point(month: m, label: label, series: "This year", cents: pair.now))
-                }
-                if pair.before > 0 {
-                    rows.append(Point(month: m, label: label, series: "Last year", cents: pair.before))
-                }
-            }
-            return rows
-        }
-    }
-
-    private var tint: Color { side == .expenses ? Theme.expenseTint : Theme.incomeTint }
-
-    var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Year over year")
-                    .font(Theme.tileLabel)
-                    .foregroundStyle(Theme.quietText)
-
-                Picker("Side", selection: $side) {
-                    ForEach(Side.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-
-                Chart(points) { p in
-                    LineMark(
-                        x: .value("Month", p.label),
-                        y: .value("Amount", Double(p.cents) / 100),
-                        series: .value("Series", p.series)
-                    )
-                    .foregroundStyle(by: .value("Series", p.series))
-                    .lineStyle(style(for: p.series))
-                    .interpolationMethod(.monotone)
-                    .symbol(by: .value("Series", p.series))
-                }
-                // Stated, not inferred — the same lesson the stacked chart
-                // taught: a scale built from the order marks arrive in changes
-                // colour when the data does.
-                .chartForegroundStyleScale(
-                    domain: ["This year", "Last year", "Plan"],
-                    range: [tint, tint.opacity(0.45), Theme.accent]
-                )
-                .chartSymbolScale(
-                    domain: ["This year", "Last year", "Plan"],
-                    range: [.circle, .circle, .square]
-                )
-                .chartLegend(position: .bottom, alignment: .leading, spacing: 8)
-                .chartYAxis {
-                    AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
-                }
-                .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 6)) { value in
-                        AxisGridLine()
-                        AxisValueLabel { if let s = value.as(String.self) { Text(s) } }
-                    }
-                }
-                .frame(height: 200)
-                .animation(.snappy(duration: 0.2), value: side)
-
-                Text("Where this year sits above last year, \(side.label.lowercased()) are running higher than they did. The plan is what the budget expects. This year stops at the last complete month.")
-                    .font(.caption2)
-                    .foregroundStyle(Theme.quietText)
-            }
-        }
-    }
-
-    /// The plan is dashed because it is an intention rather than a record, the
-    /// same distinction the faded bars make above.
-    private func style(for series: String) -> StrokeStyle {
-        switch series {
-        case "Plan":      return .init(lineWidth: 1.8, dash: [4, 3])
-        case "Last year": return .init(lineWidth: 1.8, dash: [2, 2])
-        default:          return .init(lineWidth: 2.4)
         }
     }
 }

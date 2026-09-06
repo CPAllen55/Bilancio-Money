@@ -85,28 +85,28 @@ private struct SessionGate: View {
 /// an empty tab is a worse answer than an absent one.
 private struct SignedIn: View {
     var body: some View {
-        TabView(selection: .constant("b")) {
+        TabView {
             // In the order the questions get asked: where things stand, how
             // that compares with before, what it was supposed to be, and then
             // the rows behind all three. Transactions sits last because it is
             // the one you arrive at from the others as often as you open it.
-            Tab("Overview", systemImage: "chart.pie", value: "o") {
+            Tab("Overview", systemImage: "chart.pie") {
                 OverviewView()
             }
-            Tab("Trend", systemImage: "chart.bar", value: "r") {
+            Tab("Trend", systemImage: "chart.bar") {
                 TrendView()
             }
-            Tab("Budgeting", systemImage: "slider.horizontal.3", value: "b") {
+            Tab("Budgeting", systemImage: "slider.horizontal.3") {
                 BudgetingView()
             }
-            Tab("Transactions", systemImage: "list.bullet", value: "t") {
+            Tab("Transactions", systemImage: "list.bullet") {
                 TransactionsView()
             }
             // A tab bar holds five. There are seven dashboards, so the fifth
             // slot is the way to the rest rather than one more of them — which
             // is better than letting iOS build its own overflow list, and
             // better than leaving Budgeting reachable only from inside Tracker.
-            Tab("More", systemImage: "ellipsis.circle", value: "m") {
+            Tab("More", systemImage: "ellipsis.circle") {
                 MoreView()
             }
         }
