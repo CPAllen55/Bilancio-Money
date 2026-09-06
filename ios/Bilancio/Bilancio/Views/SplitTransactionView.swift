@@ -31,6 +31,15 @@ final class SplitEditor {
     }
 
     var drafts: [Draft] = []
+
+    /// The category this transaction should be filed under. Changing it files
+    /// every future transaction from the same merchant there too — which is
+    /// what a merchant's category is for, and is why it is a separate control
+    /// from the splits below it.
+    var categoryId: String?
+    /// What it was when the sheet opened, so an unchanged picker writes nothing.
+    private let originalCategoryId: String?
+
     private(set) var saving = false
     private(set) var error: String?
 
@@ -48,6 +57,18 @@ final class SplitEditor {
         self.drafts = (row.splits ?? []).map {
             Draft(categoryId: $0.categoryId, magnitude: abs($0.amount))
         }
+        // The row carries the resolved slug rather than an id, because a
+        // category is settled per row at read time and is not a column.
+        let current = categories.first { $0.slug == row.category }?.id
+        self.categoryId = current
+        self.originalCategoryId = current
+    }
+
+    var categoryChanged: Bool { categoryId != originalCategoryId }
+
+    /// What the merchant will be filed under from now on, for the caption.
+    var chosenCategoryLabel: String? {
+        categories.first { $0.id == categoryId }?.label
     }
 
     /// The whole transaction, unsigned.
@@ -71,7 +92,19 @@ final class SplitEditor {
         return nil
     }
 
-    var canSave: Bool { problem == nil && !saving }
+    var canSave: Bool { problem == nil && !saving && (categoryChanged || splitsChanged) }
+
+    /// Whether the split rows differ from what was stored.
+    var splitsChanged: Bool {
+        let stored = (row.splits ?? [])
+            .map { [$0.categoryId, String(abs($0.amount))].joined(separator: ":") }
+            .sorted()
+        let now = drafts
+            .filter { $0.categoryId != nil && $0.magnitude > 0 }
+            .map { [$0.categoryId!, String($0.magnitude)].joined(separator: ":") }
+            .sorted()
+        return stored != now
+    }
 
     /// Leaves only, of the same side of the ledger as the transaction.
     ///
@@ -100,6 +133,23 @@ final class SplitEditor {
         saving = true
         error = nil
         defer { saving = false }
+
+        // The category first. It is the coarser change of the two — it moves
+        // the merchant as well as this row — and a split written against a
+        // category that then failed to save would be parts of something filed
+        // somewhere nobody chose.
+        if categoryChanged, let categoryId {
+            do {
+                try await client.setCategory(transactionId: row.id,
+                                             categoryId: categoryId,
+                                             applyToMerchant: true)
+            } catch {
+                self.error = error.localizedDescription
+                return false
+            }
+        }
+
+        guard splitsChanged else { return true }
 
         // The sign comes from the transaction, and a zero row is somebody
         // clearing a line rather than a fact about anything.
@@ -141,6 +191,25 @@ struct SplitTransactionView: View {
                 }
 
                 Section {
+                    Picker("Category", selection: $editor.categoryId) {
+                        Text("Unset").tag(String?.none)
+                        ForEach(editor.pickable) { cat in
+                            Text(cat.label).tag(String?.some(cat.id))
+                        }
+                    }
+                } header: {
+                    Text("Filed under")
+                } footer: {
+                    // Said plainly because it is the surprising half: this
+                    // control does not only change the row in front of you.
+                    if editor.categoryChanged, let label = editor.chosenCategoryLabel {
+                        Text("Saving files this transaction under \(label), and every future one from \(editor.row.name) too. Splits below are separate and leave that alone.")
+                    } else {
+                        Text("Changing this files every future transaction from \(editor.row.name) the same way. To move only this one, split it below instead.")
+                    }
+                }
+
+                Section {
                     ForEach($editor.drafts) { $draft in
                         VStack(alignment: .leading, spacing: 8) {
                             Picker("Category", selection: $draft.categoryId) {
@@ -168,7 +237,7 @@ struct SplitTransactionView: View {
                 } header: {
                     Text("Split into")
                 } footer: {
-                    Text("Only the parts you carve off are saved. Whatever is left stays where it is now.")
+                    Text("Only this transaction, and only the parts you carve off. Whatever is left stays where it is, and the merchant keeps whatever category it already had.")
                 }
 
                 Section {
@@ -193,7 +262,7 @@ struct SplitTransactionView: View {
                     }
                 }
             }
-            .navigationTitle("Split transaction")
+            .navigationTitle("Transaction")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

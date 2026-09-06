@@ -187,7 +187,7 @@ struct BudgetingView: View {
                            selection: Bindable(model).month)
 
                 PlanHero(data: data, month: month, spent: spent)
-                PlanVersusHistory(data: data, month: month)
+                MoneyOverTime(data: data, month: month)
 
                 if let incomeRow = data.incomeRow {
                     VStack(alignment: .leading, spacing: 8) {
@@ -589,90 +589,122 @@ private struct PlanHero: View {
     }
 }
 
-// MARK: - The plan against what actually happened
+// MARK: - Money over time
 
-/// Planned net by month, with the months that have happened marked by what
-/// they actually came to.
+/// Income and spending, month by month, one behind the other.
 ///
-/// The point of it is that a plan is only credible against a record. A budget
-/// that expects to keep $500 in a month that has never once kept $500 is a wish
-/// with a number on it, and that is visible here and nowhere else on the screen.
-private struct PlanVersusHistory: View {
+/// Income is the wider bar and sits behind; spending is narrower and sits in
+/// front of it. The gap you can see above the front bar is what the month
+/// keeps, and the months where the front bar overtops the one behind it are the
+/// months that did not — which is the whole question, answered without reading
+/// a single figure.
+///
+/// One chart rather than two, because the sizes only mean anything relative to
+/// each other. Two charts side by side with their own axes can make a month
+/// that earned twice what it spent look identical to one that spent twice what
+/// it earned.
+private struct MoneyOverTime: View {
     let data: BudgetResponse
     let month: String
 
     private struct Point: Identifiable {
         let month: String
         let label: String
-        let planned: Int
-        /// Nil for months with no record — which is not the same as zero.
-        let actual: Int?
+        let income: Int
+        let expense: Int
+        /// No record yet — these are the plan's expectations rather than what
+        /// happened, and are drawn faintly to say so.
+        let projected: Bool
         var id: String { month }
     }
 
     private var points: [Point] {
         data.months.enumerated().map { i, m in
-            Point(month: m,
-                  label: data.labels.indices.contains(i)
-                      ? String(data.labels[i].prefix(3)) : m,
-                  planned: data.plannedNet(m),
-                  actual: data.actualNet(m))
+            // income.spent carries a key only for months complete enough to
+            // have a record, which makes it the test for whether this month
+            // happened. Summing the categories cannot tell you: an absent month
+            // and a month of nothing both sum to zero.
+            let earned = data.income.spent[m]
+            let spent = data.categories.reduce(0) { $0 + ($1.spent[m] ?? 0) }
+            return Point(
+                month: m,
+                label: data.labels.indices.contains(i)
+                    ? String(data.labels[i].prefix(3)) : m,
+                income: earned ?? data.plannedIncome(m),
+                expense: earned == nil ? data.plannedExpense(m) : spent,
+                projected: earned == nil
+            )
         }
     }
 
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Plan against history")
-                    .font(Theme.tileLabel)
-                    .foregroundStyle(Theme.quietText)
+                HStack {
+                    Text("Income and spending over time")
+                        .font(Theme.tileLabel)
+                        .foregroundStyle(Theme.quietText)
+                    Spacer()
+                    legend
+                }
 
                 Chart {
                     ForEach(points) { p in
+                        // Unstacked, or Swift Charts puts one on top of the
+                        // other and the pair reads as a total neither of them
+                        // is. Both start at zero so their heights compare.
                         BarMark(
                             x: .value("Month", p.label),
-                            y: .value("Planned net", Double(p.planned) / 100)
+                            y: .value("Income", Double(p.income) / 100),
+                            width: .ratio(0.94),
+                            stacking: .unstacked
                         )
-                        .foregroundStyle(Theme.tint(forNet: p.planned).opacity(
-                            p.month == month ? 1 : 0.4
-                        ))
+                        .foregroundStyle(Theme.incomeTint.opacity(p.projected ? 0.16 : 0.3))
+                        .cornerRadius(2)
 
-                        // What the month actually came to, where there is a
-                        // record of it. A tick across the bar rather than a
-                        // second bar beside it: the comparison is one number
-                        // against another, and a pair of bars at this width is
-                        // two slivers.
-                        //
-                        // A RectangleMark rather than a RuleMark. A rule with
-                        // the same start and end on a category axis has no
-                        // length to draw and collapses into a dot — which is
-                        // what the first version did, twelve times.
-                        if let actual = p.actual {
-                            RectangleMark(
-                                x: .value("Month", p.label),
-                                y: .value("Actual", Double(actual) / 100),
-                                height: .fixed(3)
-                            )
-                            .foregroundStyle(Theme.text)
-                            .cornerRadius(1.5)
-                        }
+                        BarMark(
+                            x: .value("Month", p.label),
+                            y: .value("Spending", Double(p.expense) / 100),
+                            width: .ratio(0.44),
+                            stacking: .unstacked
+                        )
+                        .foregroundStyle(Theme.expenseTint.opacity(p.projected ? 0.4 : 0.95))
+                        .cornerRadius(2)
                     }
                 }
                 .chartYAxis {
                     AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
                 }
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                    AxisMarks(values: .automatic(desiredCount: 6)) { value in
                         AxisGridLine()
                         AxisValueLabel { if let s = value.as(String.self) { Text(s) } }
                     }
                 }
-                .frame(height: 170)
+                .frame(height: 190)
 
-                Text("Bars are what the plan expects to keep. Dark ticks are what those months actually came to.")
+                Text("Faded months are the plan; solid months already happened. Where the narrow bar rises above the wide one, the month spent more than it earned.")
                     .font(.caption2)
                     .foregroundStyle(Theme.quietText)
             }
+        }
+    }
+
+    private var legend: some View {
+        HStack(spacing: 10) {
+            swatch(Theme.incomeTint.opacity(0.3), "Income", wide: true)
+            swatch(Theme.expenseTint.opacity(0.95), "Spending", wide: false)
+        }
+    }
+
+    private func swatch(_ colour: Color, _ label: String, wide: Bool) -> some View {
+        HStack(spacing: 4) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(colour)
+                .frame(width: wide ? 12 : 5, height: 10)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(Theme.quietText)
         }
     }
 }

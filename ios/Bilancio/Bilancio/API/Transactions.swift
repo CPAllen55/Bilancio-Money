@@ -150,3 +150,35 @@ extension TransactionsResponse.Row {
         return f.date(from: date)
     }
 }
+
+// MARK: - Filing a transaction
+
+struct CategoryChange: Decodable {
+    /// Present when a merchant rule was written or replaced.
+    let rule: Rule?
+
+    struct Rule: Decodable {
+        let id: String
+        let displayName: String?
+    }
+}
+
+extension APIClient {
+    /// Files a transaction under a category, and optionally every future one
+    /// from the same merchant.
+    ///
+    /// Two things happen server-side and the difference matters. An override is
+    /// always written for this transaction. With `applyToMerchant` a merchant
+    /// rule is written too, replacing any existing one rather than leaving two
+    /// quietly fighting over the same name — so re-filing a merchant moves it
+    /// rather than adding a second opinion.
+    @discardableResult
+    func setCategory(
+        transactionId: String,
+        categoryId: String,
+        applyToMerchant: Bool
+    ) async throws -> CategoryChange {
+        try await send("POST", "/api/transactions/\(transactionId)/category",
+                       body: ["categoryId": categoryId, "applyToMerchant": applyToMerchant])
+    }
+}
