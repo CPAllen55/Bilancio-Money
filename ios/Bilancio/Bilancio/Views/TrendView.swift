@@ -42,6 +42,10 @@ struct TrendView: View {
     /// The parent category being looked inside, or nil for all of them.
     @State private var drilled: String?
 
+    /// Landscape on a phone.
+    @Environment(\.verticalSizeClass) private var verticalSize
+    private var isLandscape: Bool { verticalSize == .compact }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -72,6 +76,26 @@ struct TrendView: View {
     }
 
     private func content(_ data: TrendResponse) -> some View {
+        // Turned sideways, the chart gets the screen. Everything below it is
+        // the same data said again in other ways, and none of that is worth
+        // the two hundred points it costs when there are only three hundred.
+        if isLandscape {
+            return AnyView(
+                CategoryTrendChart(series: data.series,
+                                   prior: data.priorSeries,
+                                   categories: data.categories,
+                                   drilled: $drilled)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                    .frame(maxHeight: .infinity)
+                    .background(Theme.background)
+            )
+        }
+
+        return AnyView(portrait(data))
+    }
+
+    private func portrait(_ data: TrendResponse) -> some View {
         ScrollView {
             VStack(spacing: Theme.sectionGap) {
                 Picker("Months", selection: Bindable(model).months) {
@@ -106,15 +130,37 @@ struct TrendView: View {
 /// no readable segments, and the question "what is big" is answered by the
 /// parents anyway. The leaves answer the next question, which is "big because
 /// of what".
+///
+/// Three ways in, because a chart this dense earns them: pinch to narrow the
+/// window onto fewer months, touch a segment for its own figure, and turn the
+/// phone to give the whole thing the screen.
 private struct CategoryTrendChart: View {
     let series: [TrendResponse.Month]
     let prior: [TrendResponse.Month]
     let categories: [TransactionsResponse.Category]
     @Binding var drilled: String?
 
-    /// The month a finger is on, as its short label — which is what the chart
-    /// uses for its x values.
-    @State private var picked: String?
+    /// Landscape on a phone. The chart is the only thing worth showing then.
+    @Environment(\.verticalSizeClass) private var verticalSize
+
+    /// How many months are on screen at once. Pinching changes it; the chart
+    /// scrolls through the rest rather than squeezing them in.
+    @State private var window: Int = 12
+    /// What the window was when the current pinch started, so the gesture is
+    /// measured from where it began rather than compounding each frame.
+    @State private var windowAtPinchStart: Int?
+
+    /// The segment under the last touch: a month, and one category within it.
+    @State private var picked: Picked?
+
+    struct Picked: Equatable {
+        let month: String
+        let slug: String
+        let label: String
+        let cents: Int
+    }
+
+    private var isLandscape: Bool { verticalSize == .compact }
 
     /// Slug to label and colour for whichever level is being drawn.
     private var visible: [TransactionsResponse.Category] {
@@ -128,6 +174,7 @@ private struct CategoryTrendChart: View {
     private struct Segment: Identifiable {
         let id = UUID()
         let month: String
+        let slug: String
         let label: String
         let colour: Color
         let cents: Int
@@ -145,16 +192,11 @@ private struct CategoryTrendChart: View {
             let source = drilled == nil ? (m.byParent ?? [:]) : (m.byCategory ?? [:])
             return visible.compactMap { cat in
                 guard let cents = source[cat.slug], cents > 0 else { return nil }
-                return Segment(month: m.shortLabel, label: cat.label,
+                return Segment(month: m.shortLabel, slug: cat.slug, label: cat.label,
                                colour: Color(hex: cat.colour), cents: cents)
             }
         }
     }
-
-    /// The scale, stated rather than inferred: each category's own colour,
-    /// against its own name.
-    private var domain: [String] { visible.map(\.label) }
-    private var range: [Color] { visible.map { Color(hex: $0.colour) } }
 
     /// The same months a year earlier, summed over whatever is on screen — so
     /// drilling in compares like with like rather than against the whole year.
@@ -167,23 +209,19 @@ private struct CategoryTrendChart: View {
         }
     }
 
+    private var domain: [String] { visible.map(\.label) }
+    private var range: [Color] { visible.map { Color(hex: $0.colour) } }
+
+    /// Never wider than the data, never narrower than three — one month on
+    /// screen is a single bar with nothing to compare it to.
+    private var clampedWindow: Int {
+        min(max(3, window), max(3, series.count))
+    }
+
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(drilled == nil ? "Spend by category" : "Inside \(drilledLabel)")
-                        .font(Theme.tileLabel)
-                        .foregroundStyle(Theme.quietText)
-                    Spacer()
-                    if drilled != nil {
-                        Button {
-                            drilled = nil
-                        } label: {
-                            Label("All categories", systemImage: "chevron.left")
-                                .font(Theme.tileLabel)
-                        }
-                    }
-                }
+                header
 
                 let marks = segments
                 let ago = yearAgo
@@ -194,77 +232,193 @@ private struct CategoryTrendChart: View {
                         .foregroundStyle(Theme.quietText)
                         .frame(maxWidth: .infinity, minHeight: 120)
                 } else {
-                    Chart {
-                        ForEach(marks) { seg in
-                            BarMark(
-                                x: .value("Month", seg.month),
-                                y: .value("Spend", Double(seg.cents) / 100)
-                            )
-                            .foregroundStyle(by: .value("Category", seg.label))
-                        }
+                    chart(marks: marks, ago: ago)
 
-                        // Last year as a rule across each month rather than a
-                        // second stack: the comparison is one number, and a
-                        // second stack beside the first doubles the ink to say
-                        // something a line already says.
-                        // Marks where the finger is, drawn behind the bars so
-                        // it never obscures the thing being asked about.
-                        if let picked {
-                            RuleMark(x: .value("Month", picked))
-                                .foregroundStyle(Theme.quietText.opacity(0.25))
-                                .lineStyle(.init(lineWidth: 22))
-                        }
-
-                        ForEach(ago, id: \.label) { point in
-                            if point.cents > 0 {
-                                RuleMark(
-                                    x: .value("Month", point.label),
-                                    yStart: .value("Last year", Double(point.cents) / 100),
-                                    yEnd: .value("Last year", Double(point.cents) / 100)
-                                )
-                                .lineStyle(.init(lineWidth: 1.5, dash: [3, 2]))
-                                .foregroundStyle(Theme.quietText)
-                            }
-                        }
-                    }
-                    .chartForegroundStyleScale(domain: domain, range: range)
-                    .chartXSelection(value: $picked)
-                    .chartLegend(position: .bottom, alignment: .leading, spacing: 8)
-                    .chartYAxis {
-                        AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
-                    }
-                    .frame(height: 260)
-
-                    // What is inside the month under the finger. The stack
-                    // already shows the proportions; what it cannot show is the
-                    // figures, and reading a segment's height against an axis
-                    // is guesswork.
-                    if let picked, let month = series.first(where: { $0.shortLabel == picked }) {
-                        MonthDetail(month: month, visible: visible, drilled: drilled)
-                    } else {
-                        Text("Dashed rule is the same month a year earlier. Touch a month for its figures.")
+                    if let picked {
+                        PickedSegment(picked: picked) { self.picked = nil }
+                    } else if !isLandscape {
+                        Text("Pinch to zoom. Touch a segment for its figure. Turn the phone for a wider view.")
                             .font(Theme.note)
                             .foregroundStyle(Theme.quietText)
                     }
                 }
 
-                if drilled == nil {
-                    DrillStrip(parents: visible, onPick: { drilled = $0 })
-                } else {
-                    // A stack says Groceries was heavy in February; the only
-                    // useful next question is which rows made it heavy. Rows
-                    // rather than the bars themselves, for the same reason the
-                    // way in was one: a segment this size is not a tap target.
-                    MonthBreakdown(series: series, subcategories: visible)
+                // Landscape gives the chart the screen; everything else is
+                // chrome, and chrome is what there is no room for.
+                if !isLandscape {
+                    if drilled == nil {
+                        DrillStrip(parents: visible, onPick: { drilled = $0 })
+                    } else {
+                        MonthBreakdown(series: series, subcategories: visible)
+                    }
                 }
             }
         }
+    }
+
+    private var header: some View {
+        HStack {
+            Text(drilled == nil ? "Spend by category" : "Inside \(drilledLabel)")
+                .font(Theme.tileLabel)
+                .foregroundStyle(Theme.quietText)
+            Spacer()
+            if clampedWindow < series.count {
+                Text("\(clampedWindow) of \(series.count) months")
+                    .font(Theme.tileLabel)
+                    .foregroundStyle(Theme.quietText)
+            }
+            if drilled != nil {
+                Button {
+                    drilled = nil
+                    picked = nil
+                } label: {
+                    Label("All categories", systemImage: "chevron.left")
+                        .font(Theme.tileLabel)
+                }
+            }
+        }
+    }
+
+    private func chart(marks: [Segment], ago: [(label: String, cents: Int)]) -> some View {
+        Chart {
+            ForEach(marks) { seg in
+                BarMark(
+                    x: .value("Month", seg.month),
+                    y: .value("Spend", Double(seg.cents) / 100)
+                )
+                .foregroundStyle(by: .value("Category", seg.label))
+                // Everything else steps back rather than the chosen segment
+                // stepping forward — a segment already at full strength has
+                // nowhere brighter to go, and this is a stack where the
+                // neighbours are the thing obscuring it.
+                .opacity(picked == nil
+                         || (picked?.month == seg.month && picked?.slug == seg.slug) ? 1 : 0.25)
+            }
+
+            // Last year as a rule across each month rather than a second stack:
+            // the comparison is one number, and a second stack beside the first
+            // doubles the ink to say what a line already says.
+            ForEach(ago, id: \.label) { point in
+                if point.cents > 0 {
+                    RuleMark(
+                        x: .value("Month", point.label),
+                        yStart: .value("Last year", Double(point.cents) / 100),
+                        yEnd: .value("Last year", Double(point.cents) / 100)
+                    )
+                    .lineStyle(.init(lineWidth: 1.5, dash: [3, 2]))
+                    .foregroundStyle(Theme.quietText)
+                }
+            }
+        }
+        .chartForegroundStyleScale(domain: domain, range: range)
+        .chartLegend(position: .bottom, alignment: .leading, spacing: 8)
+        .chartYAxis {
+            AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
+        }
+        .chartScrollableAxes(.horizontal)
+        .chartXVisibleDomain(length: clampedWindow)
+        // Portrait gets a fixed height so the cards below it keep their
+        // rhythm. Landscape takes whatever is left, because a fixed 300 is
+        // taller than an iPhone has once the navigation and tab bars have
+        // taken theirs — and a chart that overflows is worse than a short one.
+        .modifier(ChartHeight(fill: isLandscape, fixed: 260))
+        .chartOverlay { proxy in
+            // Swift Charts' own selection reports the x value only, which for a
+            // stack names the month and not the segment inside it. Both
+            // coordinates are needed to say which category was touched, so the
+            // hit test is done here against the plot's own scales rather than
+            // against pixels.
+            GeometryReader { geo in
+                Rectangle().fill(.clear).contentShape(Rectangle())
+                    .onTapGesture { location in
+                        hit(location, proxy: proxy, geo: geo)
+                    }
+                    .gesture(
+                        LongPressGesture(minimumDuration: 0.2)
+                            .sequenced(before: DragGesture(minimumDistance: 0))
+                            .onChanged { value in
+                                if case .second(_, let drag?) = value {
+                                    hit(drag.location, proxy: proxy, geo: geo)
+                                }
+                            }
+                    )
+            }
+        }
+        .simultaneousGesture(
+            MagnifyGesture()
+                .onChanged { value in
+                    let base = windowAtPinchStart ?? clampedWindow
+                    if windowAtPinchStart == nil { windowAtPinchStart = base }
+                    // Pinching out shows fewer months, which is what zooming in
+                    // means for a time axis.
+                    window = Int((Double(base) / value.magnification).rounded())
+                }
+                .onEnded { _ in windowAtPinchStart = nil }
+        )
+        .animation(.snappy(duration: 0.2), value: picked)
+    }
+
+    /// Which segment a point lands on.
+    ///
+    /// The x scale gives the month directly. The y scale gives a figure, and
+    /// the segment is found by stacking that month's categories in draw order
+    /// until the running total passes it — the same order the bars were built
+    /// in, or the answer would name a different band than the finger was on.
+    private func hit(_ location: CGPoint, proxy: ChartProxy, geo: GeometryProxy) {
+        guard let plot = proxy.plotFrame else { return }
+        let origin = geo[plot].origin
+        guard let month: String = proxy.value(atX: location.x - origin.x),
+              let value: Double = proxy.value(atY: location.y - origin.y),
+              value >= 0
+        else { return }
+
+        var running = 0.0
+        for seg in segments where seg.month == month {
+            running += Double(seg.cents) / 100
+            if value <= running {
+                picked = Picked(month: month, slug: seg.slug,
+                                label: seg.label, cents: seg.cents)
+                return
+            }
+        }
+        // Above the stack is empty space, not the top segment.
+        picked = nil
     }
 
     private var drilledLabel: String {
         categories.first { $0.slug == drilled }?.label ?? drilled ?? ""
     }
 }
+
+/// What one segment came to.
+private struct PickedSegment: View {
+    let picked: CategoryTrendChart.Picked
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(picked.month)
+                .font(Theme.tileLabel)
+                .foregroundStyle(Theme.quietText)
+            Text(picked.label)
+                .font(Theme.note)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Text(picked.cents.asMoney)
+                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                .monospacedDigit()
+            Button(action: dismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(Theme.quietText)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .background(Theme.background, in: .rect(cornerRadius: 8))
+    }
+}
+
 
 /// A month, a subcategory within it, and the way through to its transactions.
 ///
@@ -606,5 +760,19 @@ private struct MonthDetail: View {
             }
         }
         .padding(.top, 2)
+    }
+}
+
+/// A fixed height, or all of what is going.
+private struct ChartHeight: ViewModifier {
+    let fill: Bool
+    let fixed: CGFloat
+
+    func body(content: Content) -> some View {
+        if fill {
+            content.frame(minHeight: 160, maxHeight: .infinity)
+        } else {
+            content.frame(height: fixed)
+        }
     }
 }
