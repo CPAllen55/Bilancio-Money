@@ -879,14 +879,27 @@ summary.get("/transactions", async (c) => {
      *
      * The wildcards are escaped, so a description containing % or _ still finds
      * itself rather than matching half the ledger. */
-    /* Every description in the period. This used to be fetched at the end,
-       purely to fill the menu on that column; it is needed up front now
-       because the subscription verdicts are worked out from it, and the page
-       query may have to filter on them.
+    /* Subscriptions cost real time to work out, and most requests do not need
+       them worked out across the period.
+     *
+     * Filtering by them does: filtering the page by a verdict computed from the
+     * page is circular, so that question has to be asked of the whole window.
+     * Labelling the rows does not — a verdict comes from eighteen months of one
+     * merchant's history and is the same answer whichever set the merchant was
+     * named in. So the labels are worked out after the page is known, from the
+     * page's own fifty-odd merchants.
+     *
+     * Both queries this skips were expensive. The first is a DISTINCT over the
+     * period; the second matches eighteen months of history against up to four
+     * hundred names, on `coalesce(merchant_name, name)` — a computed value no
+     * index can serve, so Postgres compares every row against every name. Run
+     * on every keystroke of a merchant search, on a ledger of any size, that is
+     * what exhausted the Worker and answered 503. */
+    const needsPeriodSubs = subFilter !== null;
 
-       Still capped, but the cap stopped being the limit of what is reachable
-       when the heading became typeable — anything past it is found by typing
-       part of it. */
+    /* The names on the column's menu, which the client shows whether or not
+       anything is being filtered. Kept here: it is one DISTINCT over the
+       period, and the expensive query is the other one. */
     const merchantRows = await db
       .selectDistinct({ name: displayName })
       .from(transactions)
@@ -895,13 +908,10 @@ summary.get("/transactions", async (c) => {
       .limit(400);
     const periodNames = merchantRows.map((r) => r.name).filter(Boolean);
 
-    /* Judged across the period's merchants rather than the page's.
-     *
-     * The page's would be enough to label the rows, and was, until the column
-     * became a filter: filtering the page by a verdict computed from the page
-     * is circular. So the question is asked of everything in the window, once,
-     * and both the filter and the labels read the same answer. */
-    const subs = await subscriptionsFor(db, ids, displayName, periodNames, new Date());
+    let subs: Awaited<ReturnType<typeof subscriptionsFor>> = { byKey: new Map(), names: new Set() };
+    if (needsPeriodSubs) {
+      subs = await subscriptionsFor(db, ids, displayName, periodNames, new Date());
+    }
 
     const textWhere = merchant
       ? and(inPeriod, ilike(displayName, "%" + merchant.replace(/[\\%_]/g, (ch) => "\\" + ch) + "%"))
@@ -1096,6 +1106,17 @@ summary.get("/transactions", async (c) => {
       total = totals[0].total;
       moneyIn = Number(totals[0].moneyIn);
       moneyOut = Number(totals[0].moneyOut);
+    }
+
+    /* The labels, now that there is a page to label. Asked of its own merchants
+       — fifty at most, against four hundred — and the answers are the same
+       ones: a verdict is read off eighteen months of a merchant's history, and
+       does not depend on which set the merchant was named in. */
+    if (!needsPeriodSubs) {
+      const pageNames = [
+        ...new Set((rows as Drilled[]).map((r) => r.merchantName ?? r.name).filter(Boolean)),
+      ];
+      subs = await subscriptionsFor(db, ids, displayName, pageNames, new Date());
     }
 
     return c.json({
