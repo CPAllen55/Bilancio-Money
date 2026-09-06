@@ -150,6 +150,15 @@ private struct CategoryTrendChart: View {
     /// measured from where it began rather than compounding each frame.
     @State private var windowAtPinchStart: Int?
 
+    /// The month at the left edge of what is on screen.
+    ///
+    /// Bound rather than left to the chart, for two reasons. A scrollable chart
+    /// with no position starts at the beginning of its data, which here is the
+    /// oldest month — so zooming in walked you to two years ago and left you
+    /// there. And holding the value means a pinch can keep the months you were
+    /// looking at on screen instead of throwing the view somewhere else.
+    @State private var scrollAnchor: String = ""
+
     /// The segment under the last touch: a month, and one category within it.
     @State private var picked: Picked?
 
@@ -218,6 +227,34 @@ private struct CategoryTrendChart: View {
         min(max(3, window), max(3, series.count))
     }
 
+    private var labels: [String] { series.map(\.shortLabel) }
+
+    /// The month to put at the left edge so that `width` months are on screen
+    /// and the last of them is `end` — clamped so neither edge runs off the
+    /// data and leaves a band of empty chart.
+    private func anchor(endingAt end: Int, width: Int) -> String {
+        guard !labels.isEmpty else { return "" }
+        let last = max(0, labels.count - width)
+        return labels[min(max(0, end - width + 1), last)]
+    }
+
+    /// Opens on the most recent months. A trend is read from the near end.
+    private func anchorAtLatest() {
+        scrollAnchor = anchor(endingAt: labels.count - 1, width: clampedWindow)
+    }
+
+    /// Zooming keeps the right-hand edge where it was, so months leave and
+    /// arrive at the far end rather than the view jumping to a different part
+    /// of the year every time the window changes.
+    private func rescale(from previous: Int) {
+        guard let leading = labels.firstIndex(of: scrollAnchor) else {
+            anchorAtLatest()
+            return
+        }
+        let trailing = min(labels.count - 1, leading + previous - 1)
+        scrollAnchor = anchor(endingAt: trailing, width: clampedWindow)
+    }
+
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 10) {
@@ -237,7 +274,7 @@ private struct CategoryTrendChart: View {
                     if let picked {
                         PickedSegment(picked: picked) { self.picked = nil }
                     } else if !isLandscape {
-                        Text("Pinch to zoom. Touch a segment for its figure. Turn the phone for a wider view.")
+                        Text("Pinch to zoom, drag to scroll through the months. Touch a segment for its figure, or hold and slide across them. Turn the phone for a wider view.")
                             .font(Theme.note)
                             .foregroundStyle(Theme.quietText)
                     }
@@ -317,6 +354,13 @@ private struct CategoryTrendChart: View {
         }
         .chartScrollableAxes(.horizontal)
         .chartXVisibleDomain(length: clampedWindow)
+        .chartScrollPosition(x: $scrollAnchor)
+        .onAppear { if scrollAnchor.isEmpty { anchorAtLatest() } }
+        // Drilling into a parent rebuilds the marks but not the months, so the
+        // anchor still names a month that exists — unless the range itself
+        // changed underneath, which is what this catches.
+        .onChange(of: series.count) { anchorAtLatest() }
+        .onChange(of: clampedWindow) { previous, _ in rescale(from: previous) }
         // Portrait gets a fixed height so the cards below it keep their
         // rhythm. Landscape takes whatever is left, because a fixed 300 is
         // taller than an iPhone has once the navigation and tab bars have
@@ -333,8 +377,13 @@ private struct CategoryTrendChart: View {
                     .onTapGesture { location in
                         hit(location, proxy: proxy, geo: geo)
                     }
+                    // Long enough that it cannot be reached by accident on
+                    // the way to a scroll. At 0.2s it could: a finger that
+                    // rests for a moment before sliding — which is how most
+                    // people start a drag — had already become a scrub, and
+                    // the chart would not move sideways at all.
                     .gesture(
-                        LongPressGesture(minimumDuration: 0.2)
+                        LongPressGesture(minimumDuration: 0.45)
                             .sequenced(before: DragGesture(minimumDistance: 0))
                             .onChanged { value in
                                 if case .second(_, let drag?) = value {
