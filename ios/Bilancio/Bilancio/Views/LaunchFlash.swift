@@ -2,7 +2,7 @@
 //  LaunchFlash.swift
 //  Bilancio
 //
-//  The owl arriving: far too big for the screen, settling into it.
+//  The owl, briefly, on the way to the dashboards.
 //
 //  It covers the moment the app is doing its least interesting work — fetching
 //  the publishable key, configuring Clerk, restoring a session — so the wait
@@ -61,9 +61,6 @@ struct LaunchFlash: View {
                     .interpolation(.high)
                     .frame(width: art.width, height: art.height)
                     .position(x: geo.size.width / 2, y: geo.size.height / 2)
-                    // Arriving from far too close and settling back, rather
-                    // than growing into place: the owl comes to meet you.
-                    .scaleEffect(settled ? 1 : 2.6)
                     .opacity(settled ? 1 : 0)
             }
             .frame(width: geo.size.width, height: geo.size.height)
@@ -77,24 +74,15 @@ struct LaunchFlash: View {
     }
 
     private func play() async {
-        // Reduce Motion is a request not to be moved at, not a request to see
-        // nothing: the owl still appears, he simply arrives rather than flying
-        // in at the reader.
-        guard !reduceMotion else {
-            settled = true
-            try? await Task.sleep(for: .milliseconds(700))
-            withAnimation(.easeOut(duration: 0.28)) { fading = true }
-            try? await Task.sleep(for: .milliseconds(280))
-            showing = false
-            return
-        }
+        // There is nothing here Reduce Motion needs to suppress — the owl
+        // fades in and out and does not move — so both paths are the same
+        // except for the fade, which is what that setting is about.
+        let arrive = reduceMotion ? 0.0 : 0.3
 
-        // Long enough to read as deceleration rather than a snap, with just
-        // enough bounce to land rather than stop.
-        withAnimation(.spring(duration: 0.75, bounce: 0.22)) { settled = true }
-        try? await Task.sleep(for: .milliseconds(950))
-        withAnimation(.easeOut(duration: 0.32)) { fading = true }
-        try? await Task.sleep(for: .milliseconds(320))
+        withAnimation(.easeOut(duration: arrive)) { settled = true }
+        try? await Task.sleep(for: .milliseconds(Int(arrive * 1000) + 450))
+        withAnimation(.easeOut(duration: 0.28)) { fading = true }
+        try? await Task.sleep(for: .milliseconds(280))
         showing = false
     }
 }
