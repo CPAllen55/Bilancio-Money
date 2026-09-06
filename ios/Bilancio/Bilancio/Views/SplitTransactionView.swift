@@ -119,6 +119,33 @@ final class SplitEditor {
             .sorted { $0.label < $1.label }
     }
 
+    /// The same leaves, under the parents they belong to.
+    ///
+    /// A flat list of thirty-one names is unusable, and the parent is the thing
+    /// somebody navigates by — "it is a Food thing" comes before "it is
+    /// Groceries". The parents are headings and carry no tag of their own, so
+    /// they cannot be chosen: a transaction belongs to a leaf, and one filed on
+    /// a parent would be counted twice against its own children.
+    var groupedPickable: [(parent: TransactionsResponse.Category,
+                           children: [TransactionsResponse.Category])] {
+        let leaves = pickable
+        let byParent = Dictionary(grouping: leaves) { $0.parentSlug ?? "" }
+        let parents = categories.filter { $0.parentSlug == nil }
+
+        return parents.compactMap { parent in
+            guard let kids = byParent[parent.slug], !kids.isEmpty else { return nil }
+            return (parent, kids)
+        }
+    }
+
+    /// Leaves whose parent is missing from the tree. Shown rather than dropped:
+    /// a category that cannot be chosen because of a gap in the hierarchy is a
+    /// category somebody will hunt for and never find.
+    var orphanPickable: [TransactionsResponse.Category] {
+        let known = Set(categories.filter { $0.parentSlug == nil }.map(\.slug))
+        return pickable.filter { !known.contains($0.parentSlug ?? "") }
+    }
+
     func add() {
         drafts.append(Draft(categoryId: pickable.first?.id, magnitude: 0))
     }
@@ -193,10 +220,24 @@ struct SplitTransactionView: View {
                 Section {
                     Picker("Category", selection: $editor.categoryId) {
                         Text("Unset").tag(String?.none)
-                        ForEach(editor.pickable) { cat in
-                            Text(cat.label).tag(String?.some(cat.id))
+
+                        ForEach(editor.groupedPickable, id: \.parent.id) { group in
+                            Section(group.parent.label) {
+                                ForEach(group.children) { cat in
+                                    Text(cat.label).tag(String?.some(cat.id))
+                                }
+                            }
+                        }
+
+                        if !editor.orphanPickable.isEmpty {
+                            Section("Other") {
+                                ForEach(editor.orphanPickable) { cat in
+                                    Text(cat.label).tag(String?.some(cat.id))
+                                }
+                            }
                         }
                     }
+                    .pickerStyle(.navigationLink)
                 } header: {
                     Text("Filed under")
                 } footer: {
@@ -214,10 +255,22 @@ struct SplitTransactionView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Picker("Category", selection: $draft.categoryId) {
                                 Text("Choose…").tag(String?.none)
-                                ForEach(editor.pickable) { cat in
-                                    Text(cat.label).tag(String?.some(cat.id))
+                                ForEach(editor.groupedPickable, id: \.parent.id) { group in
+                                    Section(group.parent.label) {
+                                        ForEach(group.children) { cat in
+                                            Text(cat.label).tag(String?.some(cat.id))
+                                        }
+                                    }
+                                }
+                                if !editor.orphanPickable.isEmpty {
+                                    Section("Other") {
+                                        ForEach(editor.orphanPickable) { cat in
+                                            Text(cat.label).tag(String?.some(cat.id))
+                                        }
+                                    }
                                 }
                             }
+                            .pickerStyle(.navigationLink)
 
                             HStack {
                                 Text("Amount")

@@ -16,6 +16,9 @@ struct RootView: View {
     /// Applied at the root so it reaches sheets and pushed screens too — set
     /// deeper it would colour the tab that changed it and nothing else.
     @AppStorage("appearance") private var appearance: Appearance = .system
+    /// Shown over everything on a cold start, and never again for the life of
+    /// the process — it belongs to launching, not to appearing.
+    @State private var launching = true
 
     var body: some View {
         Group {
@@ -33,8 +36,21 @@ struct RootView: View {
                     .environment(clerk)
             }
         }
+        // Filled before the overlay is attached. An overlay takes the size of
+        // what it covers, and at launch that is a ProgressView the size of a
+        // coin — which is exactly how big the launch screen came out.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task { await bootstrap.start() }
         .preferredColorScheme(appearance.colorScheme)
+        .overlay {
+            if launching {
+                // Over the top rather than before it, so the work underneath —
+                // fetching the key, configuring Clerk, restoring the session —
+                // happens during the animation instead of after it.
+                LaunchFlash(showing: $launching)
+                    .transition(.opacity)
+            }
+        }
     }
 }
 
@@ -69,28 +85,28 @@ private struct SessionGate: View {
 /// an empty tab is a worse answer than an absent one.
 private struct SignedIn: View {
     var body: some View {
-        TabView {
+        TabView(selection: .constant("b")) {
             // In the order the questions get asked: where things stand, how
             // that compares with before, what it was supposed to be, and then
             // the rows behind all three. Transactions sits last because it is
             // the one you arrive at from the others as often as you open it.
-            Tab("Overview", systemImage: "chart.pie") {
+            Tab("Overview", systemImage: "chart.pie", value: "o") {
                 OverviewView()
             }
-            Tab("Trend", systemImage: "chart.bar") {
+            Tab("Trend", systemImage: "chart.bar", value: "r") {
                 TrendView()
             }
-            Tab("Budgeting", systemImage: "slider.horizontal.3") {
+            Tab("Budgeting", systemImage: "slider.horizontal.3", value: "b") {
                 BudgetingView()
             }
-            Tab("Transactions", systemImage: "list.bullet") {
+            Tab("Transactions", systemImage: "list.bullet", value: "t") {
                 TransactionsView()
             }
             // A tab bar holds five. There are seven dashboards, so the fifth
             // slot is the way to the rest rather than one more of them — which
             // is better than letting iOS build its own overflow list, and
             // better than leaving Budgeting reachable only from inside Tracker.
-            Tab("More", systemImage: "ellipsis.circle") {
+            Tab("More", systemImage: "ellipsis.circle", value: "m") {
                 MoreView()
             }
         }
