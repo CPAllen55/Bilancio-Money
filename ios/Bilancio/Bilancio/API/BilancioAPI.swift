@@ -45,9 +45,25 @@ enum APIError: LocalizedError {
 }
 
 /// The shape of an error body from the Worker.
+///
+/// Three different fields carry the explanation, because three different kinds
+/// of failure write them. A 400 from our own validation puts it in `reason`; a
+/// failure at Plaid puts Plaid's own sentence in `message` alongside a `code`
+/// like INVALID_FIELD; everything else has only the `error` slug. Reading just
+/// the first two is how "The server returned 502. plaid_error" happened — the
+/// response said exactly what was wrong and the app threw it away.
 private struct APIErrorBody: Decodable {
     let error: String
     let reason: String?
+    let message: String?
+    let code: String?
+
+    /// The most specific thing the body has to say.
+    var explanation: String {
+        let text = reason ?? message ?? error
+        guard let code, !code.isEmpty, code != text else { return text }
+        return "\(text) (\(code))"
+    }
 }
 
 /// A thin JSON GET client.
@@ -123,8 +139,9 @@ struct APIClient {
                 }
                 // The Worker's 400s explain themselves — "the parts add up to
                 // more than the transaction" is the whole message a person
-                // needs, and burying it under a status code helps nobody.
-                throw APIError.http(status: status, body: body.reason ?? body.error)
+                // needs, and burying it under a status code helps nobody. The
+                // same goes for a 502 carrying Plaid's own complaint.
+                throw APIError.http(status: status, body: body.explanation)
             }
             throw APIError.http(status: status, body: String(data: data, encoding: .utf8) ?? "")
         }
