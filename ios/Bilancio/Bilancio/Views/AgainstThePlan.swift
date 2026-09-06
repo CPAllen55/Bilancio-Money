@@ -19,114 +19,20 @@
 import ClerkKit
 import SwiftUI
 
-@MainActor
-@Observable
-final class TrackerModel {
-    enum State {
-        case loading
-        case loaded(SummaryResponse)
-        case failed(String)
-    }
-
-    private(set) var state: State = .loading
-
-    /// `YYYY-MM`, or nil for the month in progress.
-    var month: String?
-    /// How many months back from the chosen one to include, that one included.
-    var trailing: Int = 1
-
-    private let client = APIClient(baseURL: Bilancio.apiBaseURL) {
-        guard let session = Clerk.shared.session else { return nil }
-        return try await session.getToken()
-    }
-
-    /// The twelve months up to now, newest first.
-    var months: [String] {
-        let cal = Calendar(identifier: .gregorian)
-        var out: [String] = []
-        var date = Date()
-        for _ in 0..<12 {
-            let c = cal.dateComponents([.year, .month], from: date)
-            if let y = c.year, let m = c.month {
-                out.append(String(format: "%04d-%02d", y, m))
-            }
-            date = cal.date(byAdding: .month, value: -1, to: date) ?? date
-        }
-        return out
-    }
-
-    var chosenMonth: String { month ?? months.first ?? "" }
-
-    /// One month is `month:`; several is a `span:` ending at the one chosen.
-    var range: SummaryRange {
-        let end = chosenMonth
-        guard trailing > 1, let i = months.firstIndex(of: end),
-              months.indices.contains(i + trailing - 1)
-        else { return .month(end) }
-        return .span(from: months[i + trailing - 1], to: end)
-    }
-
-    func load() async {
-        do { state = .loaded(try await client.summary(range: range)) }
-        catch { state = .failed(error.localizedDescription) }
-    }
-}
-
-struct TrackerView: View {
-    @State private var model = TrackerModel()
-    @State private var editingPlan = false
+/// Every category against its plan, for whatever period the caller is showing.
+///
+/// Lifted out of a screen of its own and into the Overview, because "what did
+/// this period come to" and "which budgets are running out" are the same
+/// question asked twice — the first is the headline and the second is the
+/// working. Splitting them across two tabs meant the answer and its reasons
+/// were never on screen together.
+struct AgainstThePlanSection: View {
+    let data: SummaryResponse
+    /// Inherited so a drill-down covers the same window the figures do.
+    let range: SummaryRange
+    let periodLabel: String
 
     var body: some View {
-        NavigationStack {
-            Group {
-                switch model.state {
-                case .loading:
-                    ProgressView("Loading…")
-
-                case .failed(let message):
-                    ContentUnavailableView {
-                        Label("Could not load the tracker", systemImage: "exclamationmark.triangle")
-                    } description: {
-                        Text(message)
-                    } actions: {
-                        Button("Try again") { Task { await model.load() } }
-                            .buttonStyle(.borderedProminent)
-                    }
-
-                case .loaded(let data):
-                    content(data)
-                }
-            }
-            .navigationTitle("Against the plan")
-            .owlMark()
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    // A sheet rather than a push. Pushed onto this stack the
-                    // plan editor took the tab bar with it, leaving no way back
-                    // to any other dashboard — and a screen you can only leave
-                    // by finding a back chevron is a screen people get stuck in.
-                    Button {
-                        editingPlan = true
-                    } label: {
-                        Label("Edit the plan", systemImage: "slider.horizontal.3")
-                    }
-                }
-            }
-            .refreshable { await model.load() }
-        }
-        .tint(Theme.accent)
-        .task { await model.load() }
-        .sheet(isPresented: $editingPlan) {
-            BudgetingView(onDone: { editingPlan = false })
-                // Changing the plan changes what this screen measures against,
-                // so it reloads on the way out rather than showing yesterday's
-                // budget beside today's spending.
-                .onDisappear { Task { await model.load() } }
-        }
-    }
-
-    private func content(_ data: SummaryResponse) -> some View {
         let categories = Dictionary(
             uniqueKeysWithValues: data.categoryList.map { ($0.slug, $0) }
         )
@@ -146,87 +52,56 @@ struct TrackerView: View {
             }
             .sorted { $0.1 > $1.1 }
 
-        return ScrollView {
-            VStack(spacing: Theme.gutter) {
-                // Bound to the resolved month rather than the optional behind
-                // it. With a nil selection no option carried a matching tag, so
-                // the menu rendered with no label at all — a bare chevron in
-                // the corner, which is a control nobody can find.
-                Picker("Month", selection: Binding(
-                    get: { model.chosenMonth },
-                    set: { model.month = $0; Task { await model.load() } }
-                )) {
-                    ForEach(model.months, id: \.self) { m in
-                        Text(monthName(m)).tag(m)
-                    }
-                }
-                .pickerStyle(.menu)
+        return VStack(alignment: .leading, spacing: Theme.gutter) {
+            Text("Against the plan")
+                .font(Theme.tileLabel)
+                .foregroundStyle(Theme.quietText)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Picker("Trailing", selection: Bindable(model).trailing) {
-                    Text("1 month").tag(1)
-                    Text("3 months").tag(3)
-                    Text("6 months").tag(6)
-                    Text("12 months").tag(12)
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: model.trailing) { Task { await model.load() } }
+            // Income first, and fixed there. A section that showed only what
+            // every category cost would say nothing about the other half of the
+            // plan — a month can be inside every spending budget it has and
+            // still be a bad month.
+            if data.totals.income > 0 || (data.budget?.income ?? 0) > 0 {
+                TrackerCard(
+                    label: "Income",
+                    colour: categories["income"].map { Color(hex: $0.colour) } ?? Theme.positive,
+                    actual: data.totals.income,
+                    budget: data.budget?.available == true ? (data.budget?.income ?? 0) : 0,
+                    isIncome: true,
+                    // Its sources — salary, dividends, interest — carry no
+                    // budget of their own, because income is planned as one
+                    // monthly figure. They are shares of what came in.
+                    children: incomeSources(in: data, categories: categories),
+                    range: range,
+                    periodLabel: periodLabel
+                )
+            }
 
-                // Income first, and fixed there. "Against the plan" that showed
-                // only what every category cost would say nothing about the
-                // other half of the plan — a month can be inside every spending
-                // budget it has and still be a bad month.
-                if data.totals.income > 0 || (data.budget?.income ?? 0) > 0 {
-                    TrackerCard(
-                        label: "Income",
-                        colour: categories["income"].map { Color(hex: $0.colour) } ?? Theme.positive,
-                        actual: data.totals.income,
-                        budget: data.budget?.available == true ? (data.budget?.income ?? 0) : 0,
-                        isIncome: true,
-                        // Its sources — salary, dividends, interest — carry no
-                        // budget of their own, because income is planned as one
-                        // monthly figure. They are shares of what came in.
-                        children: incomeSources(in: data, categories: categories),
-                        range: model.range,
-                        periodLabel: periodLabel
-                    )
-                }
+            ForEach(rows, id: \.0.id) { cat, spent, plan in
+                TrackerCard(
+                    label: cat.label,
+                    colour: Color(hex: cat.colour),
+                    actual: spent,
+                    budget: data.budget?.available == true ? plan : 0,
+                    isIncome: false,
+                    // What is inside this parent, biggest first, with each
+                    // subcategory measured against its own plan the same way
+                    // the parent is against its.
+                    children: children(of: cat.slug, in: data, categories: categories),
+                    range: range,
+                    periodLabel: periodLabel
+                )
+            }
 
-                ForEach(rows, id: \.0.id) { cat, spent, plan in
-                    TrackerCard(
-                        label: cat.label,
-                        colour: Color(hex: cat.colour),
-                        actual: spent,
-                        budget: data.budget?.available == true ? plan : 0,
-                        isIncome: false,
-                        // What is inside this parent, biggest first, with each
-                        // subcategory measured against its own plan the same
-                        // way the parent is against its.
-                        children: children(of: cat.slug, in: data, categories: categories),
-                        range: model.range,
-                        periodLabel: periodLabel
-                    )
-                }
-
-                if rows.isEmpty && data.totals.income == 0 {
-                    ContentUnavailableView(
-                        "Nothing in this period",
-                        systemImage: "tray",
-                        description: Text("No spending or income was recorded.")
-                    )
-                    .padding(.top, 40)
+            if rows.isEmpty && data.totals.income == 0 {
+                Card {
+                    Text("No spending or income recorded in this period.")
+                        .font(Theme.note)
+                        .foregroundStyle(Theme.quietText)
                 }
             }
-            .padding()
         }
-        .background(Theme.background)
-    }
-
-    /// What the drill-down calls the period it is showing.
-    private var periodLabel: String {
-        model.trailing > 1
-            ? "\(model.trailing) months to \(monthName(model.chosenMonth))"
-            : monthName(model.chosenMonth)
     }
 
     private func children(
@@ -282,7 +157,7 @@ struct TrackerChild: Identifiable {
     var id: String { slug }
 }
 
-private struct TrackerCard: View {
+struct TrackerCard: View {
     let label: String
     let colour: Color
     let actual: Int

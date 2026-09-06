@@ -79,12 +79,13 @@ private struct SignedIn: View {
             Tab("Trend", systemImage: "chart.bar") {
                 TrendView()
             }
-            // Tracker rather than Budgeting, because the two are read at very
-            // different rates: performance against the plan is a daily
-            // question, editing the plan is an occasional one. Budgeting is a
-            // push away from here, the way Forecast is a push away from it.
-            Tab("Tracker", systemImage: "target") {
-                TrackerView()
+            // Tracker is gone as a tab: it is the Overview's lower half now.
+            // "What did this period come to" and "which budgets are running
+            // out" are the same question asked twice, and splitting them across
+            // two tabs meant the answer and its reasons were never on screen
+            // together. Net Worth takes the slot back.
+            Tab("Net Worth", systemImage: "building.columns") {
+                NetWorthView()
             }
             // A tab bar holds five. There are seven dashboards, so the fifth
             // slot is the way to the rest rather than one more of them — which

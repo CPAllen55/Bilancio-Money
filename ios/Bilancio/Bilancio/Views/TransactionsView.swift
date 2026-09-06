@@ -373,7 +373,7 @@ extension Color {
 /// and sixteen do not, and the named months are the reason this exists: a
 /// ledger that can only show the current month is a ledger you cannot check
 /// last February with.
-private struct PeriodMenu: View {
+struct PeriodMenu: View {
     @Binding var range: SummaryRange
     let months: [String]
     let onChange: () -> Void

@@ -2,9 +2,13 @@
 //  OverviewView.swift
 //  Bilancio
 //
-//  Where things stand: this period at a glance, then the same four figures
-//  twice over — against the period before, and against what the period was
-//  expected to cost.
+//  Where things stand — the first screen, and the one that has to answer the
+//  whole question before anything else is read.
+//
+//  Two figures lead it, and they are the same figure twice: what the period
+//  actually came to, and what it was supposed to. Each is measured against the
+//  other and against the period before, so three of the four comparisons a
+//  person makes are already made. Everything below is the working.
 //
 //  The headline is totals.net. It is NOT safeToSpend.remaining, which is
 //  floored at zero and so reads a month that spent more than it earned as 0
@@ -30,6 +34,21 @@ final class OverviewModel {
     private(set) var sparklines: TrendResponse.Sparklines?
 
     var range: SummaryRange = .thisMonth
+
+    /// The last twelve months, newest first, for the period menu.
+    var recentMonths: [String] {
+        let cal = Calendar(identifier: .gregorian)
+        var out: [String] = []
+        var date = Date()
+        for _ in 0..<12 {
+            let c = cal.dateComponents([.year, .month], from: date)
+            if let y = c.year, let m = c.month {
+                out.append(String(format: "%04d-%02d", y, m))
+            }
+            date = cal.date(byAdding: .month, value: -1, to: date) ?? date
+        }
+        return out
+    }
 
     private let client = APIClient(baseURL: Bilancio.apiBaseURL) {
         // Optional-chaining `session?.getToken()` would give a String?? here,
@@ -100,30 +119,17 @@ struct OverviewView: View {
     private func content(_ s: SummaryResponse) -> some View {
         ScrollView {
             VStack(spacing: Theme.sectionGap) {
-                Picker("Period", selection: Bindable(model).range) {
-                    ForEach(SummaryRange.allCases, id: \.self) { r in
-                        Text(r.label).tag(r)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: model.range) { Task { await model.load() } }
-
-                StandingCard(summary: s)
-                ActualTiles(summary: s, spark: model.sparklines)
-                BudgetTiles(summary: s)
-
-                if let note = budgetNote(s.budget) {
-                    Text(note)
-                        .font(Theme.note)
-                        .foregroundStyle(Theme.quietText)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                PeriodMenu(range: Bindable(model).range,
+                           months: model.recentMonths) {
+                    Task { await model.load() }
                 }
 
-                // Zero accounts is not zero spending. Without saying so, an
-                // untouched install looks identical to a broken one.
-                // Nothing linked is not an error, but it is the one state
-                // where the whole screen is zeros and the only useful thing on
-                // it is the way out.
+                HeadlineCard(summary: s, spark: model.sparklines?.net)
+                PlanCard(summary: s)
+
+                // Nothing linked is not an error, but it is the one state where
+                // the whole screen is zeros and the only useful thing on it is
+                // the way out.
                 if s.accountsCounted == 0 {
                     Card {
                         VStack(alignment: .leading, spacing: 10) {
@@ -136,6 +142,17 @@ struct OverviewView: View {
                                 .padding(.top, 2)
                         }
                     }
+                } else {
+                    AgainstThePlanSection(data: s,
+                                          range: model.range,
+                                          periodLabel: s.range.label)
+                }
+
+                if let note = budgetNote(s.budget) {
+                    Text(note)
+                        .font(Theme.note)
+                        .foregroundStyle(Theme.quietText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding()
@@ -149,47 +166,77 @@ struct OverviewView: View {
             return "Not enough history yet to say what this period should have cost."
         }
         guard let months = b.monthsOfHistory else { return nil }
-        return "Budget shaped from \(months) month\(months == 1 ? "" : "s") of history."
+        return "The plan is shaped from \(months) month\(months == 1 ? "" : "s") of history."
     }
 }
 
-// MARK: - The headline
+// MARK: - What the period came to
 
-/// The answer first: what was kept, or what was overspent, and the two figures
-/// it is worked out from.
-private struct StandingCard: View {
+/// Net Balance: the answer, and the two things worth measuring it against.
+private struct HeadlineCard: View {
     let summary: SummaryResponse
+    let spark: [Int]?
 
     private var net: Int { summary.totals.net }
     private var overspent: Bool { net < 0 }
 
+    /// Absent rather than zero when there is no plan. A budgeted net of nothing
+    /// is the absence of a plan, not a plan to break even, and comparing
+    /// against it would invent a target.
+    private var plannedNet: Int? {
+        guard let b = summary.budget, b.available, b.income > 0 || b.expense > 0 else { return nil }
+        return b.net
+    }
+
     var body: some View {
         Card {
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Net Balance")
+                        .font(Theme.tileLabel)
+                        .foregroundStyle(Theme.quietText)
+
                     Text(summary.range.label)
-                        .font(Theme.body)
+                        .font(Theme.note)
                         .foregroundStyle(Theme.quietText)
 
                     // The sign is kept and the colour follows it, rather than
-                    // the figure being made absolute and the meaning moved
-                    // into a word beside it.
+                    // the figure being made absolute and the meaning moved into
+                    // a word beside it.
                     Text(net.asMoney)
-                        .font(Theme.figure(40))
+                        .font(Theme.figure(46))
                         .monospacedDigit()
                         .foregroundStyle(Theme.tint(forNet: net))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.5)
+                        .minimumScaleFactor(0.4)
 
                     Text(subline)
                         .font(Theme.body)
                         .foregroundStyle(Theme.quietText)
                 }
 
-                // Each bar runs to whichever is larger of its own figure and
-                // its own plan, so passing the plan is what fills the track.
-                // Only when neither has a plan do the two share a scale, and
-                // then it is so they can still be read against each other.
+                if let spark, spark.contains(where: { $0 != 0 }) {
+                    Sparkline(values: spark)
+                        .stroke(Theme.tint(forNet: net),
+                                style: .init(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                        .frame(height: 30)
+                }
+
+                Divider()
+
+                HStack(spacing: 0) {
+                    Metric(caption: "vs budget",
+                           value: plannedNet.map { net - $0 },
+                           betterWhen: .up,
+                           empty: "no plan yet")
+                    Divider().frame(height: 38)
+                    Metric(caption: "vs \(summary.comparison.label.lowercased())",
+                           value: net - summary.previous.net,
+                           betterWhen: .up)
+                }
+
+                // Both bars, and both marks, on the scale each deserves — see
+                // ProportionBar for why a bar with a plan runs to its own.
                 let noPlanScale = max(summary.totals.income, summary.totals.expense)
                 VStack(spacing: 12) {
                     ProportionBar(label: "Income", amount: summary.totals.income,
@@ -199,29 +246,14 @@ private struct StandingCard: View {
                                   planned: plannedExpense, fallbackScale: noPlanScale,
                                   tint: Theme.expenseTint, verb: "spent")
                 }
-
-                if let status = budgetStatus {
-                    Label(status.text, systemImage: status.icon)
-                        .font(Theme.note)
-                        .foregroundStyle(status.tint)
-                }
             }
         }
     }
 
-    private var budget: SummaryResponse.Budget? {
-        guard let b = summary.budget, b.available else { return nil }
-        return b
-    }
+    /// 0 rather than nil for "no plan", which is how the Worker guards it too.
+    private var plannedIncome: Int { max(0, summary.budget?.income ?? 0) }
+    private var plannedExpense: Int { max(0, summary.budget?.expense ?? 0) }
 
-    /// 0 rather than nil for "no plan", which is how the Worker guards it too:
-    /// a budget of zero is the absence of the information, not a plan to earn
-    /// or spend nothing, and both read as "no ‘of ...’ clause".
-    private var plannedIncome: Int { max(0, budget?.income ?? 0) }
-    private var plannedExpense: Int { max(0, budget?.expense ?? 0) }
-
-    /// What the headline figure means, in the terms the reader is in.
-    ///
     /// A finished period gets no daily rate: there are no days left to spread
     /// anything over, and "about $40 a day for the 0 days left" is what
     /// arithmetic says rather than what a person would.
@@ -233,133 +265,110 @@ private struct StandingCard: View {
         }
         return "About \(safe.perDay.asMoney) a day for the \(safe.daysLeft) day\(safe.daysLeft == 1 ? "" : "s") left."
     }
-
-    /// Reported against the budget, not against elapsed days.
-    ///
-    /// A straight-line pace assumes money leaves evenly and it does not — rent
-    /// clears on the 1st, and an indicator that cries wolf for a week every
-    /// month teaches people to ignore it. The budget is an actual limit with no
-    /// prediction attached.
-    private var budgetStatus: (text: String, icon: String, tint: Color)? {
-        guard let b = summary.budget, b.available, b.expense > 0 else { return nil }
-        let over = summary.totals.expense - b.expense
-        return over > 0
-            ? ("\(over.asMoney) over budget", "exclamationmark.triangle.fill", Theme.negative)
-            : ("\((-over).asMoney) left in budget", "checkmark.circle.fill", Theme.positive)
-    }
 }
 
-// MARK: - The four figures
+// MARK: - What it was supposed to come to
 
-/// In the order the ledger reads: what came in, what went out, what is left,
-/// and what that is as a share.
-private struct ActualTiles: View {
-    let summary: SummaryResponse
-    let spark: TrendResponse.Sparklines?
-
-    var body: some View {
-        let t = summary.totals
-        let p = summary.previous
-
-        VStack(alignment: .leading, spacing: 8) {
-        Text("Compared with \(summary.comparison.label.lowercased())")
-            .font(Theme.tileLabel)
-            .foregroundStyle(Theme.quietText)
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: Theme.gutter),
-                            GridItem(.flexible(), spacing: Theme.gutter)],
-                  spacing: Theme.gutter) {
-
-            StatTile(label: "Income", value: t.income.asShortMoney,
-                     comparison: .init(current: t.income, against: p.income,
-                                       betterWhen: .up),
-                     spark: spark?.income, sparkTint: Theme.incomeTint)
-
-            StatTile(label: "Expenses", value: t.expense.asShortMoney,
-                     comparison: .init(current: t.expense, against: p.expense,
-                                       betterWhen: .down),
-                     spark: spark?.expense, sparkTint: Theme.expenseTint)
-
-            StatTile(label: "Net Balance", value: t.net.asShortMoney,
-                     comparison: .init(current: t.net, against: p.net,
-                                       betterWhen: .up),
-                     spark: spark?.net, sparkTint: Theme.tint(forNet: t.net))
-
-            StatTile(label: "Net Balance Rate",
-                     value: t.savingsRate.map { $0.formatted(.number.precision(.fractionLength(1))) + "%" } ?? "—",
-                     comparison: rateComparison,
-                     emptyNote: t.income > 0 ? nil : "no income recorded")
-        }
-        }
-    }
-
-    /// Percentages are compared in tenths of a point, so they are carried as
-    /// such and divided back out for display. Comparison speaks in integers
-    /// because everything else it measures is cents.
-    private var rateComparison: Comparison? {
-        guard let now = summary.totals.savingsRate,
-              let before = summary.previous.savingsRate else { return nil }
-        return .init(current: Int((now * 10).rounded()),
-                     against: Int((before * 10).rounded()),
-                     betterWhen: .up)
-    }
-}
-
-// MARK: - The same four, against the plan
-
-/// Same order as the row above, and it has to stay that way: the two grids
-/// read as one four-column table, each figure sitting under what it was
-/// planned to be.
-private struct BudgetTiles: View {
+/// Net Balance Budget: the same figure the plan expected, against what actually
+/// happened and against the period before.
+private struct PlanCard: View {
     let summary: SummaryResponse
 
+    private var available: Bool {
+        guard let b = summary.budget else { return false }
+        return b.available && (b.income > 0 || b.expense > 0)
+    }
+
+    private var plannedNet: Int { summary.budget?.net ?? 0 }
+
     var body: some View {
-        let b = summary.budget
-        let t = summary.totals
-        let available = b?.available ?? false
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Net Balance Budget")
+                    .font(Theme.tileLabel)
+                    .foregroundStyle(Theme.quietText)
 
-        // Three of the four need income to mean anything, and income only
-        // exists if an account that receives it is linked. With cards alone the
-        // honest answer is a dash: a budgeted income of $0 is not a plan to
-        // earn nothing, it is the absence of the information.
-        let haveIn = available && (b?.income ?? 0) > 0
-        let haveOut = available && (b?.expense ?? 0) > 0
-        let noHistory = available ? "nothing to compare" : "not enough history"
+                if available {
+                    Text(plannedNet.asMoney)
+                        .font(Theme.figure(32))
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.tint(forNet: plannedNet))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
 
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Against plan")
-                .font(Theme.tileLabel)
-                .foregroundStyle(Theme.quietText)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                    Divider()
 
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: Theme.gutter),
-                                GridItem(.flexible(), spacing: Theme.gutter)],
-                      spacing: Theme.gutter) {
-
-                StatTile(label: "Income · budget",
-                         value: haveIn ? (b?.income ?? 0).asShortMoney : "—",
-                         comparison: haveIn ? .init(current: b?.income ?? 0, against: t.income,
-                                                    betterWhen: .down, show: .amount) : nil,
-                         emptyNote: haveIn ? nil : (available ? "no income linked" : noHistory))
-
-                StatTile(label: "Expenses · budget",
-                         value: haveOut ? (b?.expense ?? 0).asShortMoney : "—",
-                         comparison: haveOut ? .init(current: b?.expense ?? 0, against: t.expense,
-                                                     betterWhen: .up, show: .amount) : nil,
-                         emptyNote: haveOut ? nil : noHistory)
-
-                StatTile(label: "Net · budget",
-                         value: haveIn ? (b?.net ?? 0).asShortMoney : "—",
-                         comparison: haveIn ? .init(current: b?.net ?? 0, against: t.net,
-                                                    betterWhen: .down, show: .amount) : nil,
-                         emptyNote: haveIn ? nil : noHistory)
-
-                StatTile(label: "Rate · budget",
-                         value: (haveIn ? b?.savingsRate : nil)
-                            .map { $0.formatted(.number.precision(.fractionLength(1))) + "%" } ?? "—",
-                         emptyNote: haveIn ? nil : noHistory)
+                    HStack(spacing: 0) {
+                        // The plan sitting above what actually happened means
+                        // the period is behind it, which is the bad direction —
+                        // so a positive gap here is not good news.
+                        Metric(caption: "vs actual",
+                               value: plannedNet - summary.totals.net,
+                               betterWhen: .down)
+                        Divider().frame(height: 38)
+                        // Deliberately uncoloured. A plan above last period's
+                        // actual is more ambitious, which is neither good nor
+                        // bad without knowing why it moved.
+                        Metric(caption: "vs \(summary.comparison.label.lowercased())",
+                               value: plannedNet - summary.previous.net,
+                               betterWhen: nil)
+                    }
+                } else {
+                    Text("Not enough history yet to say what this period should have cost.")
+                        .font(Theme.note)
+                        .foregroundStyle(Theme.quietText)
+                }
             }
         }
+    }
+}
+
+// MARK: - One comparison
+
+/// A difference, its direction, and whether that direction is good news.
+///
+/// `betterWhen` is optional because some comparisons genuinely have no better
+/// direction, and colouring one anyway asserts a judgement the figure does not
+/// support.
+private struct Metric: View {
+    let caption: String
+    let value: Int?
+    let betterWhen: BetterWhen?
+    var empty: String = "—"
+
+    private var tint: Color {
+        guard let value, let betterWhen else { return Theme.text }
+        if value == 0 { return Theme.quietText }
+        return (betterWhen == .up ? value > 0 : value < 0) ? Theme.positive : Theme.negative
+    }
+
+    var body: some View {
+        VStack(spacing: 3) {
+            if let value {
+                HStack(spacing: 3) {
+                    if betterWhen != nil, value != 0 {
+                        Image(systemName: value > 0 ? "arrow.up" : "arrow.down")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    Text(abs(value).asShortMoney)
+                        .font(.system(.headline, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+                .foregroundStyle(tint)
+            } else {
+                Text(empty)
+                    .font(.system(.headline, design: .rounded))
+                    .foregroundStyle(Theme.quietText)
+            }
+
+            Text(caption)
+                .font(Theme.tileLabel)
+                .foregroundStyle(Theme.quietText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
