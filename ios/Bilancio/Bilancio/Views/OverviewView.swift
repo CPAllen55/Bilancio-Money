@@ -33,10 +33,13 @@ final class OverviewModel {
     /// complete without it, and a failure to fetch it must not empty the page.
     private(set) var sparklines: TrendResponse.Sparklines?
 
-    var range: SummaryRange = .thisMonth
+    /// `YYYY-MM`, or nil for the month in progress.
+    var month: String?
+    /// How many months back from the chosen one to include, that one included.
+    var trailing: Int = 1
 
-    /// The last twelve months, newest first, for the period menu.
-    var recentMonths: [String] {
+    /// The last twelve months, newest first.
+    var months: [String] {
         let cal = Calendar(identifier: .gregorian)
         var out: [String] = []
         var date = Date()
@@ -48,6 +51,35 @@ final class OverviewModel {
             date = cal.date(byAdding: .month, value: -1, to: date) ?? date
         }
         return out
+    }
+
+    var chosenMonth: String { month ?? months.first ?? "" }
+
+    /// One month is `month:`; several is a `span:` ending at the one chosen.
+    ///
+    /// Derived rather than stored, so the two controls cannot drift out of
+    /// step with the window actually being fetched.
+    var range: SummaryRange {
+        let end = chosenMonth
+        guard trailing > 1, let i = months.firstIndex(of: end),
+              months.indices.contains(i + trailing - 1)
+        else { return .month(end) }
+        return .span(from: months[i + trailing - 1], to: end)
+    }
+
+    /// What a drill-down calls the window it inherits.
+    var periodLabel: String {
+        trailing > 1
+            ? "\(trailing) months to \(Self.monthName(chosenMonth))"
+            : Self.monthName(chosenMonth)
+    }
+
+    static func monthName(_ ym: String) -> String {
+        let parts = ym.split(separator: "-")
+        guard parts.count == 2, let m = Int(parts[1]), (1...12).contains(m) else { return ym }
+        let names = ["January","February","March","April","May","June",
+                     "July","August","September","October","November","December"]
+        return "\(names[m - 1]) \(parts[0])"
     }
 
     private let client = APIClient(baseURL: Bilancio.apiBaseURL) {
@@ -119,10 +151,29 @@ struct OverviewView: View {
     private func content(_ s: SummaryResponse) -> some View {
         ScrollView {
             VStack(spacing: Theme.sectionGap) {
-                PeriodMenu(range: Bindable(model).range,
-                           months: model.recentMonths) {
-                    Task { await model.load() }
+                // Bound to the resolved month rather than the optional behind
+                // it: with a nil selection no option carries a matching tag and
+                // the menu renders with no label at all — a bare chevron in the
+                // corner, which is a control nobody can find.
+                Picker("Month", selection: Binding(
+                    get: { model.chosenMonth },
+                    set: { model.month = $0; Task { await model.load() } }
+                )) {
+                    ForEach(model.months, id: \.self) { m in
+                        Text(OverviewModel.monthName(m)).tag(m)
+                    }
                 }
+                .pickerStyle(.menu)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Picker("Trailing", selection: Bindable(model).trailing) {
+                    Text("1 month").tag(1)
+                    Text("3 months").tag(3)
+                    Text("6 months").tag(6)
+                    Text("12 months").tag(12)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: model.trailing) { Task { await model.load() } }
 
                 StandingCard(summary: s)
 
@@ -144,7 +195,7 @@ struct OverviewView: View {
                 } else {
                     AgainstThePlanSection(data: s,
                                           range: model.range,
-                                          periodLabel: s.range.label)
+                                          periodLabel: model.periodLabel)
                 }
 
                 if let note = budgetNote(s.budget) {
@@ -235,12 +286,39 @@ private struct StandingCard: View {
     private var plannedIncome: Int { max(0, budget?.income ?? 0) }
     private var plannedExpense: Int { max(0, budget?.expense ?? 0) }
 
+    /// Whether the window has actually finished, from its own end date rather
+    /// than from a day count.
+    ///
+    /// safeToSpend cannot answer this for every range. A span reports
+    /// `daysElapsed == daysInPeriod` by construction — months × 30 for both —
+    /// because a span is normally historical, so "days left" is zero even for
+    /// one ending in the month currently running. Trusting that produced "This
+    /// period is complete." over a September that had three weeks to go.
+    ///
+    /// ISO dates compare correctly as strings, which is the whole reason the
+    /// API speaks them.
+    private var periodEnded: Bool {
+        let today = Date().formatted(.iso8601.year().month().day()
+            .dateSeparator(.dash).dateTimeSeparator(.space))
+        return summary.range.end < String(today.prefix(10))
+    }
+
     /// A finished period gets no daily rate: there are no days left to spread
     /// anything over, and "about $40 a day for the 0 days left" is what
     /// arithmetic says rather than what a person would.
     private var subline: String {
         let safe = summary.safeToSpend
-        if safe.daysLeft <= 0 { return "This period is complete." }
+        if periodEnded { return "This period is complete." }
+
+        // Still running, but with no usable day count — a span, where the
+        // Worker does not track one. Say the true half and leave out the
+        // clause it cannot support.
+        guard safe.daysLeft > 0 else {
+            return overspent
+                ? "\((-net).asMoney) more out than in so far."
+                : "\(net.asMoney) kept so far."
+        }
+
         if overspent {
             return "\((-net).asMoney) more out than in, with \(safe.daysLeft) day\(safe.daysLeft == 1 ? "" : "s") still to go."
         }
