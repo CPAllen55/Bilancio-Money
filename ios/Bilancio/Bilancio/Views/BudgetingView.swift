@@ -11,6 +11,7 @@
 //  says so rather than letting it look like an error.
 //
 
+import Charts
 import ClerkKit
 import SwiftUI
 
@@ -185,22 +186,26 @@ struct BudgetingView: View {
                            current: data.currentMonth,
                            selection: Bindable(model).month)
 
-                Card {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Planned for this month")
+                PlanHero(data: data, month: month, spent: spent)
+                PlanVersusHistory(data: data, month: month)
+
+                if let incomeRow = data.incomeRow {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Money in")
                             .font(Theme.tileLabel)
                             .foregroundStyle(Theme.quietText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                        Text(planned.asMoney)
-                            .font(Theme.figure(32))
-                            .monospacedDigit()
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-
-                        ProportionBar(label: "Spent", amount: spent, planned: planned,
-                                      fallbackScale: max(spent, planned),
-                                      tint: spent > planned ? Theme.negative : Theme.positive,
-                                      verb: "spent")
+                        Card(padding: 0) {
+                            Button {
+                                editing = incomeRow
+                            } label: {
+                                PlanRow(row: incomeRow, month: month,
+                                        spent: incomeRow.spent[month]
+                                            ?? model.spentThisMonth["income"] ?? 0)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
 
@@ -509,5 +514,165 @@ private struct PlanRow: View {
         .padding(.trailing, 14)
         .padding(.leading, 14)
         .contentShape(.rect)
+    }
+}
+
+// MARK: - What the plan comes to
+
+/// Planned income, planned spending, and the difference — which is the figure
+/// the whole screen is really about.
+///
+/// Both halves are shown because both are editable. A plan that only budgets
+/// spending can tell you what a month costs and never whether you can afford
+/// it; the answer to that is one subtraction away and was not being drawn.
+private struct PlanHero: View {
+    let data: BudgetResponse
+    let month: String
+    /// What has actually gone out, for the bar underneath.
+    let spent: Int
+
+    private var income: Int { data.plannedIncome(month) }
+    private var expense: Int { data.plannedExpense(month) }
+    private var net: Int { data.plannedNet(month) }
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Planned net")
+                        .font(Theme.tileLabel)
+                        .foregroundStyle(Theme.quietText)
+
+                    Text(net.asMoney)
+                        .font(Theme.figure(36))
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.tint(forNet: net))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+
+                    Text(net < 0
+                         ? "This month plans to spend more than it earns."
+                         : "What the plan expects to keep.")
+                        .font(Theme.note)
+                        .foregroundStyle(Theme.quietText)
+                }
+
+                HStack(spacing: 0) {
+                    figure("Income planned", income, Theme.incomeTint)
+                    Divider().frame(height: 34)
+                    figure("Spending planned", expense, Theme.expenseTint)
+                }
+
+                ProportionBar(label: "Spent so far", amount: spent, planned: expense,
+                              fallbackScale: max(spent, expense),
+                              tint: spent > expense ? Theme.negative : Theme.positive,
+                              verb: "spent")
+            }
+        }
+    }
+
+    private func figure(_ label: String, _ cents: Int, _ tint: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(label)
+                .font(Theme.tileLabel)
+                .foregroundStyle(Theme.quietText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(cents.asShortMoney)
+                .font(.system(.headline, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - The plan against what actually happened
+
+/// Planned net by month, with the months that have happened marked by what
+/// they actually came to.
+///
+/// The point of it is that a plan is only credible against a record. A budget
+/// that expects to keep $500 in a month that has never once kept $500 is a wish
+/// with a number on it, and that is visible here and nowhere else on the screen.
+private struct PlanVersusHistory: View {
+    let data: BudgetResponse
+    let month: String
+
+    private struct Point: Identifiable {
+        let month: String
+        let label: String
+        let planned: Int
+        /// Nil for months with no record — which is not the same as zero.
+        let actual: Int?
+        var id: String { month }
+    }
+
+    private var points: [Point] {
+        data.months.enumerated().map { i, m in
+            Point(month: m,
+                  label: data.labels.indices.contains(i)
+                      ? String(data.labels[i].prefix(3)) : m,
+                  planned: data.plannedNet(m),
+                  actual: data.actualNet(m))
+        }
+    }
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Plan against history")
+                    .font(Theme.tileLabel)
+                    .foregroundStyle(Theme.quietText)
+
+                Chart {
+                    ForEach(points) { p in
+                        BarMark(
+                            x: .value("Month", p.label),
+                            y: .value("Planned net", Double(p.planned) / 100)
+                        )
+                        .foregroundStyle(Theme.tint(forNet: p.planned).opacity(
+                            p.month == month ? 1 : 0.4
+                        ))
+
+                        // What the month actually came to, where there is a
+                        // record of it. A tick across the bar rather than a
+                        // second bar beside it: the comparison is one number
+                        // against another, and a pair of bars at this width is
+                        // two slivers.
+                        //
+                        // A RectangleMark rather than a RuleMark. A rule with
+                        // the same start and end on a category axis has no
+                        // length to draw and collapses into a dot — which is
+                        // what the first version did, twelve times.
+                        if let actual = p.actual {
+                            RectangleMark(
+                                x: .value("Month", p.label),
+                                y: .value("Actual", Double(actual) / 100),
+                                height: .fixed(3)
+                            )
+                            .foregroundStyle(Theme.text)
+                            .cornerRadius(1.5)
+                        }
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                        AxisGridLine()
+                        AxisValueLabel { if let s = value.as(String.self) { Text(s) } }
+                    }
+                }
+                .frame(height: 170)
+
+                Text("Bars are what the plan expects to keep. Dark ticks are what those months actually came to.")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.quietText)
+            }
+        }
     }
 }

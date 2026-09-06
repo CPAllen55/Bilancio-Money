@@ -21,6 +21,7 @@ struct BudgetResponse: Decodable {
     let monthsOfHistory: Int
     let categories: [Row]
     let income: Income
+    let totals: Totals
     let savings: Savings
 
     struct Row: Decodable, Identifiable, Hashable {
@@ -54,10 +55,28 @@ struct BudgetResponse: Decodable {
         func isPinned(_ month: String) -> Bool { pinned[month] != nil }
     }
 
+    /// Income, which is budgeted exactly like a category and stored exactly
+    /// like one — only the response shape differs, because the Worker keeps it
+    /// as a single line rather than a breakdown. "What comes in" is the
+    /// question, not which of two employers it came from.
     struct Income: Decodable {
+        let id: String?
         let plan: [String: Int]
-        let spent: [String: Int]
+        let computed: [String: Int]
         let baseline: Int
+        let baselineOverride: Int?
+        let pinned: [String: Int]
+        let spent: [String: Int]
+    }
+
+    /// The plan's own arithmetic, month by month, worked out by the Worker so
+    /// nothing here has to sum the categories and reach a different answer.
+    struct Totals: Decodable {
+        /// Planned spending per month, summed across every subcategory.
+        let expense: [String: Int]
+        /// Planned income minus planned spending. The figure the whole screen
+        /// is really about.
+        let savings: [String: Int]
     }
 
     struct Savings: Decodable {
@@ -93,6 +112,42 @@ struct BudgetEdit: Encodable {
             out["amount"] = (amount ?? nil) as Any? ?? NSNull()
         }
         return out
+    }
+}
+
+extension BudgetResponse {
+    /// Income as a row, so the editor that changes every other plan can change
+    /// this one too. It is budgeted the same way and written the same way; the
+    /// only reason it is not already a Row is the shape the Worker sends.
+    ///
+    /// Nil when the income category is missing, which would mean there is no
+    /// id to write an override against.
+    var incomeRow: Row? {
+        guard let id = income.id else { return nil }
+        return Row(
+            id: id, slug: "income", label: "Income",
+            // The mint the app uses for money coming in, so the row matches
+            // every other place income is drawn.
+            colour: "#0B8259", parentSlug: nil,
+            spent: income.spent, priorSpent: nil,
+            plan: income.plan, computed: income.computed,
+            baseline: income.baseline, baselineOverride: income.baselineOverride,
+            pinned: income.pinned
+        )
+    }
+
+    /// Planned income minus planned spending for one month.
+    func plannedNet(_ month: String) -> Int { totals.savings[month] ?? 0 }
+    func plannedIncome(_ month: String) -> Int { income.plan[month] ?? 0 }
+    func plannedExpense(_ month: String) -> Int { totals.expense[month] ?? 0 }
+
+    /// What actually happened, for months complete enough to have a record.
+    /// Absent rather than zero: a month with no record is not a month of
+    /// nothing, and the chart has to be able to tell them apart.
+    func actualNet(_ month: String) -> Int? {
+        guard let earned = income.spent[month] else { return nil }
+        let spent = categories.reduce(0) { $0 + ($1.spent[month] ?? 0) }
+        return earned - spent
     }
 }
 
