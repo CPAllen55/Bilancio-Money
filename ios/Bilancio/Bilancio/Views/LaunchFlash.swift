@@ -2,31 +2,35 @@
 //  LaunchFlash.swift
 //  Bilancio
 //
-//  The owl, full screen, and then the chips falling onto the stacks already in
-//  front of him.
+//  The badge, large, and then chips falling onto the stacks already in front of
+//  the owl.
 //
 //  It covers the moment the app is doing its least interesting work — fetching
 //  the publishable key, configuring Clerk, restoring a session — so the wait
 //  becomes the mark rather than a spinner. That it is also the brand arriving
 //  is the point of it.
 //
-//  Two things make it work, and both are measurements rather than guesses.
+//  ── Why the badge is a badge here, and not the whole screen ─────────────────
 //
-//  The first is the crop. The artwork is a rounded badge on a gold ground, and
-//  a badge shown edge to edge is a gold box with a line around it — which is
-//  the one thing this mark has already been asked not to be. So the image is
-//  cropped to the inside of that border and the rest of the screen is filled
-//  with the same gold the crop edge is made of, sampled off the artwork itself.
-//  There is no frame because the frame is off-screen, and no seam because the
-//  ground on both sides of it is the same colour.
+//  The drawing is a beveled plate on a gold that varies in two directions, and
+//  the owl reaches its edges. So there is no honest way to run it edge to edge
+//  on a screen twice as tall as it is wide: carrying the outer rows outwards
+//  drags the ears and the stacks into long vertical smears, and cropping to the
+//  height cuts the owl in half. Both were tried and both look like a mistake.
 //
-//  The second is the chip grid. The bars in the artwork are not solid: they are
-//  stacks of chips, five stacks of 3, 6, 9, 12 and 15, on a ten-pixel pitch.
-//  Those numbers were read out of the pixels, so the chips that fall land on
-//  the pitch the painted ones are already on and the join is invisible. Three
-//  land on every stack, which keeps the step between them at three and leaves
-//  the mark's own arithmetic intact — it grows without becoming a different
-//  shape.
+//  What the drawing does have is a rim, which is a legible edge — so it is
+//  shown as what it is, a plate, at the full width of the screen, on a field
+//  that continues its own top-to-bottom fall past both ends. The two colours
+//  below are the average of its first and last rows, extended linearly, so the
+//  field meets the rim at the tone the rim already is.
+//
+//  ── Why the chips are photographs ──────────────────────────────────────────
+//
+//  `OwlChip1…5` are real chips lifted out of the drawing, one per stack at that
+//  stack's own width, cut to a rounded rect so they carry no ground with them.
+//  A chip that lands is the same object as the ones it lands on, down to the
+//  highlight along its top edge — which drawing one in code could not manage
+//  against artwork this shaded. Three land on every stack.
 //
 
 import SwiftUI
@@ -48,48 +52,40 @@ struct LaunchFlash: View {
         GeometryReader { geo in
             let art = Art(size: geo.size)
 
-            ZStack(alignment: .topLeading) {
-                Art.ground
+            ZStack {
+                art.field.ignoresSafeArea()
 
-                owl(art)
+                Image("OwlLaunch")
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: art.side, height: art.side)
+                    .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                    .scaleEffect(owlIn ? 1 : 0.94)
+                    .opacity(owlIn ? 1 : 0)
 
                 ForEach(Chip.all) { chip in
                     let frame = art.frame(of: chip)
-                    ChipMark(stroke: art.stroke)
+                    Image("OwlChip\(chip.stack + 1)")
+                        .resizable()
+                        .interpolation(.high)
                         .frame(width: frame.width, height: frame.height)
                         .position(x: frame.midX, y: frame.midY)
                         // Off the top of the screen until its turn, so every
                         // chip enters from outside rather than materialising
                         // over the owl.
-                        .offset(y: dropped > chip.order ? 0 : -(frame.maxY + 40))
+                        .offset(y: dropped > chip.order ? 0 : -(frame.maxY + 60))
                         .opacity(owlIn ? 1 : 0)
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
-            // A full screen of gold is a lot of gold at night. Laid over both
-            // the ground and the artwork at once, so it dims the flash without
-            // reopening the seam between them.
+            // A full screen of gold is a lot of gold at night. Laid over the
+            // field and the chips at once, so it dims the flash uniformly.
             .overlay(scheme == .dark ? Color.black.opacity(0.18) : .clear)
             .opacity(fading ? 0 : 1)
         }
         .ignoresSafeArea()
         .task { await play() }
         .accessibilityHidden(true)
-    }
-
-    private func owl(_ art: Art) -> some View {
-        Image("OwlBadge")
-            .resizable()
-            .interpolation(.high)
-            .frame(width: art.imageSide, height: art.imageSide)
-            .offset(x: -Art.crop.minX * art.scale, y: -Art.crop.minY * art.scale)
-            // Sized to the crop and clipped to it: everything outside is the
-            // badge's border, which is what is being got rid of.
-            .frame(width: art.band.width, height: art.band.height, alignment: .topLeading)
-            .clipShape(RoundedRectangle(cornerRadius: Art.cropRadius * art.scale, style: .circular))
-            .offset(x: art.band.minX, y: art.band.minY)
-            .scaleEffect(owlIn ? 1 : 0.92)
-            .opacity(owlIn ? 1 : 0)
     }
 
     private func play() async {
@@ -125,20 +121,6 @@ struct LaunchFlash: View {
     }
 }
 
-// MARK: - One chip
-
-/// A single chip: the artwork's fill with its outline, so a chip that has
-/// landed is indistinguishable from one that was always painted there.
-private struct ChipMark: View {
-    let stroke: CGFloat
-
-    var body: some View {
-        Rectangle()
-            .fill(Art.chipFill)
-            .overlay(Rectangle().strokeBorder(Art.chipStroke, lineWidth: stroke))
-    }
-}
-
 // MARK: - Where everything is
 
 /// A chip's slot: which stack, and how far above that stack's painted top.
@@ -164,77 +146,68 @@ private struct Chip: Identifiable, Equatable {
     }()
 }
 
-/// The artwork's own geometry, in the pixels of the 512pt badge.
+/// The drawing's own geometry, in the pixels of `OwlLaunch` — which is the app
+/// icon, so these are the icon's own coordinates and nothing is converted.
 ///
-/// Every number here was read off `owl-badge.png` rather than eyeballed: the
-/// stacks by tracing their outlines, the pitch and the tops by finding the
-/// divider rows inside them, the frame by following its stroke around a corner,
-/// the colours by sampling. If the artwork is ever redrawn these all have to be
-/// measured again, which is why they are together in one place rather than
-/// spread through the view.
+/// None of it is guessed. The stacks were found by reading a row of pixels
+/// straight through all five and taking the bright chip bodies between their
+/// dark edges: the drop shadow to the right of each one is close enough in tone
+/// to be mistaken for the chip, and taking it swelled every stack by ten pixels
+/// and landed the first chips visibly wide. The tops and the pitch came from
+/// the divider rows inside each stack, the pitch agreeing to a third of a pixel
+/// across all five.
+///
+/// Replacing the artwork means regenerating the five chips from it and
+/// measuring all of this again.
 private struct Art {
-    /// The inside of the badge's border, which is all of it that is shown.
-    ///
-    /// Rounded, because the badge is. A rectangle cut just inside the frame's
-    /// straight edges still catches the four corner arcs, which is what the
-    /// first attempt did — the owl arrived full screen with the corners of a
-    /// box around him. The corners are squircles rather than circles, so this
-    /// was fitted against the stroke's measured inner edge rather than derived:
-    /// at this radius nothing of the frame survives the clip and nothing of the
-    /// bars is lost to it.
-    static let crop = CGRect(x: 76, y: 54, width: 352, height: 410)
-    static let cropRadius: CGFloat = 56
+    /// The side of `OwlLaunch`, in its own pixels.
+    static let badge: CGFloat = 1024
 
-    /// Where the badge is drawn on the sheet the crop is taken from.
-    static let side: CGFloat = 512
+    /// x range of each stack, left to right — its dark edges included, its
+    /// shadow not.
+    static let stacks: [ClosedRange<CGFloat>] = [
+        186...288, 309...428, 451...570, 596...719, 746...873,
+    ]
 
-    /// x range of each painted stack, left to right — outline included.
-    ///
-    /// Measured across the stacks' side outlines rather than their striped
-    /// fill. The fill is the obvious thing to find and it is four or five
-    /// pixels narrower on each side, which is enough to see: the first chips
-    /// landed visibly inset, sitting on the stacks rather than continuing them.
-    /// The stacks are not all the same width, and are not meant to be.
-    static let stacks: [ClosedRange<CGFloat>] = [118...163, 171...218, 228...276, 287...336, 349...399]
-
-    /// The top edge of each painted stack — where the next chip lands.
-    static let tops: [CGFloat] = [421, 391, 361, 330, 295]
+    /// The top edge of each stack — where the next chip lands.
+    static let tops: [CGFloat] = [923, 846, 762, 699, 640]
 
     /// One chip, divider to divider.
-    static let pitch: CGFloat = 10.1
+    static let pitch: CGFloat = 29.7
 
-    /// Sampled from the artwork so the fill behind and around the crop is the
-    /// colour the crop edge already is, and the join cannot be seen.
-    static let ground = Color(hex: "#EFBD54")
-    static let chipFill = Color(hex: "#F4CD60")
-    static let chipStroke = Color(hex: "#9D6D23")
+    /// The average of the drawing's first and last rows. The field is these
+    /// two extended past the badge at the same rate, so it arrives at the rim
+    /// already the colour of the rim.
+    static let edgeTop = (r: 0.988, g: 0.835, b: 0.396)      // #FCD565
+    static let edgeBottom = (r: 0.871, g: 0.643, b: 0.208)   // #DEA435
 
     let size: CGSize
 
-    /// Points per artwork pixel.
-    ///
-    /// Whichever axis runs out first. On a phone held upright that is the
-    /// width, and the crop then runs edge to edge with no seam down either
-    /// side. Turned on its side — or on an iPad — it is the height instead,
-    /// and the artwork is inset rather than cropped through the owl. Either
-    /// way what is beside it is the same gold as its edge.
-    var scale: CGFloat {
-        min(size.width / Art.crop.width, size.height / Art.crop.height)
+    /// The badge spans the width. Anything larger crops the owl; anything
+    /// smaller wastes the screen.
+    var side: CGFloat { size.width }
+    var scale: CGFloat { side / Art.badge }
+
+    /// Where the badge starts, and so where the field's own scale is anchored.
+    var originY: CGFloat { (size.height - side) / 2 }
+
+    /// The drawing's fall, continued to the top and bottom of the screen.
+    var field: LinearGradient {
+        LinearGradient(colors: [colour(at: -originY / side),
+                                colour(at: (size.height - originY) / side)],
+                       startPoint: .top, endPoint: .bottom)
     }
 
-    var imageSide: CGFloat { Art.side * scale }
-
-    /// The part of the screen the artwork occupies, centred.
-    var band: CGRect {
-        let width = Art.crop.width * scale
-        let height = Art.crop.height * scale
-        return CGRect(x: (size.width - width) / 2, y: (size.height - height) / 2,
-                      width: width, height: height)
+    /// `t` is measured in badge heights from the badge's own top row, so 0 and
+    /// 1 are the two sampled rows and anything outside is the extension.
+    private func colour(at t: CGFloat) -> Color {
+        func mix(_ a: Double, _ b: Double) -> Double {
+            min(1, max(0, a + (b - a) * Double(t)))
+        }
+        return Color(red: mix(Art.edgeTop.r, Art.edgeBottom.r),
+                     green: mix(Art.edgeTop.g, Art.edgeBottom.g),
+                     blue: mix(Art.edgeTop.b, Art.edgeBottom.b))
     }
-
-    /// A divider in the artwork is about five pixels, and two chips meeting
-    /// each contribute half of it — `strokeBorder` draws inwards.
-    var stroke: CGFloat { max(1.5, 3 * scale) }
 
     /// Where a chip lands, in screen points.
     ///
@@ -244,11 +217,9 @@ private struct Art {
     func frame(of chip: Chip) -> CGRect {
         let stack = Art.stacks[chip.stack]
         let top = Art.tops[chip.stack] - CGFloat(chip.level + 1) * Art.pitch
-        return CGRect(
-            x: band.minX + (stack.lowerBound - Art.crop.minX) * scale,
-            y: band.minY + (top - Art.crop.minY) * scale,
-            width: (stack.upperBound - stack.lowerBound) * scale,
-            height: Art.pitch * scale
-        )
+        return CGRect(x: stack.lowerBound * scale,
+                      y: originY + top * scale,
+                      width: (stack.upperBound - stack.lowerBound) * scale,
+                      height: Art.pitch * scale)
     }
 }
