@@ -130,12 +130,19 @@ export async function loadCategories(
   const rules = await db
     .select({ matchKey: merchantRules.matchKey, categoryId: merchantRules.categoryId })
     .from(merchantRules)
-    .where(eq(merchantRules.userId, userId));
+    .where(eq(merchantRules.userId, userId))
+    // Oldest first, so that where two keys now normalise to one the newest
+    // statement about that merchant is the one left standing.
+    .orderBy(merchantRules.createdAt);
 
   const ruleBySlugKey = new Map<string, string>();
   for (const r of rules) {
     const slug = slugById.get(r.categoryId);
-    if (slug) ruleBySlugKey.set(r.matchKey, slug);
+    // Normalised again on the way in. The stored key was written by whatever
+    // merchantKey did at the time, and the rule that drops reference codes came
+    // later; running it over the stored key turns an old key into the new one
+    // without a migration, and leaves a key already in the new shape alone.
+    if (slug) ruleBySlugKey.set(merchantKey(null, r.matchKey), slug);
   }
 
   return { list: rows, slugById, parentOfSlug, kindOfSlug, ruleBySlugKey };
@@ -197,11 +204,31 @@ function resolveSlug(
     if (slug) return { kind: ctx.kindOfSlug.get(slug) ?? "spend", slug, explicit: true };
   }
 
-  // Rules do not apply to transfers: a merchant rule is about what something
-  // is, and a transfer between your own accounts is not a purchase.
-  if (base.kind === "spend") {
-    const ruled = ctx.ruleBySlugKey.get(key);
-    if (ruled) return { kind: ctx.kindOfSlug.get(ruled) ?? "spend", slug: ruled, explicit: false };
+  /* A rule can take a row out of the transfer ledger, but never put one in.
+   *
+   * Rules used to be skipped for transfers altogether, on the grounds that a
+   * transfer between your own accounts is not a purchase. That is true of a
+   * real transfer and useless against a wrong one: a mortgage paid by standing
+   * order comes back from Plaid as a credit card payment, which is a transfer,
+   * so it left the expense figures entirely and no amount of re-filing the
+   * merchant would bring it back. The reader could fix one month and only one.
+   *
+   * So a rule naming a spending category is allowed to overrule that guess —
+   * it is the reader saying what the merchant is, against a guess that is
+   * demonstrably wrong. The reverse is still refused: nothing may quietly
+   * become a transfer and leave the spending figures.
+   *
+   * The cost is that filing a merchant under spending also claims that
+   * merchant's genuine card payments, if the reader uses the same name for
+   * both. That is visible and undoable — the rule is listed and can be
+   * removed — where the money silently missing from expenses was not.
+   */
+  const ruled = ctx.ruleBySlugKey.get(key);
+  if (ruled) {
+    const ruledKind = ctx.kindOfSlug.get(ruled) ?? "spend";
+    if (base.kind === "spend" || ruledKind === "spend") {
+      return { kind: ruledKind, slug: ruled, explicit: false };
+    }
   }
 
   return { ...base, explicit: false };
