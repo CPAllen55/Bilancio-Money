@@ -19,10 +19,19 @@
 //  because the stacks run to the bottom of the drawing and a hard edge there
 //  reads as the chart being cut off rather than standing on the ground.
 //
-//  What the rounding takes away, and everything above and below the drawing, is
-//  filled by the field below — the drawing's own first and last rows, extended
-//  at the rate they fall. So the corners cannot be seen, and neither can the
-//  join.
+//  ── What `OwlField` is ─────────────────────────────────────────────────────
+//
+//  The gold around it, and the reason it cannot be seen to end. The drawing's
+//  ground varies across it as well as down it, so a flat colour is wrong at the
+//  sides and a vertical gradient is wrong in the middle — both leave the owl
+//  sitting in a visible rectangle of slightly different gold, which is exactly
+//  what the first version did.
+//
+//  `OwlField` is the drawing itself blurred until nothing but its ground is
+//  left, then carried out to a canvas tall enough for any phone. A blurred copy
+//  matches the ground at every point of the drawing's own edge because it is
+//  made of it, and clamping it outwards leaves no streaks because there is
+//  nothing sharp left in it to streak.
 //
 
 import SwiftUI
@@ -42,7 +51,10 @@ struct LaunchFlash: View {
             let art = Art(size: geo.size)
 
             ZStack {
-                art.field.ignoresSafeArea()
+                Image("OwlField")
+                    .resizable()
+                    .frame(width: art.fieldWidth, height: art.fieldHeight)
+                    .position(x: geo.size.width / 2, y: geo.size.height / 2)
 
                 Image("OwlLaunch")
                     .resizable()
@@ -89,17 +101,16 @@ struct LaunchFlash: View {
 
 // MARK: - Where the drawing sits
 
-/// How the drawing meets the screen, and the gold either side of it.
+/// How the drawing meets the screen, and the gold behind it.
 ///
-/// The two colours are the average of the artwork's own first and last rows,
-/// measured off it rather than chosen, so the field arrives at the drawing at
-/// the tone the drawing already is.
+/// `OwlField` is generated from `OwlLaunch` at the same width, with the drawing
+/// centred in it, so drawing both centred and at the same width puts every
+/// point of the field exactly where it was blurred from.
 private struct Art {
     /// `OwlLaunch`, in its own pixels.
     static let size = CGSize(width: 764, height: 824)
-
-    static let edgeTop = (r: 0.992, g: 0.812, b: 0.325)      // #FDCF53
-    static let edgeBottom = (r: 0.878, g: 0.616, b: 0.145)   // #E09D25
+    /// `OwlField`, which is wider than any screen is tall relative to it.
+    static let fieldSize = CGSize(width: 764, height: 1900)
 
     let size: CGSize
 
@@ -108,24 +119,7 @@ private struct Art {
     var width: CGFloat { size.width }
     var height: CGFloat { width * Art.size.height / Art.size.width }
 
-    /// Where the drawing starts, and so where the field's scale is anchored.
-    var originY: CGFloat { (size.height - height) / 2 }
-
-    /// The drawing's own fall, continued to the top and bottom of the screen.
-    var field: LinearGradient {
-        LinearGradient(colors: [colour(at: -originY / height),
-                                colour(at: (size.height - originY) / height)],
-                       startPoint: .top, endPoint: .bottom)
-    }
-
-    /// `t` is measured in artwork heights from its own first row, so 0 and 1
-    /// are the two sampled rows and anything outside is the extension.
-    private func colour(at t: CGFloat) -> Color {
-        func mix(_ a: Double, _ b: Double) -> Double {
-            min(1, max(0, a + (b - a) * Double(t)))
-        }
-        return Color(red: mix(Art.edgeTop.r, Art.edgeBottom.r),
-                     green: mix(Art.edgeTop.g, Art.edgeBottom.g),
-                     blue: mix(Art.edgeTop.b, Art.edgeBottom.b))
-    }
+    /// The field, at the same scale as the drawing so the two line up.
+    var fieldWidth: CGFloat { width }
+    var fieldHeight: CGFloat { width * Art.fieldSize.height / Art.fieldSize.width }
 }
