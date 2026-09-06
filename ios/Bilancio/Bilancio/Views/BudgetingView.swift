@@ -113,7 +113,8 @@ struct BudgetingView: View {
         .sheet(item: $editing) { row in
             BudgetEditorView(row: row,
                              month: editingMonth,
-                             monthLabel: monthLabel) {
+                             months: windowMonths,
+                             labels: windowLabels) {
                 Task { await model.load() }
             }
         }
@@ -174,6 +175,18 @@ struct BudgetingView: View {
         if let chosen = model.month { return chosen }
         if case .loaded(let data) = model.state { return data.currentMonth }
         return ""
+    }
+
+    /// The window the strip covers, handed to the editor so a plan can be made
+    /// for any of it rather than only the month the sheet was opened on.
+    private var windowMonths: [String] {
+        guard case .loaded(let data) = model.state else { return [] }
+        return data.months
+    }
+
+    private var windowLabels: [String] {
+        guard case .loaded(let data) = model.state else { return [] }
+        return data.labels
     }
 
     /// The same month, named the way the strip names it.

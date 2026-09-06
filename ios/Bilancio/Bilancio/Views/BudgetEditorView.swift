@@ -17,6 +17,14 @@
 //  twelve separate edits. So both, said plainly, rather than one control whose
 //  behaviour changes depending on where you touch it.
 //
+//  Which month is being pinned is chosen here rather than inherited. It used to
+//  be whatever the strip behind the sheet was showing, which put the year's
+//  chart in front of somebody who could only act on one column of it — the
+//  information to decide that March is the heavy month, and no way to say so
+//  without closing the sheet, moving the strip and opening it again. Touching a
+//  bar now moves the edit to that month, and several months can be planned
+//  before saving once.
+//
 
 import Charts
 import ClerkKit
@@ -26,11 +34,19 @@ import SwiftUI
 @Observable
 final class BudgetEditor {
     let row: BudgetResponse.Row
-    let month: String
-    let monthLabel: String
+    /// The whole window, so any of it can be planned rather than just the one
+    /// month the sheet was opened on.
+    let months: [String]
+    let labels: [String]
 
-    /// The absolute figure for this month, or nil to let the shape decide.
-    var pinnedAmount: Int?
+    /// The month being pinned. Moves with the chart.
+    var month: String
+
+    /// Every pinned month, as it stands including unsaved edits. Held for the
+    /// whole window rather than one month at a time so that planning March and
+    /// then April does not throw March away, and so both go up in one write.
+    var pinned: [String: Int]
+
     /// The scaling baseline, or nil to go back to what history says.
     var baseline: Int?
 
@@ -42,12 +58,49 @@ final class BudgetEditor {
         return try await session.getToken()
     }
 
-    init(row: BudgetResponse.Row, month: String, monthLabel: String) {
+    init(row: BudgetResponse.Row, month: String, months: [String], labels: [String]) {
         self.row = row
-        self.month = month
-        self.monthLabel = monthLabel
-        self.pinnedAmount = row.pinned[month]
+        // Fall back to the months the row itself carries. The window is the
+        // same one; this only matters if a caller has the row and not the
+        // response it came out of.
+        let window = months.isEmpty ? row.plan.keys.sorted() : months
+        self.months = window
+        self.labels = labels
+        // A month outside the window would leave the picker with nothing
+        // selected and pin something the chart does not show.
+        self.month = window.contains(month) ? month : (window.last ?? month)
+        self.pinned = row.pinned
         self.baseline = row.baselineOverride
+    }
+
+    /// The month named the way the rest of the screen names it.
+    func label(of m: String) -> String {
+        if let i = months.firstIndex(of: m), labels.indices.contains(i) { return labels[i] }
+        return Self.shortLabel(m)
+    }
+
+    var monthLabel: String { label(of: month) }
+
+    /// The absolute figure for the month being edited, or nil to let the shape
+    /// decide. Reads and writes the entry for whichever month is selected.
+    var pinnedAmount: Int? {
+        get { pinned[month] }
+        set { pinned[month] = newValue }
+    }
+
+    /// Months whose pin differs from what the server holds — what a save would
+    /// actually change, and what the chart marks.
+    var pendingMonths: Set<String> {
+        let keys = Set(pinned.keys).union(row.pinned.keys)
+        return keys.filter { pinned[$0] != row.pinned[$0] }
+    }
+
+    /// Jan…Dec, for a window whose labels were not passed in.
+    static func shortLabel(_ ym: String) -> String {
+        let parts = ym.split(separator: "-")
+        guard parts.count == 2, let m = Int(parts[1]), (1...12).contains(m) else { return ym }
+        return ["Jan","Feb","Mar","Apr","May","Jun",
+                "Jul","Aug","Sep","Oct","Nov","Dec"][m - 1]
     }
 
     /// What history alone says a month of this costs.
@@ -62,10 +115,13 @@ final class BudgetEditor {
     /// is typed — the whole point of showing it is to answer "compared with
     /// what?" while the answer can still change.
     func projected(_ m: String) -> Int {
-        if m == month, let pinned = pinnedAmount { return pinned }
-        if let existing = row.pinned[m], m != month { return existing }
-        guard let baseline, baseline > 0, shaped > 0 else { return row.plan[m] ?? 0 }
-        return Int((Double(row.computed[m] ?? 0) * Double(baseline) / Double(shaped)).rounded())
+        if let pin = pinned[m] { return pin }
+        // No pin: the shape, scaled if a baseline is being typed. `computed`
+        // rather than `plan`, because `plan` still carries a pin that has just
+        // been removed and would show the cleared figure as if it stood.
+        let shape = row.computed[m] ?? 0
+        guard let baseline, baseline > 0, shaped > 0 else { return shape }
+        return Int((Double(shape) * Double(baseline) / Double(shaped)).rounded())
     }
 
     /// What the year would become at the baseline being typed.
@@ -81,12 +137,12 @@ final class BudgetEditor {
     }
 
     var changed: Bool {
-        pinnedAmount != row.pinned[month] || baseline != row.baselineOverride
+        !pendingMonths.isEmpty || baseline != row.baselineOverride
     }
 
     var canSave: Bool { changed && !saving }
 
-    func clearPin() { pinnedAmount = nil }
+    func clearPin() { pinned[month] = nil }
     func clearBaseline() { baseline = nil }
 
     /// True once saved, so the caller reloads and dismisses.
@@ -100,9 +156,9 @@ final class BudgetEditor {
         // month pin would rewrite the whole year to say the same thing, and a
         // no-op write is still a write somebody has to reason about later.
         var edits: [BudgetEdit] = []
-        if pinnedAmount != row.pinned[month] {
-            edits.append(BudgetEdit(slug: row.slug, month: month,
-                                    amount: .some(pinnedAmount)))
+        for m in pendingMonths.sorted() {
+            edits.append(BudgetEdit(slug: row.slug, month: m,
+                                    amount: .some(pinned[m])))
         }
         if baseline != row.baselineOverride {
             edits.append(BudgetEdit(slug: row.slug, baseline: .some(baseline)))
@@ -124,10 +180,15 @@ struct BudgetEditorView: View {
     @State private var editor: BudgetEditor
     let onSaved: () -> Void
 
-    init(row: BudgetResponse.Row, month: String, monthLabel: String,
+    init(row: BudgetResponse.Row, month: String, months: [String], labels: [String],
          onSaved: @escaping () -> Void) {
-        _editor = State(initialValue: BudgetEditor(row: row, month: month, monthLabel: monthLabel))
+        _editor = State(initialValue: BudgetEditor(row: row, month: month,
+                                                   months: months, labels: labels))
         self.onSaved = onSaved
+    }
+
+    private var selectedMonth: Binding<String> {
+        Binding(get: { editor.month }, set: { editor.month = $0 })
     }
 
     var body: some View {
@@ -146,10 +207,20 @@ struct BudgetEditorView: View {
                 } header: {
                     Text("Against the year")
                 } footer: {
-                    Text("Solid is what was spent. Faded is what the plan expects, and it moves as you type.")
+                    Text("Solid is what was spent. Faded is what the plan expects, and it moves as you type. Touch a month to plan that one instead.")
                 }
 
                 Section {
+                    // The same choice the chart makes, said in words. A chart
+                    // is a fine way to point at March and a poor way to be
+                    // sure you did.
+                    Picker("Month", selection: selectedMonth) {
+                        ForEach(editor.months, id: \.self) { m in
+                            Text(editor.label(of: m)).tag(m)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
                     if editor.pinnedAmount == nil {
                         Button("Pin \(editor.monthLabel) to an amount") {
                             editor.pinnedAmount = editor.currentPlan
@@ -170,7 +241,23 @@ struct BudgetEditorView: View {
                 } header: {
                     Text("Just \(editor.monthLabel)")
                 } footer: {
-                    Text("A pinned month is exact. Every other month is left alone.")
+                    Text("A pinned month is exact. Every other month is left alone. Plan as many months as you like — they all go up together when you save.")
+                }
+
+                if !editor.pendingMonths.isEmpty {
+                    Section("Not saved yet") {
+                        ForEach(editor.pendingMonths.sorted(), id: \.self) { m in
+                            Button {
+                                editor.month = m
+                            } label: {
+                                LabeledContent(editor.label(of: m)) {
+                                    Text(editor.pinned[m]?.asMoney ?? "Back to the plan")
+                                        .foregroundStyle(Theme.quietText)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
 
                 Section {
@@ -286,11 +373,11 @@ private struct PlanHistoryChart: View {
     }
 
     private var bars: [Bar] {
-        editor.row.plan.keys.sorted().map { m in
+        editor.months.map { m in
             let spent = editor.row.spent[m]
             return Bar(
                 month: m,
-                label: shortLabel(m),
+                label: BudgetEditor.shortLabel(m),
                 amount: spent ?? editor.projected(m),
                 isSpent: spent != nil,
                 isEdited: m == editor.month
@@ -303,7 +390,8 @@ private struct PlanHistoryChart: View {
         let colour = Color(hex: editor.row.colour)
 
         VStack(alignment: .leading, spacing: 6) {
-            Chart(data) { bar in
+            Chart {
+                ForEach(data) { bar in
                 BarMark(
                     x: .value("Month", bar.label),
                     y: .value("Amount", Double(bar.amount) / 100)
@@ -333,8 +421,30 @@ private struct PlanHistoryChart: View {
                         .foregroundStyle(colour)
                     }
                 }
+                }
+
+                // A month with an unsaved figure on it. Marked rather than
+                // recoloured: the bar's own weight already means spent or not,
+                // and a second meaning loaded onto the same channel would make
+                // both unreadable.
+                ForEach(data.filter { editor.pendingMonths.contains($0.month) }) { bar in
+                    PointMark(
+                        x: .value("Month", bar.label),
+                        y: .value("Amount", Double(bar.amount) / 100)
+                    )
+                    .symbolSize(26)
+                    .foregroundStyle(Theme.accent)
+                }
             }
             .chartXSelection(value: $picked)
+            // Touching the chart moves the edit, which is the point of showing
+            // the year while a figure can still be typed. Nothing is lost by
+            // moving: each month's figure is held against that month, so
+            // stepping away and back returns to what was typed.
+            .onChange(of: picked) { _, chosen in
+                guard let chosen, let bar = bars.first(where: { $0.label == chosen }) else { return }
+                editor.month = bar.month
+            }
             .animation(.snappy(duration: 0.2), value: picked)
             .chartYAxis {
                 AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
@@ -369,10 +479,4 @@ private struct PlanHistoryChart: View {
         return sum > 0 ? sum : nil
     }
 
-    private func shortLabel(_ ym: String) -> String {
-        let parts = ym.split(separator: "-")
-        guard parts.count == 2, let m = Int(parts[1]), (1...12).contains(m) else { return ym }
-        return ["Jan","Feb","Mar","Apr","May","Jun",
-                "Jul","Aug","Sep","Oct","Nov","Dec"][m - 1]
-    }
 }
