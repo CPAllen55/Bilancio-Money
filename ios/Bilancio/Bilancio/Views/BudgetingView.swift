@@ -72,7 +72,11 @@ final class BudgetingModel {
                     .filter { $0.parentSlug == nil }
                     .map { ($0.slug, $0) }
             )
-            trend = try? await client.trend(months: 12)
+            // Two years, not one. The plan runs to December and its
+            // year-ago counterparts run to December before that — twelve
+            // months of history stops at last October and leaves the
+            // projection months with nothing behind them to compare against.
+            trend = try? await client.trend(months: 24)
             // Opens on the month in progress, which is the one a person came
             // to look at. Any other default is a click before the screen is
             // showing what was asked for.
@@ -636,23 +640,35 @@ private struct MoneyOverTime: View {
         var id: String { month }
     }
 
-    /// Last year's actuals, keyed by the month they are compared with.
+    /// Last year's actuals, keyed by the month they are drawn under.
     ///
-    /// priorSeries is positionally aligned with series — entry *i* is the same
-    /// calendar month a year earlier — so the pairing is by index and the key
-    /// comes from the present one.
+    /// Built by shifting the series back a year rather than by reading
+    /// priorSeries. priorSeries only covers the months the series itself
+    /// covers, which ends today — so the projection months, whose year-ago
+    /// counterparts are perfectly well recorded, had nothing to draw. Twenty
+    /// four months of series reaches every one of them.
     private var lastYear: [String: (income: Int, expense: Int)] {
         guard let trend else { return [:] }
-        var out: [String: (Int, Int)] = [:]
-        for (now, before) in zip(trend.series, trend.priorSeries) {
-            out[now.month] = (before.income, before.expense)
+        let byMonth = Dictionary(uniqueKeysWithValues: trend.series.map {
+            ($0.month, (income: $0.income, expense: $0.expense))
+        })
+        var out: [String: (income: Int, expense: Int)] = [:]
+        for m in data.months {
+            if let year = Self.yearBefore(m), let found = byMonth[year] {
+                out[m] = found
+            }
         }
         return out
     }
 
-    private var hasLastYear: Bool {
-        lastYear.values.contains { $0.income > 0 || $0.expense > 0 }
+    /// "2026-12" a year earlier is "2025-12".
+    static func yearBefore(_ ym: String) -> String? {
+        let parts = ym.split(separator: "-")
+        guard parts.count == 2, let y = Int(parts[0]) else { return nil }
+        return "\(y - 1)-\(parts[1])"
     }
+
+    private var hasLastYear: Bool { !lastYear.isEmpty }
 
     private var points: [Point] {
         data.months.enumerated().map { i, m in
@@ -722,31 +738,34 @@ private struct MoneyOverTime: View {
                     // lower than then", which is a shape rather than a size.
                     if showLastYear {
                         ForEach(points) { p in
+                            // Both lines, and no threshold on either. A month
+                            // present in the record earned what it earned, and
+                            // a year in which nothing came in is a finding
+                            // rather than missing data — suppressing the zero
+                            // deleted the income line entirely and made the
+                            // chart look like it only tracked spending.
                             if let before = lastYear[p.month] {
-                                if before.expense > 0 {
-                                    LineMark(
-                                        x: .value("Month", p.label),
-                                        y: .value("Amount", Double(before.expense) / 100),
-                                        series: .value("Series", "Spending last year")
-                                    )
-                                    .foregroundStyle(Theme.expenseTint)
-                                    .lineStyle(.init(lineWidth: 2, dash: [4, 3]))
-                                    .interpolationMethod(.monotone)
-                                    .symbol(.circle)
-                                    .symbolSize(18)
-                                }
-                                if before.income > 0 {
-                                    LineMark(
-                                        x: .value("Month", p.label),
-                                        y: .value("Amount", Double(before.income) / 100),
-                                        series: .value("Series", "Income last year")
-                                    )
-                                    .foregroundStyle(Theme.incomeTint)
-                                    .lineStyle(.init(lineWidth: 2, dash: [4, 3]))
-                                    .interpolationMethod(.monotone)
-                                    .symbol(.circle)
-                                    .symbolSize(18)
-                                }
+                                LineMark(
+                                    x: .value("Month", p.label),
+                                    y: .value("Amount", Double(before.expense) / 100),
+                                    series: .value("Series", "Spending last year")
+                                )
+                                .foregroundStyle(Theme.expenseTint)
+                                .lineStyle(.init(lineWidth: 2, dash: [5, 3]))
+                                .interpolationMethod(.monotone)
+                                .symbol(.circle)
+                                .symbolSize(20)
+
+                                LineMark(
+                                    x: .value("Month", p.label),
+                                    y: .value("Amount", Double(before.income) / 100),
+                                    series: .value("Series", "Income last year")
+                                )
+                                .foregroundStyle(Theme.incomeTint)
+                                .lineStyle(.init(lineWidth: 2, dash: [2, 3]))
+                                .interpolationMethod(.monotone)
+                                .symbol(.square)
+                                .symbolSize(20)
                             }
                         }
                     }
@@ -777,17 +796,24 @@ private struct MoneyOverTime: View {
             swatch(Theme.incomeTint.opacity(0.3), "Income", wide: true)
             swatch(Theme.expenseTint.opacity(0.95), "Spending", wide: false)
             if showLastYear {
-                HStack(spacing: 4) {
-                    // A dash rather than a block, because that is what is drawn.
-                    Rectangle()
-                        .fill(Theme.quietText)
-                        .frame(width: 12, height: 2)
-                    Text("Last year")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.quietText)
-                }
+                // Dashes rather than blocks, because that is what is drawn —
+                // and one for each, because there are two lines and they are
+                // not the same measurement.
+                dash(Theme.incomeTint, "Income LY")
+                dash(Theme.expenseTint, "Spending LY")
             }
             Spacer(minLength: 0)
+        }
+    }
+
+    private func dash(_ colour: Color, _ label: String) -> some View {
+        HStack(spacing: 4) {
+            Rectangle()
+                .fill(colour)
+                .frame(width: 12, height: 2)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(Theme.quietText)
         }
     }
 
