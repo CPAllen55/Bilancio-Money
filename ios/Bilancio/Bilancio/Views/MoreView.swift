@@ -49,10 +49,6 @@ struct MoreView: View {
         NavigationStack {
             List {
                 Section {
-                    row("Budgeting", "slider.horizontal.3",
-                        "What each month is supposed to cost") {
-                        BudgetingView(embedded: true)
-                    }
                     row("The year ahead", "calendar",
                         "Where the year ends up, on the same plan") {
                         ForecastView()

@@ -134,6 +134,7 @@ struct BudgetingView: View {
             }
         .navigationTitle("Budgeting")
         .navigationBarTitleDisplayMode(embedded ? .inline : .large)
+        .modifier(MarkWhenRoot(on: !embedded && onDone == nil))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink {

@@ -70,22 +70,21 @@ private struct SessionGate: View {
 private struct SignedIn: View {
     var body: some View {
         TabView {
+            // In the order the questions get asked: where things stand, how
+            // that compares with before, what it was supposed to be, and then
+            // the rows behind all three. Transactions sits last because it is
+            // the one you arrive at from the others as often as you open it.
             Tab("Overview", systemImage: "chart.pie") {
                 OverviewView()
-            }
-            Tab("Transactions", systemImage: "list.bullet") {
-                TransactionsView()
             }
             Tab("Trend", systemImage: "chart.bar") {
                 TrendView()
             }
-            // Tracker is gone as a tab: it is the Overview's lower half now.
-            // "What did this period come to" and "which budgets are running
-            // out" are the same question asked twice, and splitting them across
-            // two tabs meant the answer and its reasons were never on screen
-            // together. Net Worth takes the slot back.
-            Tab("Net Worth", systemImage: "building.columns") {
-                NetWorthView()
+            Tab("Budgeting", systemImage: "slider.horizontal.3") {
+                BudgetingView()
+            }
+            Tab("Transactions", systemImage: "list.bullet") {
+                TransactionsView()
             }
             // A tab bar holds five. There are seven dashboards, so the fifth
             // slot is the way to the rest rather than one more of them — which
