@@ -124,8 +124,7 @@ struct OverviewView: View {
                     Task { await model.load() }
                 }
 
-                HeadlineCard(summary: s, spark: model.sparklines?.net)
-                PlanCard(summary: s)
+                StandingCard(summary: s)
 
                 // Nothing linked is not an error, but it is the one state where
                 // the whole screen is zeros and the only useful thing on it is
@@ -170,73 +169,42 @@ struct OverviewView: View {
     }
 }
 
-// MARK: - What the period came to
+// MARK: - Where things stand
 
-/// Net Balance: the answer, and the two things worth measuring it against.
-private struct HeadlineCard: View {
+/// The answer first: what was kept, or what was overspent, and the two figures
+/// it is worked out from.
+private struct StandingCard: View {
     let summary: SummaryResponse
-    let spark: [Int]?
 
     private var net: Int { summary.totals.net }
     private var overspent: Bool { net < 0 }
 
-    /// Absent rather than zero when there is no plan. A budgeted net of nothing
-    /// is the absence of a plan, not a plan to break even, and comparing
-    /// against it would invent a target.
-    private var plannedNet: Int? {
-        guard let b = summary.budget, b.available, b.income > 0 || b.expense > 0 else { return nil }
-        return b.net
-    }
-
     var body: some View {
         Card {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Net Balance")
-                        .font(Theme.tileLabel)
-                        .foregroundStyle(Theme.quietText)
-
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(summary.range.label)
-                        .font(Theme.note)
+                        .font(Theme.body)
                         .foregroundStyle(Theme.quietText)
 
                     // The sign is kept and the colour follows it, rather than
                     // the figure being made absolute and the meaning moved into
                     // a word beside it.
                     Text(net.asMoney)
-                        .font(Theme.figure(46))
+                        .font(Theme.figure(40))
                         .monospacedDigit()
                         .foregroundStyle(Theme.tint(forNet: net))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.4)
+                        .minimumScaleFactor(0.5)
 
                     Text(subline)
                         .font(Theme.body)
                         .foregroundStyle(Theme.quietText)
                 }
 
-                if let spark, spark.contains(where: { $0 != 0 }) {
-                    Sparkline(values: spark)
-                        .stroke(Theme.tint(forNet: net),
-                                style: .init(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                        .frame(height: 30)
-                }
-
-                Divider()
-
-                HStack(spacing: 0) {
-                    Metric(caption: "vs budget",
-                           value: plannedNet.map { net - $0 },
-                           betterWhen: .up,
-                           empty: "no plan yet")
-                    Divider().frame(height: 38)
-                    Metric(caption: "vs \(summary.comparison.label.lowercased())",
-                           value: net - summary.previous.net,
-                           betterWhen: .up)
-                }
-
-                // Both bars, and both marks, on the scale each deserves — see
-                // ProportionBar for why a bar with a plan runs to its own.
+                // Each bar runs to whichever is larger of its own figure and
+                // its own plan, so passing the plan is what fills the track.
+                // Only when neither has a plan do the two share a scale.
                 let noPlanScale = max(summary.totals.income, summary.totals.expense)
                 VStack(spacing: 12) {
                     ProportionBar(label: "Income", amount: summary.totals.income,
@@ -246,13 +214,26 @@ private struct HeadlineCard: View {
                                   planned: plannedExpense, fallbackScale: noPlanScale,
                                   tint: Theme.expenseTint, verb: "spent")
                 }
+
+                if let status = budgetStatus {
+                    Label(status.text, systemImage: status.icon)
+                        .font(Theme.note)
+                        .foregroundStyle(status.tint)
+                }
             }
         }
     }
 
-    /// 0 rather than nil for "no plan", which is how the Worker guards it too.
-    private var plannedIncome: Int { max(0, summary.budget?.income ?? 0) }
-    private var plannedExpense: Int { max(0, summary.budget?.expense ?? 0) }
+    private var budget: SummaryResponse.Budget? {
+        guard let b = summary.budget, b.available else { return nil }
+        return b
+    }
+
+    /// 0 rather than nil for "no plan", which is how the Worker guards it too:
+    /// a budget of zero is the absence of the information, not a plan to earn
+    /// or spend nothing.
+    private var plannedIncome: Int { max(0, budget?.income ?? 0) }
+    private var plannedExpense: Int { max(0, budget?.expense ?? 0) }
 
     /// A finished period gets no daily rate: there are no days left to spread
     /// anything over, and "about $40 a day for the 0 days left" is what
@@ -265,110 +246,18 @@ private struct HeadlineCard: View {
         }
         return "About \(safe.perDay.asMoney) a day for the \(safe.daysLeft) day\(safe.daysLeft == 1 ? "" : "s") left."
     }
-}
 
-// MARK: - What it was supposed to come to
-
-/// Net Balance Budget: the same figure the plan expected, against what actually
-/// happened and against the period before.
-private struct PlanCard: View {
-    let summary: SummaryResponse
-
-    private var available: Bool {
-        guard let b = summary.budget else { return false }
-        return b.available && (b.income > 0 || b.expense > 0)
-    }
-
-    private var plannedNet: Int { summary.budget?.net ?? 0 }
-
-    var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Net Balance Budget")
-                    .font(Theme.tileLabel)
-                    .foregroundStyle(Theme.quietText)
-
-                if available {
-                    Text(plannedNet.asMoney)
-                        .font(Theme.figure(32))
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.tint(forNet: plannedNet))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-
-                    Divider()
-
-                    HStack(spacing: 0) {
-                        // The plan sitting above what actually happened means
-                        // the period is behind it, which is the bad direction —
-                        // so a positive gap here is not good news.
-                        Metric(caption: "vs actual",
-                               value: plannedNet - summary.totals.net,
-                               betterWhen: .down)
-                        Divider().frame(height: 38)
-                        // Deliberately uncoloured. A plan above last period's
-                        // actual is more ambitious, which is neither good nor
-                        // bad without knowing why it moved.
-                        Metric(caption: "vs \(summary.comparison.label.lowercased())",
-                               value: plannedNet - summary.previous.net,
-                               betterWhen: nil)
-                    }
-                } else {
-                    Text("Not enough history yet to say what this period should have cost.")
-                        .font(Theme.note)
-                        .foregroundStyle(Theme.quietText)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - One comparison
-
-/// A difference, its direction, and whether that direction is good news.
-///
-/// `betterWhen` is optional because some comparisons genuinely have no better
-/// direction, and colouring one anyway asserts a judgement the figure does not
-/// support.
-private struct Metric: View {
-    let caption: String
-    let value: Int?
-    let betterWhen: BetterWhen?
-    var empty: String = "—"
-
-    private var tint: Color {
-        guard let value, let betterWhen else { return Theme.text }
-        if value == 0 { return Theme.quietText }
-        return (betterWhen == .up ? value > 0 : value < 0) ? Theme.positive : Theme.negative
-    }
-
-    var body: some View {
-        VStack(spacing: 3) {
-            if let value {
-                HStack(spacing: 3) {
-                    if betterWhen != nil, value != 0 {
-                        Image(systemName: value > 0 ? "arrow.up" : "arrow.down")
-                            .font(.system(size: 10, weight: .bold))
-                    }
-                    Text(abs(value).asShortMoney)
-                        .font(.system(.headline, design: .rounded))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                }
-                .foregroundStyle(tint)
-            } else {
-                Text(empty)
-                    .font(.system(.headline, design: .rounded))
-                    .foregroundStyle(Theme.quietText)
-            }
-
-            Text(caption)
-                .font(Theme.tileLabel)
-                .foregroundStyle(Theme.quietText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity)
+    /// Reported against the budget, not against elapsed days.
+    ///
+    /// A straight-line pace assumes money leaves evenly and it does not — rent
+    /// clears on the 1st, and an indicator that cries wolf for a week every
+    /// month teaches people to ignore it. The budget is an actual limit with no
+    /// prediction attached.
+    private var budgetStatus: (text: String, icon: String, tint: Color)? {
+        guard let b = budget, b.expense > 0 else { return nil }
+        let over = summary.totals.expense - b.expense
+        return over > 0
+            ? ("\(over.asMoney) over budget", "exclamationmark.triangle.fill", Theme.negative)
+            : ("\((-over).asMoney) left in budget", "checkmark.circle.fill", Theme.positive)
     }
 }
