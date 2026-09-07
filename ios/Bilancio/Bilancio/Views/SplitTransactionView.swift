@@ -114,27 +114,35 @@ final class SplitEditor {
     /// income category would make the parts sum to more spending than the
     /// charge — arithmetic that holds while the meaning does not.
     ///
-    /// Transfers are offered whichever way the money went, because a transfer
-    /// is not a side of the ledger: it is money that has not been earned or
-    /// spent, only moved. Leaving them out meant a hundred thousand pounds
-    /// moved between two of your own accounts had no correct answer available
-    /// — it could be filed as some kind of spending or left as some kind of
-    /// spending, and either way it stood in the expense figures and set the
-    /// scale of every chart it appeared in.
-    ///
-    /// Splits are deliberately not widened the same way. A split divides a
-    /// charge into the things it paid for, and "part of this was not a
-    /// purchase" is a statement about the whole row rather than a share of it.
+    /// That rule is about SPLITS, and only splits. The row's own category is
+    /// `filable` below, which offers everything.
     var pickable: [TransactionsResponse.Category] {
-        pickable(includingTransfers: false)
-    }
-
-    /// The same, with the transfer categories added. Used by the row's own
-    /// category and not by its splits.
-    func pickable(includingTransfers: Bool) -> [TransactionsResponse.Category] {
         let side = row.amount > 0 ? "income" : "spend"
         return categories
-            .filter { $0.isLeaf && ($0.kind == side || (includingTransfers && $0.kind == "transfer")) }
+            .filter { $0.isLeaf && $0.kind == side }
+            .sorted { $0.label < $1.label }
+    }
+
+    /// Every leaf, whichever way the money went.
+    ///
+    /// Filing a row is the reader telling us something the direction of the
+    /// money cannot tell us back, so it is not the place to be clever about
+    /// which answers are allowed. The narrower list ruled out the true answer
+    /// more than once: a hundred thousand moved between two of your own
+    /// accounts is a transfer whichever way it went, and money arriving from
+    /// somebody covering a bill you already paid belongs against that bill and
+    /// not in income.
+    ///
+    /// The Worker is already built for this. An explicit override keeps the
+    /// sign the money actually had — see `displayBucket` — so an inbound row
+    /// filed against Home lands there as a negative and cancels the part of
+    /// the bill it repaid, rather than being quietly rebucketed as a refund.
+    /// Only a rule or Plaid's guess is overruled by the direction of travel,
+    /// because those are generalisations and a generalisation must not be able
+    /// to invent income.
+    var filable: [TransactionsResponse.Category] {
+        categories
+            .filter(\.isLeaf)
             .sorted { $0.label < $1.label }
     }
 
@@ -150,12 +158,11 @@ final class SplitEditor {
         grouped(pickable)
     }
 
-    /// The row's own category, which is the one that may be a transfer. The
-    /// transfer leaves sit under a parent of their own, so they arrive as a
-    /// section without anything here having to name them.
+    /// The row's own category. Every parent in the tree appears, transfers and
+    /// income among them, so nothing has to be named here for it to show up.
     var groupedFilable: [(parent: TransactionsResponse.Category,
                           children: [TransactionsResponse.Category])] {
-        grouped(pickable(includingTransfers: true))
+        grouped(filable)
     }
 
     private func grouped(_ leaves: [TransactionsResponse.Category])
@@ -175,6 +182,12 @@ final class SplitEditor {
     var orphanPickable: [TransactionsResponse.Category] {
         let known = Set(categories.filter { $0.parentSlug == nil }.map(\.slug))
         return pickable.filter { !known.contains($0.parentSlug ?? "") }
+    }
+
+    /// The same gap, for the row's own picker.
+    var orphanFilable: [TransactionsResponse.Category] {
+        let known = Set(categories.filter { $0.parentSlug == nil }.map(\.slug))
+        return filable.filter { !known.contains($0.parentSlug ?? "") }
     }
 
     func add() {
@@ -266,9 +279,9 @@ struct SplitTransactionView: View {
                             }
                         }
 
-                        if !editor.orphanPickable.isEmpty {
+                        if !editor.orphanFilable.isEmpty {
                             Section("Other") {
-                                ForEach(editor.orphanPickable) { cat in
+                                ForEach(editor.orphanFilable) { cat in
                                     Text(cat.label).tag(String?.some(cat.id))
                                 }
                             }
