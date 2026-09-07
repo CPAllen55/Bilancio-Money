@@ -534,6 +534,45 @@ private struct PickedSegment: View {
 }
 
 
+/// What one touch on a chart came to.
+///
+/// The same shape as `PickedSegment`, for charts whose bars are a month rather
+/// than a category within one. Said in a row under the chart rather than in a
+/// label over the bar: an annotation has to be small enough to sit in the gap
+/// above a bar, which on a phone means an abbreviated figure that vanishes the
+/// moment the finger lifts — legible only if you already knew what it said.
+private struct ChartReadout: View {
+    let month: String
+    let value: Int
+    let caption: String
+    let tint: Color
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(TrendResponse.Month.shortLabel(of: month))
+                .font(Theme.tileLabel)
+                .foregroundStyle(Theme.quietText)
+            Text(caption)
+                .font(Theme.note)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Text(value.asMoney)
+                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(tint)
+            Button(action: dismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(Theme.quietText)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .background(Theme.background, in: .rect(cornerRadius: 8))
+    }
+}
+
 /// A month, a subcategory within it, and the way through to its transactions.
 ///
 /// Two steps rather than one screen per combination: picking the month first
@@ -682,14 +721,6 @@ private struct NetChart: View {
                     // stepping forward: a bar already at full strength has
                     // nowhere brighter to go.
                     .opacity(picked == nil || picked == m.month ? 1 : 0.3)
-                    .annotation(position: .top, spacing: 2) {
-                        if picked == m.month {
-                            Text(m.net.asShortMoney)
-                                .font(.system(size: 10, weight: .semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(Theme.tint(forNet: m.net))
-                        }
-                    }
                 }
                 .chartXSelection(value: $picked)
                 .chartXAxis {
@@ -706,6 +737,17 @@ private struct NetChart: View {
                 .chartYAxis { AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0))) }
                 .modifier(ChartHeight(fill: maximised, fixed: 180))
                 .animation(.snappy(duration: 0.2), value: picked)
+
+                if let month = picked, let m = series.first(where: { $0.month == month }) {
+                    ChartReadout(month: month,
+                                 value: m.net,
+                                 caption: m.net < 0 ? "more out than in" : "more in than out",
+                                 tint: Theme.tint(forNet: m.net)) { picked = nil }
+                } else {
+                    Text("Touch a month for what it came to.")
+                        .font(Theme.note)
+                        .foregroundStyle(Theme.quietText)
+                }
             }
         }
     }
@@ -722,6 +764,7 @@ private struct NetChart: View {
 /// serve one of them.
 private struct RunningTotalChart: View {
     let series: [TrendResponse.Month]
+    @State private var picked: String?
 
     private var points: [(label: String, total: Int)] {
         var total = 0
@@ -749,7 +792,20 @@ private struct RunningTotalChart: View {
                         .foregroundStyle(Theme.tint(forNet: p.total))
                         .interpolationMethod(.monotone)
                     }
+
+                    // The touched month, marked on the line itself. A running
+                    // total has no bars to darken, so without this there is
+                    // nothing to say which point the figure below belongs to.
+                    if let picked, let p = points.first(where: { $0.label == picked }) {
+                        PointMark(
+                            x: .value("Month", p.label),
+                            y: .value("Running", Double(p.total) / 100)
+                        )
+                        .symbolSize(70)
+                        .foregroundStyle(Theme.tint(forNet: p.total))
+                    }
                 }
+                .chartXSelection(value: $picked)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 6)) { value in
                         AxisGridLine()
@@ -763,8 +819,14 @@ private struct RunningTotalChart: View {
                 }
                 .chartYAxis { AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0))) }
                 .modifier(ChartHeight(fill: maximised, fixed: 170))
+                .animation(.snappy(duration: 0.2), value: picked)
 
-                if let last = points.last {
+                if let month = picked, let p = points.first(where: { $0.label == month }) {
+                    ChartReadout(month: month,
+                                 value: p.total,
+                                 caption: "by the end of it",
+                                 tint: Theme.tint(forNet: p.total)) { picked = nil }
+                } else if let last = points.last {
                     Text("\(last.total.asMoney) across the \(series.count) months shown")
                         .font(Theme.note)
                         .foregroundStyle(Theme.quietText)
