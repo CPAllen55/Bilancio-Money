@@ -145,7 +145,14 @@ private struct CategoryTrendChart: View {
 
     /// How many months are on screen at once. Pinching changes it; the chart
     /// scrolls through the rest rather than squeezing them in.
-    @State private var window: Int = 12
+    ///
+    /// Starts at whatever was asked for. It used to start at twelve whatever
+    /// was asked for, so choosing 24 fetched two years and showed one — and
+    /// because the columns were collapsing two Januaries into one at the time,
+    /// twelve columns of doubled spending looked like the answer rather than
+    /// like half of it. Asking for twenty-four months and being shown twelve is
+    /// the chart disagreeing with the control above it.
+    @State private var window: Int?
     /// What the window was when the current pinch started, so the gesture is
     /// measured from where it began rather than compounding each frame.
     @State private var windowAtPinchStart: Int?
@@ -259,9 +266,10 @@ private struct CategoryTrendChart: View {
     private var range: [Color] { visible.map { Color(hex: $0.colour) } }
 
     /// Never wider than the data, never narrower than three — one month on
-    /// screen is a single bar with nothing to compare it to.
+    /// screen is a single bar with nothing to compare it to. Unset means the
+    /// whole of what was asked for.
     private var clampedWindow: Int {
-        min(max(3, window), max(3, series.count))
+        min(max(3, window ?? series.count), max(3, series.count))
     }
 
     /// The plotted values, which are the month keys — see `Month.shortLabel`
@@ -413,7 +421,12 @@ private struct CategoryTrendChart: View {
         // Drilling into a parent rebuilds the marks but not the months, so the
         // anchor still names a month that exists — unless the range itself
         // changed underneath, which is what this catches.
-        .onChange(of: series.count) { anchorAtLatest() }
+        // A new range is a new question, so the window goes back to showing all
+        // of it rather than keeping a zoom that belonged to the last one.
+        .onChange(of: series.count) {
+            window = nil
+            anchorAtLatest()
+        }
         .onChange(of: clampedWindow) { previous, _ in rescale(from: previous) }
         // Portrait gets a fixed height so the cards below it keep their
         // rhythm. Landscape takes whatever is left, because a fixed 300 is
