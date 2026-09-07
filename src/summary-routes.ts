@@ -1339,6 +1339,147 @@ export function monthKeys(count: number, today: Date): string[] {
   return out;
 }
 
+/* ------------------------------------------------------------- calendar -- */
+
+/**
+ * One month, day by day: what was spent on each, and which days carry a
+ * subscription.
+ *
+ * Spend is worked out the same way every other figure on the site is — the
+ * rows go through partsFor and displayBucket, so a split lands on the day of
+ * the transaction it was carved from and a transfer never counts as spending.
+ * Summing the raw amounts would have been shorter and would have produced a
+ * calendar that quietly disagreed with the Overview, which is worse than no
+ * calendar.
+ *
+ * A month in the future has no spending to report. What it does have is the
+ * subscriptions that will land in it, which is the whole reason to look ahead:
+ * the detector only recognises monthly runs — judge() rejects any gap outside
+ * 25 to 37 days — so the next occurrence is the same day of the month as the
+ * last one, and the month after that, and so on. Projected days are marked as
+ * such and carry no spend figure, because nothing has been spent.
+ */
+summary.get("/calendar", async (c) => {
+  const { db, ready, close } = getDb(c.env, { cached: true });
+  try {
+    await ready;
+    const auth = await requireUser(c, db);
+    if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+
+    const asked = c.req.query("month") ?? "";
+    const m = /^(\d{4})-(\d{2})$/.exec(asked);
+    const today = new Date();
+    const year = m ? Number(m[1]) : today.getUTCFullYear();
+    const mon = m ? Number(m[2]) - 1 : today.getUTCMonth();
+    if (mon < 0 || mon > 11) return c.json({ error: "bad_request", reason: "month" }, 400);
+
+    const start = new Date(Date.UTC(year, mon, 1));
+    const end = new Date(Date.UTC(year, mon + 1, 0));
+    const key = `${year}-${String(mon + 1).padStart(2, "0")}`;
+    const daysInMonth = end.getUTCDate();
+
+    const account = c.req.query("account") ?? "all";
+    const [ctx, ids] = await Promise.all([
+      loadCategories(db, auth.user.id),
+      ownedAccountIds(db, auth.user.id, account, true),
+    ]);
+
+    /* Every day of the month exists in the response whether or not anything
+       happened on it. A calendar with gaps where the quiet days were would
+       have to be filled in by the client anyway, and then two places would
+       decide how many days February has. */
+    const days = new Map<string, { spent: number; count: number; subs: unknown[] }>();
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = `${key}-${String(d).padStart(2, "0")}`;
+      days.set(date, { spent: 0, count: 0, subs: [] });
+    }
+
+    const where = ledgerRows(ids, start, end);
+    /* rowFields plus the date. The shared selection does not carry it -- no
+       other figure on the site is grouped by day -- and widening it here
+       would add a column to every query that uses it for the benefit of
+       one. */
+    const dated = () =>
+      db
+        .select({ ...rowFields, date: transactions.date })
+        .from(transactions)
+        .leftJoin(
+          transactionOverrides,
+          and(
+            eq(transactionOverrides.transactionId, transactions.id),
+            eq(transactionOverrides.userId, auth.user.id),
+          ),
+        )
+        .where(where);
+
+    const [rows, splits] = ids.length
+      ? await Promise.all([dated(), loadSplits(db, auth.user.id, where)])
+      : [[] as (AmountRow & { date: string })[], new Map() as SplitMap];
+
+    let spentTotal = 0;
+    for (const r of rows as (AmountRow & { date: string })[]) {
+      const cell = days.get(String(r.date));
+      if (!cell) continue;                       // a date outside the month
+      let any = false;
+      for (const part of partsFor(r, splits)) {
+        const { kind, signed } = displayBucket(part.amount, part.row, ctx);
+        if (kind === "transfer" || kind === "income") continue;
+        cell.spent += -signed;
+        spentTotal += -signed;
+        any = true;
+      }
+      /* Counted per transaction rather than per part: three pieces of one
+         supermarket trip are one thing that happened that day. */
+      if (any) cell.count += 1;
+    }
+
+    /* The subscriptions are judged over their own long window rather than this
+       month, because three charges are needed before anything is a
+       subscription at all and one month can never hold three. */
+    const displayName = sql<string>`coalesce(${transactions.merchantName}, ${transactions.name})`;
+    const names = ids.length
+      ? (await db
+          .selectDistinct({ name: displayName })
+          .from(transactions)
+          .where(ledgerRows(ids))
+        ).map((r) => String(r.name)).filter(Boolean)
+      : [];
+    const subs = await subscriptionsFor(db, ids, displayName, names, today);
+
+    let subsTotal = 0;
+    for (const [name, v] of subs.byKey) {
+      if (!v.last) continue;
+      const [ly, lm, ld] = v.last.split("-").map(Number);
+      /* Which day of the month it lands on. A charge on the 31st has no
+         counterpart in a 30-day month, so it falls back to the last day
+         rather than spilling into the next one. */
+      const day = Math.min(ld, daysInMonth);
+      const date = `${key}-${String(day).padStart(2, "0")}`;
+      const cell = days.get(date);
+      if (!cell) continue;
+
+      /* Already happened, or still to come. The last charge is the boundary:
+         anything at or before it is history the rows above already counted,
+         anything after it is a projection. */
+      const lastKey = `${ly}-${String(lm).padStart(2, "0")}`;
+      const projected = key > lastKey;
+      cell.subs.push({ name, cents: v.cents, projected, since: v.since, rose: v.rose });
+      subsTotal += v.cents;
+    }
+
+    return c.json({
+      ok: true,
+      month: key,
+      today: ymd(today),
+      days: [...days.entries()].map(([date, d]) => ({ date, ...d })),
+      total: { spent: spentTotal, subscriptions: subsTotal },
+      accountsCounted: ids.length,
+    });
+  } finally {
+    c.executionCtx.waitUntil(close());
+  }
+});
+
 summary.get("/trend", async (c) => {
   // Read-only and expensive: safe to serve from Hyperdrive's cache when a
   // caching binding exists. See getDb.

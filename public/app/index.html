@@ -1712,6 +1712,68 @@
   .bg-delta.bad{ color:var(--coral); }
   .bg-from{ font-size:11.5px; color:var(--muted); margin-top:2px; }
 
+  /* ---- the calendar ---- */
+
+  .cal-bar{ display:flex; align-items:center; gap:10px; margin:16px 0 14px; }
+  .cal-bar b{ font-size:15px; min-width:150px; }
+  .cal-sum{ margin-left:auto; font-family:var(--font-num); font-size:12.5px;
+            color:var(--muted); }
+  .cal-subtot{ color:var(--near-ink, var(--ink-soft)); }
+  .cal-ahead{ color:var(--ink-soft); }
+
+  /* Seven columns, always. A month that started on the left every time would
+     put no two months in the same shape, which is most of what a calendar is
+     for. */
+  .cal-month{ display:grid; grid-template-columns:repeat(7, minmax(0, 1fr));
+              gap:6px; }
+  .cal-dow{ font:500 10.5px/1 var(--font-num); letter-spacing:.08em;
+            text-transform:uppercase; color:var(--muted); padding:0 0 4px 2px; }
+
+  .cal-cell{ position:relative; min-height:86px; padding:7px 8px 8px;
+             border:1px solid var(--hair); border-radius:7px;
+             background:var(--surface); display:flex; flex-direction:column;
+             gap:4px; overflow:hidden; }
+  /* The blanks before the 1st hold the shape and nothing else, so they take no
+     border -- an empty box with an edge reads as a day with nothing in it. */
+  .cal-cell.empty{ border:0; background:none; min-height:0; }
+  .cal-num{ font:500 11.5px/1 var(--font-num); color:var(--muted); }
+
+  /* Today gets the gold the rest of the app uses for "this is the one you are
+     looking at", rather than a colour of its own. */
+  .cal-cell.today{ border-color:var(--gold-4); }
+  .cal-cell.today .cal-num{ color:var(--gold-4); font-weight:600; }
+
+  /* A day still to come has nothing spent on it, and saying so quietly is
+     better than leaving it looking identical to a day that cost nothing. */
+  .cal-cell.future{ background:none; border-style:dashed; }
+
+  /* The figure carries the weight of the day rather than a background wash:
+     --heat is the day's share of the busiest one in the month, so a quiet
+     month still shows its own shape instead of being uniformly pale. */
+  .cal-amt{ font-family:var(--font-num); font-size:13px; font-weight:600;
+            color:var(--ink);
+            opacity:calc(0.45 + 0.55 * var(--heat, 0)); }
+
+  .cal-subs{ display:flex; flex-direction:column; gap:3px; margin-top:auto; }
+  /* A charge that has happened is stated; one that has not is outlined. The
+     difference is the same one the Budgeting chart draws between a month that
+     happened and a month that is planned. */
+  .cal-sub{ font-size:10.5px; line-height:1.25; padding:2px 5px; border-radius:4px;
+            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+            background:var(--mint-bg); color:var(--ink);
+            border:1px solid transparent; }
+  .cal-sub.due{ background:none; border-color:var(--mint-dim); color:var(--ink-soft);
+                border-style:dashed; }
+
+  @media (max-width:760px){
+    /* Seven columns of eighty pixels is not a calendar on a phone, it is a
+       grid of initials. The weekday row goes and the days run as a list. */
+    .cal-month{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+    .cal-dow{ display:none; }
+    .cal-cell.empty{ display:none; }
+    .cal-cell{ min-height:0; }
+  }
+
   .charttip{ position:fixed; z-index:9; pointer-events:none;
              min-width:172px; padding:11px 14px 12px;
              background:var(--bg-panel); border:1px solid var(--hair-strong);
@@ -2926,6 +2988,7 @@
       <button class="tab" data-view="overview" aria-current="true">Overview</button>
       <button class="tab" data-view="tracker">Tracker</button>
       <button class="tab" data-view="trend">Trend</button>
+      <button class="tab" data-view="calendar">Calendar</button>
       <button class="tab" data-view="net">Net Activity</button>
       <button class="tab" data-view="budgeting">Budgeting</button>
       <button class="tab" data-view="assets">Net Worth</button>
@@ -2999,6 +3062,22 @@
       </div>
       <div class="card" id="trend-pie"></div>
       <div class="card trend-below" id="forecast-box" hidden></div>
+    </section>
+
+    <section class="panel" id="v-calendar">
+      <h1>A month, day by day</h1>
+      <p class="lede">What each day cost, and which days carry a subscription.
+        Look ahead and the spending stops — nothing has been spent yet — but the
+        subscriptions keep landing, because they are the part of a month that is
+        known in advance.</p>
+      <div class="cal-bar">
+        <button type="button" class="ctl" id="cal-prev" aria-label="Previous month">&#8592;</button>
+        <b id="cal-label"></b>
+        <button type="button" class="ctl" id="cal-next" aria-label="Next month">&#8594;</button>
+        <button type="button" class="ctl" id="cal-today">Today</button>
+        <span id="cal-sum" class="cal-sum"></span>
+      </div>
+      <div id="cal-grid"></div>
     </section>
 
     <section class="panel" id="v-net">
@@ -3421,6 +3500,7 @@ async function refresh() {
     if (view === 'admin')        await renderAdmin();
     if (view === 'overview')     await renderOverview();
     if (view === 'trend')        await renderTrend();
+    if (view === 'calendar')     await renderCalendar();
     if (view === 'net')          await renderNet();
     if (view === 'assets')       await renderAssets();
     if (view === 'tracker')      await renderBudgetView();
@@ -5537,6 +5617,109 @@ function monthLabel(ym) {
   const p = ym.split('-');
   return MONTH_NAMES[Number(p[1]) - 1] + ' ' + p[0];
 }
+
+/* Which month the calendar is showing. Held here rather than read off the
+   heading, because the heading is what it produces. */
+let calMonth = null;
+const CAL_DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function calShift(ym, by) {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + by, 1));
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+}
+
+/**
+ * A month laid out as a month.
+ *
+ * Weeks run Monday to Sunday, and the first row is padded with blanks so the
+ * 1st falls under the right weekday — a grid that started every month on the
+ * left would put no two months in the same shape and defeat the point of
+ * looking at one.
+ *
+ * The heat of a day is its share of the busiest day in the month rather than
+ * an absolute scale. A quiet month should still show its own shape; measured
+ * against some fixed ceiling every day in it would be the same pale nothing.
+ */
+async function renderCalendar() {
+  const grid = $('cal-grid');
+  if (!grid) return;
+  grid.innerHTML = '<p class="hint">Loading…</p>';
+
+  let r;
+  try {
+    r = await authed('/api/calendar' + (calMonth ? '?month=' + encodeURIComponent(calMonth) : ''));
+  } catch (err) {
+    grid.innerHTML = '<p class="hint">' + escapeHtml(err.message) + '</p>';
+    return;
+  }
+  calMonth = r.month;
+
+  const [y, m] = r.month.split('-').map(Number);
+  $('cal-label').textContent = MONTH_NAMES[m - 1] + ' ' + y;
+
+  const busiest = r.days.reduce((hi, d) => Math.max(hi, d.spent), 0) || 1;
+  const ahead = r.days.filter(d => d.date > r.today).length === r.days.length;
+
+  $('cal-sum').innerHTML = ahead
+    ? '<span class="cal-ahead">' + money0(r.total.subscriptions) + ' of subscriptions due</span>'
+    : escapeHtml(money0(r.total.spent)) + ' spent' +
+      (r.total.subscriptions
+        ? ' · <span class="cal-subtot">' + escapeHtml(money0(r.total.subscriptions)) +
+          ' of it subscriptions</span>'
+        : '');
+
+  /* getUTCDay is Sunday-first; these weeks are Monday-first, so Sunday moves
+     from the front to the back. */
+  const first = new Date(r.month + '-01T00:00:00Z').getUTCDay();
+  const lead = (first + 6) % 7;
+
+  const head = CAL_DOW.map(d => '<div class="cal-dow">' + d + '</div>').join('');
+  const blanks = Array.from({ length: lead }, () => '<div class="cal-cell empty"></div>').join('');
+
+  const cells = r.days.map(d => {
+    const day = Number(d.date.slice(8));
+    const future = d.date > r.today;
+    const heat = d.spent > 0 ? Math.max(0.08, d.spent / busiest) : 0;
+    const subs = d.subs || [];
+    return '<div class="cal-cell' + (d.date === r.today ? ' today' : '') +
+      (future ? ' future' : '') + (subs.length ? ' hassub' : '') + '"' +
+      (d.spent > 0 || subs.length
+        ? ' ' + tipAttrs(calTipLabel(d, subs), null, d.spent, 0, {
+            when: MONTH_NAMES[m - 1] + ' ' + day,
+            note: subs.length ? calTipNote(subs) : (d.count + ' transaction' + (d.count === 1 ? '' : 's')),
+          })
+        : '') + '>' +
+      '<span class="cal-num">' + day + '</span>' +
+      (d.spent > 0
+        ? '<span class="cal-amt" style="--heat:' + heat.toFixed(3) + '">' +
+          escapeHtml(money0(d.spent)) + '</span>'
+        : '') +
+      (subs.length
+        ? '<span class="cal-subs">' + subs.map(s =>
+            '<span class="cal-sub' + (s.projected ? ' due' : '') + '" title="' +
+            escapeHtml(s.name) + ' · ' + escapeHtml(money(s.cents)) +
+            (s.projected ? ' · due' : ' · charged') + '">' +
+            escapeHtml(s.name) + '</span>').join('') + '</span>'
+        : '') +
+    '</div>';
+  }).join('');
+
+  grid.innerHTML = '<div class="cal-month">' + head + blanks + cells + '</div>';
+}
+
+const calTipLabel = (d, subs) =>
+  subs.length && !d.spent ? subs.map(s => s.name).join(', ') : 'Spent';
+
+/* Named individually rather than counted. "2 subscriptions" is a number; the
+   reader wants to know which two. */
+const calTipNote = (subs) => subs
+  .map(s => s.name + ' ' + money(s.cents) + (s.projected ? ' (due)' : ''))
+  .join(' · ');
+
+$('cal-prev').addEventListener('click', () => { calMonth = calShift(calMonth, -1); renderCalendar(); });
+$('cal-next').addEventListener('click', () => { calMonth = calShift(calMonth, 1); renderCalendar(); });
+$('cal-today').addEventListener('click', () => { calMonth = null; renderCalendar(); });
 
 async function renderTrend() {
   const months = trendMonths;

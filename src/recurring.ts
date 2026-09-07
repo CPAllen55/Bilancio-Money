@@ -56,6 +56,13 @@ export interface Verdict {
   cents: number;
   /** Date of the first charge in the run. */
   since: string;
+  /** Date of the most recent charge.
+   *
+   * The first date says how long this has been going on; the last one is what
+   * a future occurrence is projected from, because these are monthly by
+   * construction -- judge() rejects any gap outside 25 to 37 days -- so the
+   * next charge is the same day of the month, next month. */
+  last: string;
   count: number;
   /** True where the price has gone up at least once across the run. */
   rose: boolean;
@@ -92,7 +99,7 @@ function daysBetween(a: string, b: string): number {
 }
 
 const NOT_A_SUBSCRIPTION: Verdict = {
-  subscription: false, cents: 0, since: "", count: 0, rose: false,
+  subscription: false, cents: 0, since: "", last: "", count: 0, rose: false,
 };
 
 /**
@@ -134,6 +141,7 @@ export function judge(charges: Charge[]): Verdict {
     subscription: true,
     cents: paid[paid.length - 1].cents,
     since: paid[0].date,
+    last: paid[paid.length - 1].date,
     count: paid.length,
     rose,
   };
