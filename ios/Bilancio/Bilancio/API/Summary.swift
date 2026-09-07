@@ -126,7 +126,18 @@ struct TrendResponse: Decodable {
         /// phone and the axis truncated it to "Ja…", which is worse than the
         /// ambiguity it was there to remove — the run is chronological and
         /// left to right, so January is legible as the wrap without saying so.
-        var shortLabel: String {
+        ///
+        /// A LABEL, and never the thing a chart is plotted against. Two years
+        /// hold two Januaries, and a chart drawn on this stacked them into one
+        /// column: twenty-four months arrived as twelve, each one carrying two
+        /// years of spending, and the axis rose to fit a bar that did not
+        /// exist. Charts plot on `month`, which is unique, and call this to
+        /// write the tick.
+        var shortLabel: String { Self.shortLabel(of: month) }
+
+        /// The same, for a key held on its own — an axis has the value it was
+        /// plotted against and not the month it came from.
+        static func shortLabel(of month: String) -> String {
             let parts = month.split(separator: "-")
             guard parts.count == 2, let m = Int(parts[1]), (1...12).contains(m) else { return month }
             return ["Jan","Feb","Mar","Apr","May","Jun",

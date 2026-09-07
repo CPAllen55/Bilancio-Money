@@ -201,7 +201,7 @@ private struct CategoryTrendChart: View {
             let source = drilled == nil ? (m.byParent ?? [:]) : (m.byCategory ?? [:])
             return visible.compactMap { cat in
                 guard let cents = source[cat.slug], cents > 0 else { return nil }
-                return Segment(month: m.shortLabel, slug: cat.slug, label: cat.label,
+                return Segment(month: m.month, slug: cat.slug, label: cat.label,
                                colour: Color(hex: cat.colour), cents: cents)
             }
         }
@@ -214,8 +214,45 @@ private struct CategoryTrendChart: View {
         return zip(series, prior).map { now, before in
             let source = drilled == nil ? (before.byParent ?? [:]) : (before.byCategory ?? [:])
             let total = source.filter { slugs.contains($0.key) }.values.reduce(0, +)
-            return (now.shortLabel, total)
+            return (now.month, total)
         }
+    }
+
+    /// The tallest month on screen, in whole currency, with a little headroom.
+    ///
+    /// Swift Charts scales y to every value it was given, not to the window
+    /// being shown, so one enormous month set the axis for all of them: a
+    /// hundred thousand in a single month left two years of ordinary ten
+    /// thousands drawn as slivers along the floor, and zooming in did not help
+    /// because the outlier was still in the data.
+    ///
+    /// Scaling to the window is not hiding it. Scroll onto that month and the
+    /// axis grows to meet it; scroll away and the months either side become
+    /// legible again, which is the entire reason for being able to scroll.
+    private var visibleCeiling: Double? {
+        let keys = Set(visibleMonths)
+        guard !keys.isEmpty else { return nil }
+        var tallest = 0
+        for m in series where keys.contains(m.month) {
+            let source = drilled == nil ? (m.byParent ?? [:]) : (m.byCategory ?? [:])
+            let slugs = Set(visible.map(\.slug))
+            tallest = max(tallest, source.filter { slugs.contains($0.key) }.values.reduce(0, +))
+        }
+        // The year-ago rule is drawn on the same axis, so an axis that cannot
+        // reach it would draw it along the top edge and call that a comparison.
+        for point in yearAgo where keys.contains(point.label) {
+            tallest = max(tallest, point.cents)
+        }
+        guard tallest > 0 else { return nil }
+        return Double(tallest) / 100 * 1.12
+    }
+
+    /// The months the window is currently showing.
+    private var visibleMonths: [String] {
+        guard let leading = labels.firstIndex(of: scrollAnchor) else {
+            return Array(labels.suffix(clampedWindow))
+        }
+        return Array(labels[leading..<min(labels.count, leading + clampedWindow)])
     }
 
     private var domain: [String] { visible.map(\.label) }
@@ -227,7 +264,9 @@ private struct CategoryTrendChart: View {
         min(max(3, window), max(3, series.count))
     }
 
-    private var labels: [String] { series.map(\.shortLabel) }
+    /// The plotted values, which are the month keys — see `Month.shortLabel`
+    /// for why they cannot be the labels.
+    private var labels: [String] { series.map(\.month) }
 
     /// The month to put at the left edge so that `width` months are on screen
     /// and the last of them is `end` — clamped so neither edge runs off the
@@ -347,11 +386,26 @@ private struct CategoryTrendChart: View {
                 }
             }
         }
+        .chartXAxis {
+            // The tick is written from the key, because the key is what the
+            // bars are plotted against. Automatic count, so twenty-four months
+            // thin the labels rather than overlapping them into a band.
+            AxisMarks(values: .automatic(desiredCount: 6)) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel {
+                    if let key = value.as(String.self) {
+                        Text(TrendResponse.Month.shortLabel(of: key))
+                    }
+                }
+            }
+        }
         .chartForegroundStyleScale(domain: domain, range: range)
         .chartLegend(position: .bottom, alignment: .leading, spacing: 8)
         .chartYAxis {
             AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
         }
+        .chartYScale(domain: visibleCeiling.map { 0...$0 } ?? 0...1, type: .linear)
         .chartScrollableAxes(.horizontal)
         .chartXVisibleDomain(length: clampedWindow)
         .chartScrollPosition(x: $scrollAnchor)
@@ -446,7 +500,7 @@ private struct PickedSegment: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(picked.month)
+            Text(TrendResponse.Month.shortLabel(of: picked.month))
                 .font(Theme.tileLabel)
                 .foregroundStyle(Theme.quietText)
             Text(picked.label)
@@ -613,16 +667,16 @@ private struct NetChart: View {
                     // is not all one thing, and the months that went backwards
                     // are the ones worth finding at a glance.
                     BarMark(
-                        x: .value("Month", m.shortLabel),
+                        x: .value("Month", m.month),
                         y: .value("Net", Double(m.net) / 100)
                     )
                     .foregroundStyle(Theme.tint(forNet: m.net))
                     // Everything else steps back rather than the chosen bar
                     // stepping forward: a bar already at full strength has
                     // nowhere brighter to go.
-                    .opacity(picked == nil || picked == m.shortLabel ? 1 : 0.3)
+                    .opacity(picked == nil || picked == m.month ? 1 : 0.3)
                     .annotation(position: .top, spacing: 2) {
-                        if picked == m.shortLabel {
+                        if picked == m.month {
                             Text(m.net.asShortMoney)
                                 .font(.system(size: 10, weight: .semibold))
                                 .monospacedDigit()
@@ -631,6 +685,17 @@ private struct NetChart: View {
                     }
                 }
                 .chartXSelection(value: $picked)
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 6)) { value in
+                        AxisGridLine()
+                        AxisTick()
+                        AxisValueLabel {
+                            if let key = value.as(String.self) {
+                                Text(TrendResponse.Month.shortLabel(of: key))
+                            }
+                        }
+                    }
+                }
                 .chartYAxis { AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0))) }
                 .frame(height: 180)
                 .animation(.snappy(duration: 0.2), value: picked)
@@ -656,7 +721,7 @@ private struct RunningTotalChart: View {
         var total = 0
         return series.map { m in
             total += m.net
-            return (m.shortLabel, total)
+            return (m.month, total)
         }
     }
 
@@ -681,6 +746,17 @@ private struct RunningTotalChart: View {
                         )
                         .foregroundStyle(Theme.tint(forNet: p.total))
                         .interpolationMethod(.monotone)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 6)) { value in
+                        AxisGridLine()
+                        AxisTick()
+                        AxisValueLabel {
+                            if let key = value.as(String.self) {
+                                Text(TrendResponse.Month.shortLabel(of: key))
+                            }
+                        }
                     }
                 }
                 .chartYAxis { AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0))) }
