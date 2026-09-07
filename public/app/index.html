@@ -39,6 +39,15 @@
      * the same white --on-fill and that token is gone.) */
     --near-ink:#F59023;                   /* the warning as text, on the card */
     --surface:#0F171F; --grid:#1B2630;
+    /* The calendar's two heavy days: an expensive one, and the most expensive
+       one in the month. Coral over --surface, baked rather than mixed at paint
+       time -- the cells sit on the panel, so an rgba wash would blend with the
+       panel and lose the surface underneath it.
+
+       Nine percent and sixteen. Neither is far off the surface on purpose:
+       these are the ground a figure is read on, and the tint is there to be
+       noticed across a grid of thirty rather than stared at in one cell. */
+    --cal-heavy:#251D26; --cal-peak:#35222C;
     /* The ledger's own two surfaces: the band the headings sit on, and the
        stripe on every other row. Both are a step off the card rather than a
        colour of their own — a table that is legible because of its stripes is
@@ -242,6 +251,8 @@
     --near-ink:#8F3F05;                   /* the warning as text; see the dark block */
 
     --grid:#E2D5B0;
+    /* The same two, mixed against cream instead; see the dark block. */
+    --cal-heavy:#F2DBBF; --cal-peak:#EFCEB6;
     --on-mint:#FFFFFF; --mint-hot:#0A6B4B;
     /* Both darkened for cream, and the glows cut back: a halo that reads as
        light over near-black reads as a smudge over paper. */
@@ -1747,12 +1758,39 @@
      better than leaving it looking identical to a day that cost nothing. */
   .cal-cell.future{ background:none; border-style:dashed; }
 
-  /* The figure carries the weight of the day rather than a background wash:
-     --heat is the day's share of the busiest one in the month, so a quiet
-     month still shows its own shape instead of being uniformly pale. */
-  .cal-amt{ font-family:var(--font-num); font-size:13px; font-weight:600;
+  /* The figure carries the weight of the day: --heat is the day's share of
+     the busiest one in the month, so a quiet month still shows its own shape
+     instead of being uniformly pale. */
+  .cal-amt{ display:flex; align-items:baseline; gap:5px;
+            font-family:var(--font-num); font-size:13px; font-weight:600;
             color:var(--ink);
             opacity:calc(0.45 + 0.55 * var(--heat, 0)); }
+
+  /* An expensive day, and the most expensive one.
+
+     Coral, because it is spending and that is what spending is drawn in
+     everywhere else on the page -- a third colour invented for this view would
+     be one more thing to learn. The two bands are told apart by shape rather
+     than by depth of tint: the peak takes the edge as well as the fill,
+     because nobody can rank two washes of the same red without a legend.
+
+     Both are conditional on there being anything to compare: a month of one
+     transaction has a busiest day, and calling it the peak would be a mark
+     that means nothing. */
+  .cal-cell.heavy{ background:var(--cal-heavy); }
+  .cal-cell.peak{ background:var(--cal-peak); border-color:var(--coral); }
+  /* Full weight, and still in ink. Coral on the peak's own fill measures 3.6
+     on cream -- the fill is the thing that makes a red figure hard to read, so
+     the emphasis is carried by the opacity and the marker instead. */
+  .cal-cell.peak .cal-amt{ opacity:1; }
+  /* Small, and after the figure. It marks the number rather than competing
+     with it, and it is a shape rather than something you read, which is why it
+     may take a colour the figure could not. */
+  .cal-peak{ font-size:9px; line-height:1; color:var(--coral); }
+
+  /* Today wins the border where the two coincide: which day it is outranks
+     how much it cost, and the fill still says the day was heavy. */
+  .cal-cell.peak.today, .cal-cell.heavy.today{ border-color:var(--gold-4); }
 
   .cal-subs{ display:flex; flex-direction:column; gap:3px; margin-top:auto; }
   /* A charge that has happened is stated; one that has not is outlined. The
@@ -2988,10 +3026,10 @@
       <button class="tab" data-view="overview" aria-current="true">Overview</button>
       <button class="tab" data-view="tracker">Tracker</button>
       <button class="tab" data-view="trend">Trend</button>
-      <button class="tab" data-view="calendar">Calendar</button>
       <button class="tab" data-view="net">Net Activity</button>
       <button class="tab" data-view="budgeting">Budgeting</button>
       <button class="tab" data-view="assets">Net Worth</button>
+      <button class="tab" data-view="calendar">Calendar</button>
       <button class="tab" data-view="transactions">Transactions</button>
       <button class="tab" data-view="banks">Banks</button>
       <!-- Hidden until /api/admin/overview answers, which it only does for the
@@ -5658,7 +5696,26 @@ async function renderCalendar() {
   const [y, m] = r.month.split('-').map(Number);
   $('cal-label').textContent = MONTH_NAMES[m - 1] + ' ' + y;
 
-  const busiest = r.days.reduce((hi, d) => Math.max(hi, d.spent), 0) || 1;
+  /* The month judged against itself.
+
+     Every scale here is the month's own. A fixed ceiling would make a quiet
+     month a page of pale identical squares and a heavy one a wall of red,
+     when what a reader wants from a single month is which of ITS days were
+     the expensive ones.
+
+     The middle is the median rather than the mean, because one $2,000 day
+     drags a mean above almost every other day in the month and then nothing
+     looks heavy. Median across days that had any spending at all: a month is
+     mostly quiet days, and counting them would put the middle at nothing. */
+  const spentDays = r.days.filter(d => d.spent > 0).map(d => d.spent).sort((a, b) => a - b);
+  const busiest = spentDays.length ? spentDays[spentDays.length - 1] : 1;
+  const middle = spentDays.length
+    ? spentDays[Math.floor(spentDays.length / 2)]
+    : 0;
+  /* One day, not a band. Two days tied at the top is real and both are
+     marked; "the top three" would be a rule about the list rather than
+     about the spending. */
+  const peak = spentDays.length > 1 ? busiest : 0;
   const ahead = r.days.filter(d => d.date > r.today).length === r.days.length;
 
   $('cal-sum').innerHTML = ahead
@@ -5681,9 +5738,15 @@ async function renderCalendar() {
     const day = Number(d.date.slice(8));
     const future = d.date > r.today;
     const heat = d.spent > 0 ? Math.max(0.08, d.spent / busiest) : 0;
+    /* Three states rather than a smooth ramp. A gradient across thirty cells
+       is a picture of a distribution; what gets read at a glance is "heavy",
+       "more than usual", and "ordinary". */
+    const band = d.spent >= peak && peak > 0 ? ' peak'
+      : middle > 0 && d.spent > middle * 1.6 ? ' heavy'
+      : '';
     const subs = d.subs || [];
     return '<div class="cal-cell' + (d.date === r.today ? ' today' : '') +
-      (future ? ' future' : '') + (subs.length ? ' hassub' : '') + '"' +
+      (future ? ' future' : '') + (subs.length ? ' hassub' : '') + band + '"' +
       (d.spent > 0 || subs.length
         ? ' ' + tipAttrs(calTipLabel(d, subs), null, d.spent, 0, {
             when: MONTH_NAMES[m - 1] + ' ' + day,
@@ -5693,7 +5756,9 @@ async function renderCalendar() {
       '<span class="cal-num">' + day + '</span>' +
       (d.spent > 0
         ? '<span class="cal-amt" style="--heat:' + heat.toFixed(3) + '">' +
-          escapeHtml(money0(d.spent)) + '</span>'
+          escapeHtml(money0(d.spent)) +
+          (band === ' peak' ? '<span class="cal-peak" aria-hidden="true">\u25B2</span>' : '') +
+          '</span>'
         : '') +
       (subs.length
         ? '<span class="cal-subs">' + subs.map(s =>
