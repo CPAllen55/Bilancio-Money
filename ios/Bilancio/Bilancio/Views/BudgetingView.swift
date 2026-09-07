@@ -703,12 +703,9 @@ private struct MoneyOverTime: View {
     }
 
     var body: some View {
-        Card {
+        Maximisable(title: "Income and spending over time") { maximised in
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("Income and spending over time")
-                        .font(Theme.tileLabel)
-                        .foregroundStyle(Theme.quietText)
                     Spacer()
                     if hasLastYear {
                         Toggle("Last year", isOn: $showLastYear)
@@ -792,7 +789,8 @@ private struct MoneyOverTime: View {
                         AxisValueLabel { if let s = value.as(String.self) { Text(s) } }
                     }
                 }
-                .frame(height: showLastYear ? 220 : 190)
+                .frame(minHeight: showLastYear ? 220 : 190,
+                       maxHeight: maximised ? .infinity : (showLastYear ? 220 : 190))
                 .animation(.snappy(duration: 0.25), value: showLastYear)
 
                 Text(showLastYear

@@ -410,3 +410,67 @@ struct MarkWhenRoot: ViewModifier {
         if on { content.owlMark() } else { content }
     }
 }
+
+// MARK: - Maximising a card
+
+/// A card that can be opened on its own, filling the screen.
+///
+/// A phone shows a chart about a third as wide as the question deserves, and
+/// turning the phone does not help while the chart is one row of a scrolling
+/// column — the column simply becomes a narrower column. This gives the reader
+/// a way to say "just this one", after which the screen is the chart's and
+/// turning the phone gives it the whole of it.
+///
+/// Presented rather than pushed. A push would take the tab bar with it, which
+/// is how somebody ends up stranded on a chart they cannot leave — that has
+/// happened in this app once already, on Budgeting.
+///
+/// The content is built twice rather than moved, because a chart that is its
+/// own screen wants different chrome from one in a list: `maximised` is passed
+/// back so the caller can drop a legend, grow a height, or say more.
+struct Maximisable<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: (_ maximised: Bool) -> Content
+
+    @State private var open = false
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(title)
+                        .font(Theme.tileLabel)
+                        .foregroundStyle(Theme.quietText)
+                    Spacer(minLength: 8)
+                    Button {
+                        open = true
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.accent)
+                    .accessibilityLabel("Open \(title) on its own")
+                }
+
+                content(false)
+            }
+        }
+        .fullScreenCover(isPresented: $open) {
+            NavigationStack {
+                content(true)
+                    .padding(.horizontal, Theme.cardPadding)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .background(Theme.background)
+                    .navigationTitle(title)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { open = false }
+                        }
+                    }
+            }
+            .tint(Theme.accent)
+        }
+    }
+}

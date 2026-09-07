@@ -303,9 +303,15 @@ private struct CategoryTrendChart: View {
     }
 
     var body: some View {
-        Card {
+        Maximisable(title: drilled == nil ? "Spend by category" : "Inside \(drilledLabel)") { maximised in
+            // Opened on its own, or turned on its side, the chart gets the
+            // screen. Both mean the same thing here: this is the only thing
+            // being looked at, so everything around it is chrome and chrome is
+            // what there is no room for.
+            let big = maximised || isLandscape
+
             VStack(alignment: .leading, spacing: 10) {
-                header
+                subheader
 
                 let marks = segments
                 let ago = yearAgo
@@ -316,20 +322,18 @@ private struct CategoryTrendChart: View {
                         .foregroundStyle(Theme.quietText)
                         .frame(maxWidth: .infinity, minHeight: 120)
                 } else {
-                    chart(marks: marks, ago: ago)
+                    chart(marks: marks, ago: ago, big: big)
 
                     if let picked {
                         PickedSegment(picked: picked) { self.picked = nil }
-                    } else if !isLandscape {
-                        Text("Pinch to zoom, drag to scroll through the months. Touch a segment for its figure, or hold and slide across them. Turn the phone for a wider view.")
+                    } else if !big {
+                        Text("Pinch to zoom, drag to scroll through the months. Touch a segment for its figure, or hold and slide across them. Turn the phone, or open this on its own, for a wider view.")
                             .font(Theme.note)
                             .foregroundStyle(Theme.quietText)
                     }
                 }
 
-                // Landscape gives the chart the screen; everything else is
-                // chrome, and chrome is what there is no room for.
-                if !isLandscape {
+                if !big {
                     if drilled == nil {
                         DrillStrip(parents: visible, onPick: { drilled = $0 })
                     } else {
@@ -340,11 +344,10 @@ private struct CategoryTrendChart: View {
         }
     }
 
-    private var header: some View {
+    /// What is left of the header once the card owns the title: how much of
+    /// the run is on screen, and the way back up out of a drill.
+    private var subheader: some View {
         HStack {
-            Text(drilled == nil ? "Spend by category" : "Inside \(drilledLabel)")
-                .font(Theme.tileLabel)
-                .foregroundStyle(Theme.quietText)
             Spacer()
             if clampedWindow < series.count {
                 Text("\(clampedWindow) of \(series.count) months")
@@ -363,7 +366,7 @@ private struct CategoryTrendChart: View {
         }
     }
 
-    private func chart(marks: [Segment], ago: [(label: String, cents: Int)]) -> some View {
+    private func chart(marks: [Segment], ago: [(label: String, cents: Int)], big: Bool) -> some View {
         Chart {
             ForEach(marks) { seg in
                 BarMark(
@@ -432,7 +435,7 @@ private struct CategoryTrendChart: View {
         // rhythm. Landscape takes whatever is left, because a fixed 300 is
         // taller than an iPhone has once the navigation and tab bars have
         // taken theirs — and a chart that overflows is worse than a short one.
-        .modifier(ChartHeight(fill: isLandscape, fixed: 260))
+        .modifier(ChartHeight(fill: big, fixed: 260))
         .chartOverlay { proxy in
             // Swift Charts' own selection reports the x value only, which for a
             // stack names the month and not the segment inside it. Both
@@ -669,12 +672,8 @@ private struct NetChart: View {
     @State private var picked: String?
 
     var body: some View {
-        Card {
+        Maximisable(title: "Net, month by month") { maximised in
             VStack(alignment: .leading, spacing: 10) {
-                Text("Net, month by month")
-                    .font(Theme.tileLabel)
-                    .foregroundStyle(Theme.quietText)
-
                 Chart(series) { m in
                     // Coloured per bar rather than per series: a run of months
                     // is not all one thing, and the months that went backwards
@@ -710,9 +709,8 @@ private struct NetChart: View {
                     }
                 }
                 .chartYAxis { AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0))) }
-                .frame(height: 180)
+                .modifier(ChartHeight(fill: maximised, fixed: 180))
                 .animation(.snappy(duration: 0.2), value: picked)
-
             }
         }
     }
@@ -739,12 +737,8 @@ private struct RunningTotalChart: View {
     }
 
     var body: some View {
-        Card {
+        Maximisable(title: "Running total") { maximised in
             VStack(alignment: .leading, spacing: 10) {
-                Text("Running total")
-                    .font(Theme.tileLabel)
-                    .foregroundStyle(Theme.quietText)
-
                 Chart {
                     ForEach(points, id: \.label) { p in
                         AreaMark(
@@ -773,7 +767,7 @@ private struct RunningTotalChart: View {
                     }
                 }
                 .chartYAxis { AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0))) }
-                .frame(height: 170)
+                .modifier(ChartHeight(fill: maximised, fixed: 170))
 
                 if let last = points.last {
                     Text("\(last.total.asMoney) across the \(series.count) months shown")
