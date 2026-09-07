@@ -17,6 +17,12 @@ final class BanksModel {
     private(set) var deleting = false
     private(set) var deleteError: String?
 
+    private(set) var syncing = false
+    /// Rows in so far this run, so a long backfill can say so.
+    private(set) var pulled = 0
+    /// What the last sync came to, kept until the next one starts.
+    private(set) var syncResult: String?
+
     private let client = APIClient(baseURL: Bilancio.apiBaseURL) {
         guard let session = Clerk.shared.session else { return nil }
         return try await session.getToken()
@@ -25,6 +31,41 @@ final class BanksModel {
     func load() async {
         do { state = .loaded(try await client.bankItems().items) }
         catch { state = .failed(error.localizedDescription) }
+    }
+
+    /// Pull whatever the banks have that we do not.
+    ///
+    /// Here because it is the only other place in the app that can: linking a
+    /// bank syncs, and nothing else did. A first link that stopped short — or a
+    /// bank that has been quiet since — had no way to be caught up from the
+    /// phone at all, and the answer was to go and use the website.
+    func sync() async {
+        syncing = true
+        pulled = 0
+        syncResult = nil
+        defer { syncing = false }
+        do {
+            let totals = try await client.syncEverything { self.pulled = $0 }
+            await load()
+            syncResult = Self.describe(totals)
+        } catch {
+            syncResult = error.localizedDescription
+        }
+    }
+
+    private static func describe(_ t: SyncTotals) -> String {
+        var parts: [String] = []
+        if t.added > 0 { parts.append("\(t.added) new") }
+        if t.modified > 0 { parts.append("\(t.modified) updated") }
+        if t.removed > 0 { parts.append("\(t.removed) removed") }
+        if parts.isEmpty { parts.append("Nothing new") }
+        var out = parts.joined(separator: ", ") + "."
+        // Said plainly rather than implied by a number that looks complete.
+        if t.unfinished { out += " There is more still to come — sync again." }
+        if !t.pending.isEmpty {
+            out += " \(t.pending.joined(separator: ", ")) is still being prepared by Plaid."
+        }
+        return out
     }
 
     /// True once everything is gone, so the caller can sign out.
@@ -77,6 +118,30 @@ struct BanksView: View {
                         ConnectBankButton(onConnected: { Task { await model.load() } },
                                           label: "Connect a bank",
                                           prominent: false)
+
+                        if !items.isEmpty {
+                            Button {
+                                Task { await model.sync() }
+                            } label: {
+                                HStack(spacing: 8) {
+                                    if model.syncing { ProgressView() }
+                                    Text(model.syncing
+                                         ? (model.pulled > 0 ? "Pulling \(model.pulled)…" : "Syncing…")
+                                         : "Sync now")
+                                }
+                            }
+                            .disabled(model.syncing)
+                        }
+
+                        if let result = model.syncResult {
+                            Text(result)
+                                .font(Theme.note)
+                                .foregroundStyle(Theme.quietText)
+                        }
+                    } footer: {
+                        if !items.isEmpty {
+                            Text("Banks are pulled when you connect them and whenever your bank tells us there is something new. This asks now.")
+                        }
                     }
 
                     ForEach(items) { item in

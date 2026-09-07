@@ -64,4 +64,51 @@ extension APIClient {
     func syncTransactions() async throws -> SyncResponse {
         try await send("POST", "/api/plaid/sync")
     }
+
+    /// Sync until the Worker says there is nothing left.
+    ///
+    /// One call is not a sync, it is a first instalment. A round is capped at a
+    /// couple of hundred rows — a Worker's request budget will not carry a two
+    /// year backfill — so it saves the cursor and answers `more`, and the
+    /// caller is expected to come back.
+    ///
+    /// Nothing else collects the rest afterwards. Plaid's webhook fires when
+    /// there is something NEW, not because a cursor was left unread, so an
+    /// unfinished backfill simply waits until the next transaction on the
+    /// account happens to wake it.
+    ///
+    /// Bounded, because a loop that trusts a server to eventually say no is a
+    /// loop that can run forever. Forty rounds is the ceiling the web client
+    /// uses, and far more than any first link needs.
+    @MainActor
+    @discardableResult
+    func syncEverything(progress: (Int) -> Void = { _ in }) async throws -> SyncTotals {
+        var totals = SyncTotals()
+        while totals.rounds < 40 {
+            let round = try await syncTransactions()
+            totals.rounds += 1
+            totals.added += round.added
+            totals.modified += round.modified
+            totals.removed += round.removed
+            totals.pending = round.pending ?? []
+            progress(totals.added)
+            if round.more != true { return totals }
+        }
+        // Out of rounds rather than out of data: worth saying so, because the
+        // honest answer is "there is more" and not "that was all of it".
+        totals.unfinished = true
+        return totals
+    }
+}
+
+/// What a whole sync came to, across however many rounds it took.
+struct SyncTotals {
+    var added = 0
+    var modified = 0
+    var removed = 0
+    var rounds = 0
+    /// Banks Plaid has accepted but is still pulling history from.
+    var pending: [String] = []
+    /// The round ceiling was reached with the Worker still saying `more`.
+    var unfinished = false
 }
