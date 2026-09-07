@@ -458,9 +458,19 @@ struct Maximisable<Content: View>: View {
         }
         .fullScreenCover(isPresented: $open) {
             NavigationStack {
-                content(true)
-                    .padding(.horizontal, Theme.cardPadding)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // At least the height of the screen, so a chart asking to fill
+                // gets the screen — and scrollable, so one that wants more than
+                // that can have it rather than being squeezed. Turning the
+                // phone changes which of those two happens, and nothing else:
+                // the chart is already chosen.
+                GeometryReader { geo in
+                    ScrollView {
+                        content(true)
+                            .padding(.horizontal, Theme.cardPadding)
+                            .frame(minHeight: geo.size.height - 16, alignment: .top)
+                    }
+                }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Theme.background)
                     .navigationTitle(title)
                     .navigationBarTitleDisplayMode(.inline)

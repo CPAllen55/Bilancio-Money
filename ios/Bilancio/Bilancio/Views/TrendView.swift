@@ -42,10 +42,6 @@ struct TrendView: View {
     /// The parent category being looked inside, or nil for all of them.
     @State private var drilled: String?
 
-    /// Landscape on a phone.
-    @Environment(\.verticalSizeClass) private var verticalSize
-    private var isLandscape: Bool { verticalSize == .compact }
-
     var body: some View {
         NavigationStack {
             Group {
@@ -75,27 +71,23 @@ struct TrendView: View {
         .task { await model.load() }
     }
 
+    /// The dashboard, the same way up or on its side.
+    ///
+    /// Turning the phone used to replace this whole screen with the category
+    /// chart, on the reasoning that everything below it is the same data said
+    /// again and not worth two hundred of the three hundred points landscape
+    /// leaves. That reasoning was fine while there was no way to ask for a
+    /// chart — it stopped being fine the moment there was, because tilting
+    /// then answered a question the reader had already answered differently,
+    /// and answered it with whichever chart happened to be at the top.
+    ///
+    /// Expanding a card is how a chart gets the screen now. Landscape makes an
+    /// expanded one wider, which is all it should ever have decided.
     private func content(_ data: TrendResponse) -> some View {
-        // Turned sideways, the chart gets the screen. Everything below it is
-        // the same data said again in other ways, and none of that is worth
-        // the two hundred points it costs when there are only three hundred.
-        if isLandscape {
-            return AnyView(
-                CategoryTrendChart(series: data.series,
-                                   prior: data.priorSeries,
-                                   categories: data.categories,
-                                   drilled: $drilled)
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
-                    .frame(maxHeight: .infinity)
-                    .background(Theme.background)
-            )
-        }
-
-        return AnyView(portrait(data))
+        dashboard(data)
     }
 
-    private func portrait(_ data: TrendResponse) -> some View {
+    private func dashboard(_ data: TrendResponse) -> some View {
         ScrollView {
             VStack(spacing: Theme.sectionGap) {
                 Picker("Months", selection: Bindable(model).months) {
@@ -140,9 +132,6 @@ private struct CategoryTrendChart: View {
     let categories: [TransactionsResponse.Category]
     @Binding var drilled: String?
 
-    /// Landscape on a phone. The chart is the only thing worth showing then.
-    @Environment(\.verticalSizeClass) private var verticalSize
-
     /// How many months are on screen at once. Pinching changes it; the chart
     /// scrolls through the rest rather than squeezing them in.
     ///
@@ -175,8 +164,6 @@ private struct CategoryTrendChart: View {
         let label: String
         let cents: Int
     }
-
-    private var isLandscape: Bool { verticalSize == .compact }
 
     /// Slug to label and colour for whichever level is being drawn.
     private var visible: [TransactionsResponse.Category] {
@@ -304,11 +291,19 @@ private struct CategoryTrendChart: View {
 
     var body: some View {
         Maximisable(title: drilled == nil ? "Spend by category" : "Inside \(drilledLabel)") { maximised in
-            // Opened on its own, or turned on its side, the chart gets the
-            // screen. Both mean the same thing here: this is the only thing
-            // being looked at, so everything around it is chrome and chrome is
-            // what there is no room for.
-            let big = maximised || isLandscape
+            // Opened on its own, the chart gets the screen: it is the only
+            // thing being looked at, so everything around it is chrome and
+            // chrome is what there is no room for.
+            //
+            // Turning the phone on the dashboard does NOT do this any more.
+            // This chart used to expand on its own whenever the phone went
+            // sideways, which meant tilting always emphasised whichever chart
+            // happened to be at the top — including when the reader had just
+            // expanded a different one. Choosing a chart and then being given
+            // another is worse than not being able to choose. Landscape is
+            // still what makes an expanded chart wide; it simply no longer
+            // decides which chart that is.
+            let big = maximised
 
             VStack(alignment: .leading, spacing: 10) {
                 subheader
