@@ -10,8 +10,10 @@
 //  2. Plaid Link runs. On success it hands back a public token.
 //  3. exchange — swaps that for the long-lived access token, which is
 //     encrypted and stored server-side. It never reaches the app.
-//  4. sync — pulls the transactions. Without it the bank is linked and the
-//     app still shows nothing, which looks exactly like a failure.
+//  4. sync — pulls the transactions, in rounds. Without it the bank is linked
+//     and the app still shows nothing, which looks exactly like a failure;
+//     without the rounds it shows a month of a two year history, which looks
+//     like the bank only had a month.
 //
 
 import Foundation
@@ -25,6 +27,14 @@ struct SyncResponse: Decodable {
     let added: Int
     let modified: Int
     let removed: Int
+    /// The Worker stopped short of the end and saved where it got to.
+    ///
+    /// A sync is capped per round — a Worker has a request budget and a two
+    /// year backfill exceeds it — so the caller is expected to come back until
+    /// this is false. Absent from older responses, so it defaults to done.
+    let more: Bool?
+    /// Banks Plaid has accepted but not finished pulling history from yet.
+    let pending: [String]?
 }
 
 struct ExchangeResponse: Decodable {

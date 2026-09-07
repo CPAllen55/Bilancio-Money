@@ -31,6 +31,10 @@ final class ConnectBankModel {
     /// transactions, which is a different thing from a failed link.
     private(set) var linkedButUnsynced = false
 
+    /// How much has come in so far, so a long backfill can say so rather than
+    /// looking like a screen that has stopped responding.
+    private(set) var pulled = 0
+
     private let client = APIClient(baseURL: Bilancio.apiBaseURL) {
         guard let session = Clerk.shared.session else { return nil }
         return try await session.getToken()
@@ -68,7 +72,7 @@ final class ConnectBankModel {
         }
 
         do {
-            _ = try await client.syncTransactions()
+            try await drainSync()
             linkedButUnsynced = false
         } catch {
             // The connection is real either way. Plaid populates a new item
@@ -83,6 +87,34 @@ final class ConnectBankModel {
     }
 
     func failed(_ message: String) { phase = .failed(message) }
+
+    /// Sync until the Worker says there is nothing left.
+    ///
+    /// One call is not a sync, it is a first instalment. The Worker caps a
+    /// round at a couple of hundred rows — a request budget will not carry a
+    /// two year backfill — saves the cursor, and answers `more`. Calling it
+    /// once and stopping is why a bank linked from the phone arrived with
+    /// about a month of history while the same bank linked from the website
+    /// arrived with years: the website had always come back until it was told
+    /// to stop.
+    ///
+    /// Nothing else fetches it later, either. Plaid's webhook fires when there
+    /// is something NEW, not because a cursor was left unread, so an unfinished
+    /// backfill simply waited — until the next transaction on the account
+    /// happened to wake it.
+    ///
+    /// Bounded, because a loop that trusts a server to eventually say no is a
+    /// loop that can run forever. Forty rounds is the same ceiling the web app
+    /// uses, and far more than a first link needs.
+    private func drainSync() async throws {
+        var rounds = 0
+        while rounds < 40 {
+            let result = try await client.syncTransactions()
+            rounds += 1
+            pulled += result.added
+            if result.more != true { return }
+        }
+    }
 }
 
 /// A button, Plaid's sheet, and the work either side of it.
@@ -101,7 +133,12 @@ struct ConnectBankButton: View {
             } label: {
                 HStack(spacing: 8) {
                     if isWorking { ProgressView() }
-                    Text(isWorking ? "Working…" : label)
+                    // A first link can take several rounds, and a button that
+                    // says only "Working…" for half a minute reads as stuck.
+                    // The count is the evidence that it is not.
+                    Text(isWorking
+                         ? (model.pulled > 0 ? "Pulling \(model.pulled)…" : "Working…")
+                         : label)
                 }
             }
             .disabled(isWorking)
