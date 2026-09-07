@@ -32,6 +32,15 @@ jobs:
 
       - run: npm ci
 
+      # Env, Hyperdrive, caches, cf — every Cloudflare binding and runtime
+      # global — are declared in worker-configuration.d.ts, which is generated
+      # from wrangler.jsonc rather than committed. Without this step tsc does
+      # not know what Env is, and the typecheck fails on essentially every line
+      # that touches a binding. It had been doing exactly that on every commit,
+      # which meant the check could not fail for the reason it exists.
+      - name: Generate Worker types
+        run: npx wrangler types
+
       # The build already fails on a type error; this makes that visible before
       # a deploy rather than during one.
       - name: Typecheck

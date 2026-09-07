@@ -79,3 +79,21 @@
   Cache-Control: public, max-age=31536000, immutable
 /shots/*
   Cache-Control: public, max-age=31536000, immutable
+
+# ── The Apple App Site Association file ─────────────────────────────────
+#
+# iOS fetches this to decide whether the app may claim links on this domain,
+# and it is how Plaid's native OAuth hand-off finds its way back into the app.
+# Plaid has no iOS bundle-identifier field in its dashboard -- Android has one,
+# iOS does not -- so this file is where the bundle identifier is declared.
+#
+# It has no extension, so it would otherwise be served as
+# application/octet-stream and iOS would reject it without saying why. The
+# Content-Type below is the whole reason this entry exists.
+#
+# An hour of caching rather than none: Apple's CDN fetches this, it changes
+# about never, and an hour is short enough that a correction still lands
+# the same afternoon.
+/.well-known/apple-app-site-association
+  Content-Type: application/json
+  Cache-Control: public, max-age=3600

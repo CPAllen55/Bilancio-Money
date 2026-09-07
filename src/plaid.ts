@@ -61,14 +61,39 @@ async function plaidPost<T>(env: Env, path: string, body: Record<string, unknown
 }
 
 /**
- * Short-lived token the browser needs to open Link.
- *
- * redirect_uri is sent only when PLAID_REDIRECT_URI is configured. Plaid
- * rejects /link/token/create outright if the value is not already registered
- * under Developers -> API -> Allowed redirect URIs, so sending a plausible
- * guess breaks linking entirely. It is only needed for banks that use an OAuth
- * hand-off, which none of the sandbox institutions do.
+ * Which client is opening Link. Web is the default because it is what every
+ * existing caller is, and an unrecognised value is treated as web rather than
+ * refused — a new client sending something we do not know about should get a
+ * working non-OAuth link, not an error.
  */
+export type Platform = "web" | "ios";
+
+export const platformFrom = (value: unknown): Platform => (value === "ios" ? "ios" : "web");
+
+/**
+ * Where the bank sends the browser back to, which is not the same place for
+ * every client.
+ *
+ * redirect_uri is sent only when one is configured. Plaid rejects
+ * /link/token/create outright if the value is not already registered under
+ * Developers -> API -> Allowed redirect URIs, so sending a plausible guess
+ * breaks linking entirely. It is only needed for banks that use an OAuth
+ * hand-off, which none of the sandbox institutions do.
+ *
+ * The web value is an ordinary page. The iOS value must be a universal link:
+ * Plaid does not accept custom URI schemes, and iOS only routes the URL into
+ * the app if `.well-known/apple-app-site-association` says the app may claim
+ * it and the app's Associated Domains entitlement names the host. Sending the
+ * web URL to a native client is the failure this function exists to prevent —
+ * Link would return into Safari and simply stop.
+ *
+ * Unset for iOS means no redirect_uri rather than the web one. A native client
+ * then links every bank except OAuth ones, which is a smaller, more legible
+ * failure than a hand-off that leaves the user staring at a browser.
+ */
+function redirectFor(env: Env, platform: Platform): string | undefined {
+  return platform === "ios" ? env.PLAID_REDIRECT_URI_IOS : env.PLAID_REDIRECT_URI;
+}
 
 /**
  * A Link token for repairing an existing connection, not making a new one.
@@ -90,7 +115,13 @@ async function plaidPost<T>(env: Env, path: string, body: Record<string, unknown
  * The public token Link hands back on success is NOT exchanged. The Item is
  * already ours; exchanging would mint a second one pointed at the same bank.
  */
-export function createUpdateLinkToken(env: Env, clerkUserId: string, accessToken: string) {
+export function createUpdateLinkToken(
+  env: Env,
+  clerkUserId: string,
+  accessToken: string,
+  platform: Platform = "web",
+) {
+  const redirect = redirectFor(env, platform);
   return plaidPost<{ link_token: string; expiration: string }>(env, "/link/token/create", {
     user: { client_user_id: clerkUserId },
     client_name: "Bilancio Money",
@@ -98,11 +129,12 @@ export function createUpdateLinkToken(env: Env, clerkUserId: string, accessToken
     ...(env.PLAID_WEBHOOK_URL ? { webhook: env.PLAID_WEBHOOK_URL } : {}),
     country_codes: ["US"],
     language: "en",
-    ...(env.PLAID_REDIRECT_URI ? { redirect_uri: env.PLAID_REDIRECT_URI } : {}),
+    ...(redirect ? { redirect_uri: redirect } : {}),
   });
 }
 
-export function createLinkToken(env: Env, clerkUserId: string) {
+export function createLinkToken(env: Env, clerkUserId: string, platform: Platform = "web") {
+  const redirect = redirectFor(env, platform);
   return plaidPost<{ link_token: string; expiration: string }>(env, "/link/token/create", {
     user: { client_user_id: clerkUserId },
     client_name: "Bilancio Money",
@@ -120,7 +152,7 @@ export function createLinkToken(env: Env, clerkUserId: string) {
     ...(env.PLAID_WEBHOOK_URL ? { webhook: env.PLAID_WEBHOOK_URL } : {}),
     country_codes: ["US"],
     language: "en",
-    ...(env.PLAID_REDIRECT_URI ? { redirect_uri: env.PLAID_REDIRECT_URI } : {}),
+    ...(redirect ? { redirect_uri: redirect } : {}),
   });
 }
 

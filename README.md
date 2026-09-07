@@ -73,14 +73,19 @@ Phase 1 will add `PLAID_CLIENT_ID`, `PLAID_SECRET` and `TOKEN_ENCRYPTION_KEY`
 token — **losing it means every user re-links every bank**, so back it up
 somewhere you cannot lose it before it is ever used.
 
-## Before deploying — read this
+## What serves the domain
 
-`wrangler deploy` has never been run, deliberately. `public/CNAME` points at
-`www.bilanciomoney.com`, which suggests GitHub Pages currently serves the
-domain, but that has never been confirmed. Deploying this Worker to that
-domain, or merging these branches to `main`, could take the live site down.
+Cloudflare, on both the apex and `www` — checked 2026-09-04. The Worker is
+live: `/api/health` answers on each, and the root of each is served by the
+assets binding out of `public/`. GitHub Pages is not in the path, whatever
+`public/CNAME` implies.
 
-**Confirm what serves `www.bilanciomoney.com` before any deploy.**
+An earlier version of this section said `wrangler deploy` had never been run
+and warned that deploying could take the live site down. That is no longer
+true — the Cloudflare build deploys on push, so `main` is production and has
+been for some time. The caution that remains is the one under **Secrets**: the
+top-level `wrangler.jsonc` config *is* production, including the `production`
+Neon branch and the Clerk production keys.
 
 ## Conventions
 

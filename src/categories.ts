@@ -230,12 +230,29 @@ export function classify(
  * Store numbers and punctuation vary between transactions at the same shop —
  * STARBUCKS #1234, Starbucks Store 9, SQ *STARBUCKS — so they are stripped.
  * Short digit runs are kept, or "7 Eleven" would become "Eleven".
+ *
+ * Reference codes are stripped too, and that is a different problem from a
+ * store number. A mortgage paid by standing order arrives as "To Maine
+ * Community Bank" followed by a code that is new every month; the code is
+ * usually not a plain run of digits, so the digit rule above never touched it
+ * and every month produced a key of its own. One rule then covered one month
+ * and no others, which is the opposite of what filing a merchant is for.
+ *
+ * A token counts as a code when it mixes letters and digits — A8B2C, XF4K9,
+ * 4TH7 — because names do not. The exceptions that do are ordinals and sizes:
+ * 3rd, 2nd, 24h, 7up. Those are short and end in letters that spell something,
+ * so a code has to be four characters or more and carry at least two digits
+ * before it is dropped.
+ *
+ * This is applied to stored keys as well as to fresh ones — see loadCategories
+ * — so rules written before it keep matching without a migration.
  */
 export function merchantKey(merchantName: string | null, name: string): string {
   return (merchantName || name || "")
     .toLowerCase()
     .replace(/[^a-z0-9 ]+/g, " ")
     .replace(/\b\d{3,}\b/g, " ")
+    .replace(/\b(?=[a-z0-9]{4,}\b)(?=(?:[a-z0-9]*\d){2})[a-z0-9]*[a-z][a-z0-9]*\b/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 80);
