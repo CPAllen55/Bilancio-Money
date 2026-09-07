@@ -188,8 +188,13 @@ access review.
 | Clerk | Authentication | Email address, authentication factors |
 | Cloudflare | Hosting, TLS, DNS, email routing | Traffic in transit |
 | Neon | Database | Stored application data |
+| Google | Optional sign-in, for users who choose it | Email address and basic profile |
 
-All four are established providers with published security programmes. We rely
+Google appears here only for users who sign in with a Google account. It is a
+first factor and not a replacement for the second one, which Clerk still
+requires. A user who signs in with a password never involves Google at all.
+
+All of them are established providers with published security programmes. We rely
 on their platform controls for physical security, host patching, and
 infrastructure hardening, which are not things a company of this size could
 perform better itself.
