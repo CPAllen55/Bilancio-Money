@@ -1481,37 +1481,86 @@ summary.get("/calendar", async (c) => {
       if (any) cell.count += 1;
     }
 
-    /* The subscriptions are judged over their own long window rather than this
-       month, because three charges are needed before anything is a
-       subscription at all and one month can never hold three. */
+    /* Candidate merchants, from a bounded window.
+
+       This asked for every distinct description in the whole ledger, which is
+       the query that answered 503 on /api/transactions: matching eighteen
+       months of history against hundreds of names, on coalesce(merchant_name,
+       name) -- a computed value no index can serve, so Postgres compares every
+       row against every name. Unbounded it was worse than the one that broke.
+
+       Three months ending at this month or today, whichever is sooner. Any
+       subscription that could land in the month being shown has charged inside
+       that window, because it charges every month by definition. A month in
+       the past gets the merchants of its own era rather than today's. */
     const displayName = sql<string>`coalesce(${transactions.merchantName}, ${transactions.name})`;
-    const names = ids.length
-      ? (await db
+    const nameEnd = end < today ? end : today;
+    const nameStart = new Date(Date.UTC(nameEnd.getUTCFullYear(), nameEnd.getUTCMonth() - 2, 1));
+    const named = ids.length
+      ? await db
           .selectDistinct({ name: displayName })
           .from(transactions)
-          .where(ledgerRows(ids))
-        ).map((r) => String(r.name)).filter(Boolean)
+          .where(ledgerRows(ids, nameStart, nameEnd))
       : [];
+    const names = named.map((r) => String(r.name)).filter(Boolean);
+
+    /* One printable name per key. merchantKey folds several spellings into
+       one verdict, and a projection has no row of its own to take a name
+       from, so the shortest spelling stands for the group -- store numbers
+       and branch codes make the others longer, not clearer. */
+    const pretty = new Map<string, string>();
+    for (const n of names) {
+      const k = merchantKey(null, n);
+      if (!k) continue;
+      const held = pretty.get(k);
+      if (!held || n.length < held.length) pretty.set(k, n);
+    }
+
     const subs = await subscriptionsFor(db, ids, displayName, names, today);
 
     let subsTotal = 0;
-    for (const [name, v] of subs.byKey) {
-      if (!v.last) continue;
-      const [ly, lm, ld] = v.last.split("-").map(Number);
-      /* Which day of the month it lands on. A charge on the 31st has no
-         counterpart in a 30-day month, so it falls back to the last day
-         rather than spilling into the next one. */
-      const day = Math.min(ld, daysInMonth);
-      const date = `${key}-${String(day).padStart(2, "0")}`;
-      const cell = days.get(date);
-      if (!cell) continue;
 
-      /* Already happened, or still to come. The last charge is the boundary:
-         anything at or before it is history the rows above already counted,
-         anything after it is a projection. */
-      const lastKey = `${ly}-${String(lm).padStart(2, "0")}`;
-      const projected = key > lastKey;
-      cell.subs.push({ name, cents: v.cents, projected, since: v.since, rose: v.rose });
+    /* What actually charged, taken from the month's own rows.
+
+       This used to project every subscription into every month from its most
+       recent charge, which is right for a month ahead and wrong for one
+       behind: it would draw today's subscriptions onto a month two years ago,
+       on days they never charged, at prices they did not cost. Where there are
+       rows, the rows are the answer -- the real date, and the amount that was
+       actually taken. */
+    const charged = new Set<string>();
+    for (const r of rows as (AmountRow & { date: string })[]) {
+      const k = merchantKey(r.merchantName, r.name);
+      const v = k && subs.byKey.get(k);
+      if (!v) continue;
+      const cell = days.get(String(r.date));
+      if (!cell) continue;
+      const cents = Number(r.amount);
+      if (cents <= 0) continue;                  // a refund is not the charge
+      cell.subs.push({
+        name: r.merchantName ?? r.name, cents, projected: false,
+        since: v.since, rose: v.rose,
+      });
+      charged.add(k);
+      subsTotal += cents;
+    }
+
+    /* What is still to come. Only for a month past the last real charge: a
+       month at or before it either has the charge in the rows above, or
+       genuinely did not have one, and inventing it would be worse than
+       leaving the day empty. */
+    for (const [k, v] of subs.byKey) {
+      if (charged.has(k) || !v.last) continue;
+      if (key <= v.last.slice(0, 7)) continue;
+      /* A charge on the 31st has no counterpart in a 30-day month, so it falls
+         back to the last day rather than spilling into the next one. */
+      const day = Math.min(Number(v.last.slice(8)), daysInMonth);
+      const cell = days.get(`${key}-${String(day).padStart(2, "0")}`);
+      if (!cell) continue;
+      cell.subs.push({
+        name: pretty.get(k) ?? k, cents: v.cents, projected: true,
+        since: v.since, rose: v.rose,
+      });
       subsTotal += v.cents;
     }
 
