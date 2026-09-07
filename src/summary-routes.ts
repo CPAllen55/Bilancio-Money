@@ -215,8 +215,15 @@ function resolveSlug(
    *
    * So a rule naming a spending category is allowed to overrule that guess —
    * it is the reader saying what the merchant is, against a guess that is
-   * demonstrably wrong. The reverse is still refused: nothing may quietly
-   * become a transfer and leave the spending figures.
+   * demonstrably wrong.
+   *
+   * It runs the other way too, and always did: a rule naming a transfer takes
+   * a merchant Plaid called spending out of the expense figures. That is how
+   * somebody files a hundred thousand moved between their own accounts, which
+   * Plaid reports as a purchase and which otherwise sets the scale of every
+   * chart it lands in. The only pairing skipped is transfer to transfer, where
+   * the row is already outside both ledgers and the rule changes only which
+   * transfer category it is filed under.
    *
    * The cost is that filing a merchant under spending also claims that
    * merchant's genuine card payments, if the reader uses the same name for

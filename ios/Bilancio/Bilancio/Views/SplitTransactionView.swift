@@ -106,16 +106,35 @@ final class SplitEditor {
         return stored != now
     }
 
-    /// Leaves only, of the same side of the ledger as the transaction.
+    /// Leaves only, of the same side of the ledger as the transaction — or of
+    /// neither side.
     ///
     /// A transaction belongs to a leaf: filing one on a parent would
     /// double-count it against its own children. And an expense carved into an
     /// income category would make the parts sum to more spending than the
     /// charge — arithmetic that holds while the meaning does not.
+    ///
+    /// Transfers are offered whichever way the money went, because a transfer
+    /// is not a side of the ledger: it is money that has not been earned or
+    /// spent, only moved. Leaving them out meant a hundred thousand pounds
+    /// moved between two of your own accounts had no correct answer available
+    /// — it could be filed as some kind of spending or left as some kind of
+    /// spending, and either way it stood in the expense figures and set the
+    /// scale of every chart it appeared in.
+    ///
+    /// Splits are deliberately not widened the same way. A split divides a
+    /// charge into the things it paid for, and "part of this was not a
+    /// purchase" is a statement about the whole row rather than a share of it.
     var pickable: [TransactionsResponse.Category] {
+        pickable(includingTransfers: false)
+    }
+
+    /// The same, with the transfer categories added. Used by the row's own
+    /// category and not by its splits.
+    func pickable(includingTransfers: Bool) -> [TransactionsResponse.Category] {
         let side = row.amount > 0 ? "income" : "spend"
         return categories
-            .filter { $0.isLeaf && $0.kind == side }
+            .filter { $0.isLeaf && ($0.kind == side || (includingTransfers && $0.kind == "transfer")) }
             .sorted { $0.label < $1.label }
     }
 
@@ -128,7 +147,19 @@ final class SplitEditor {
     /// a parent would be counted twice against its own children.
     var groupedPickable: [(parent: TransactionsResponse.Category,
                            children: [TransactionsResponse.Category])] {
-        let leaves = pickable
+        grouped(pickable)
+    }
+
+    /// The row's own category, which is the one that may be a transfer. The
+    /// transfer leaves sit under a parent of their own, so they arrive as a
+    /// section without anything here having to name them.
+    var groupedFilable: [(parent: TransactionsResponse.Category,
+                          children: [TransactionsResponse.Category])] {
+        grouped(pickable(includingTransfers: true))
+    }
+
+    private func grouped(_ leaves: [TransactionsResponse.Category])
+        -> [(parent: TransactionsResponse.Category, children: [TransactionsResponse.Category])] {
         let byParent = Dictionary(grouping: leaves) { $0.parentSlug ?? "" }
         let parents = categories.filter { $0.parentSlug == nil }
 
@@ -227,7 +258,7 @@ struct SplitTransactionView: View {
                             Text("Unset").tag(String?.none)
                         }
 
-                        ForEach(editor.groupedPickable, id: \.parent.id) { group in
+                        ForEach(editor.groupedFilable, id: \.parent.id) { group in
                             Section(group.parent.label) {
                                 ForEach(group.children) { cat in
                                     Text(cat.label).tag(String?.some(cat.id))
