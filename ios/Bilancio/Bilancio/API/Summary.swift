@@ -163,6 +163,9 @@ enum SummaryRange: Hashable, CaseIterable {
     case month(String)
     /// An explicit run of whole months, inclusive. Both `YYYY-MM`.
     case span(from: String, to: String)
+    /// One named day, whole. `YYYY-MM-DD`. Reached from the calendar, where
+    /// the question is which rows made up a day rather than a month.
+    case day(String)
     /// Everything. The Worker applies no window at all for this one.
     case all
 
@@ -178,6 +181,7 @@ enum SummaryRange: Hashable, CaseIterable {
         case .yearToDate:     return "ytd"
         case .month(let ym):  return "month:\(ym)"
         case .span(let a, let b): return "span:\(a)..\(b)"
+        case .day(let ymd): return "day:\(ymd)"
         case .all: return "all"
         }
     }
@@ -189,6 +193,7 @@ enum SummaryRange: Hashable, CaseIterable {
         case .yearToDate:     return "Year to date"
         case .month(let ym):  return ym
         case .span(let a, let b): return "\(a)..\(b)"
+        case .day(let ymd): return ymd
         case .all: return "All time"
         }
     }

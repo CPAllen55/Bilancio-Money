@@ -90,6 +90,7 @@ struct CalendarView: View {
 
                 if let day = picked, let match = data.days.first(where: { $0.date == day.date }) {
                     DayCard(day: match) { picked = nil }
+                    DayRows(date: match.date)
                 }
             }
             .padding(.horizontal)
@@ -310,5 +311,95 @@ private struct DayCard: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - What was actually bought
+
+/// The transactions behind one day.
+///
+/// The calendar's own answer is a total and a count, which is enough to find
+/// the day worth looking at and never enough to explain it. A heavy Tuesday is
+/// one large charge or fifteen small ones, and those are different problems.
+///
+/// Fetched on its own rather than carried in the month: a month of rows is far
+/// more than fits in one page, and thirty days of them would be fetched to
+/// read one.
+@MainActor
+@Observable
+private final class DayRowsModel {
+    enum State { case loading, loaded(TransactionsResponse), failed(String) }
+    private(set) var state: State = .loading
+
+    private let client = APIClient(baseURL: Bilancio.apiBaseURL) {
+        guard let session = Clerk.shared.session else { return nil }
+        return try await session.getToken()
+    }
+
+    func load(_ date: String) async {
+        state = .loading
+        do {
+            state = .loaded(try await client.transactions(range: .day(date), limit: 100))
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+    }
+}
+
+private struct DayRows: View {
+    let date: String
+    @State private var model = DayRowsModel()
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("What was bought")
+                    .font(Theme.tileLabel)
+                    .foregroundStyle(Theme.quietText)
+
+                switch model.state {
+                case .loading:
+                    ProgressView().frame(maxWidth: .infinity)
+
+                case .failed(let message):
+                    Text(message)
+                        .font(Theme.note)
+                        .foregroundStyle(Theme.negative)
+
+                case .loaded(let data):
+                    if data.transactions.isEmpty {
+                        Text("Nothing on this day.")
+                            .font(Theme.note)
+                            .foregroundStyle(Theme.quietText)
+                    } else {
+                        ForEach(data.transactions) { row in
+                            HStack(spacing: 10) {
+                                MerchantLogo(file: row.logo, name: row.name)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(row.name)
+                                        .font(Theme.body)
+                                        .lineLimit(1)
+                                    if let slug = row.category,
+                                       let cat = data.categories.first(where: { $0.slug == slug }) {
+                                        Text(cat.label)
+                                            .font(.caption2)
+                                            .foregroundStyle(Theme.quietText)
+                                    }
+                                }
+                                Spacer(minLength: 8)
+                                Text(row.amount.asMoney)
+                                    .font(Theme.body)
+                                    .monospacedDigit()
+                                    // Positive is money in — the Worker has
+                                    // already turned Plaid's sign round, so a
+                                    // refund on a heavy day reads as one.
+                                    .foregroundStyle(row.amount > 0 ? Theme.incomeTint : Theme.text)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .task(id: date) { await model.load(date) }
     }
 }
