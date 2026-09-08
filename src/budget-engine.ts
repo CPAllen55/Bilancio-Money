@@ -13,7 +13,7 @@
  * handed to the statistics — which is what makes a median of Housing mean
  * something, because the rent is no longer in it.
  *
- * Everything happens at the subcategory level, one of the 45 spend leaves. A
+ * Everything happens at the subcategory level, one of the 34 spend leaves. A
  * parent's figure is the sum of its children and is never fitted itself.
  *
  * ── Why it is worth the trouble ─────────────────────────────────────────────
