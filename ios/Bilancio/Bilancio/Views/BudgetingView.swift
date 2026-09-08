@@ -642,6 +642,9 @@ private struct MoneyOverTime: View {
     /// feature — it is the same complaint on a loop.
     @AppStorage("budgetShowLastYear") private var showLastYear = false
 
+    /// The month under the last touch.
+    @State private var picked: String?
+
     private struct Point: Identifiable {
         let month: String
         let label: String
@@ -682,6 +685,13 @@ private struct MoneyOverTime: View {
     }
 
     private var hasLastYear: Bool { !lastYear.isEmpty }
+
+    /// The label to write under a column, by the key it is plotted against.
+    /// Plotted on the key because two years hold two Januaries, and a chart
+    /// drawn on a three letter label stacks them into one column.
+    private var labelByMonth: [String: String] {
+        Dictionary(uniqueKeysWithValues: points.map { ($0.month, $0.label) })
+    }
 
     private var points: [Point] {
         data.months.enumerated().map { i, m in
@@ -724,7 +734,7 @@ private struct MoneyOverTime: View {
                         // other and the pair reads as a total neither of them
                         // is. Both start at zero so their heights compare.
                         BarMark(
-                            x: .value("Month", p.label),
+                            x: .value("Month", p.month),
                             y: .value("Income", Double(p.income) / 100),
                             width: .ratio(0.94),
                             stacking: .unstacked
@@ -733,7 +743,7 @@ private struct MoneyOverTime: View {
                         .cornerRadius(2)
 
                         BarMark(
-                            x: .value("Month", p.label),
+                            x: .value("Month", p.month),
                             y: .value("Spending", Double(p.expense) / 100),
                             width: .ratio(0.44),
                             stacking: .unstacked
@@ -756,7 +766,7 @@ private struct MoneyOverTime: View {
                             // chart look like it only tracked spending.
                             if let before = lastYear[p.month] {
                                 LineMark(
-                                    x: .value("Month", p.label),
+                                    x: .value("Month", p.month),
                                     y: .value("Amount", Double(before.expense) / 100),
                                     series: .value("Series", "Spending last year")
                                 )
@@ -767,7 +777,7 @@ private struct MoneyOverTime: View {
                                 .symbolSize(20)
 
                                 LineMark(
-                                    x: .value("Month", p.label),
+                                    x: .value("Month", p.month),
                                     y: .value("Amount", Double(before.income) / 100),
                                     series: .value("Series", "Income last year")
                                 )
@@ -786,18 +796,97 @@ private struct MoneyOverTime: View {
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 6)) { value in
                         AxisGridLine()
-                        AxisValueLabel { if let s = value.as(String.self) { Text(s) } }
+                        AxisValueLabel {
+                            if let key = value.as(String.self) { Text(labelByMonth[key] ?? key) }
+                        }
                     }
                 }
+                .chartXSelection(value: $picked)
                 .frame(minHeight: showLastYear ? 220 : 190,
                        maxHeight: maximised ? .infinity : (showLastYear ? 220 : 190))
                 .animation(.snappy(duration: 0.25), value: showLastYear)
+                .animation(.snappy(duration: 0.2), value: picked)
+
+                /* One touch, both figures.
+                 *
+                 * The other charts name the thing that was hit, because a
+                 * stack is many things and only one of them was under the
+                 * finger. This one is two bars drawn from the same floor, and
+                 * a month is the question either of them answers — so the
+                 * month is what a touch selects, and it says what came in,
+                 * what went out, and the difference, which is the number the
+                 * whole screen is really about.
+                 */
+                if let month = picked, let p = points.first(where: { $0.month == month }) {
+                    MonthReadout(point: p, lastYear: lastYear[month]) { picked = nil }
+                }
 
                 Text(showLastYear
                      ? "Faded months are the plan; solid months already happened. Where the narrow bar rises above the wide one, the month spent more than it earned. Dashed lines are the same months a year ago."
                      : "Faded months are the plan; solid months already happened. Where the narrow bar rises above the wide one, the month spent more than it earned.")
                     .font(.caption2)
                     .foregroundStyle(Theme.quietText)
+            }
+        }
+    }
+
+    /// What one month came to, in the terms this screen is built around.
+    private struct MonthReadout: View {
+        let point: Point
+        let lastYear: (income: Int, expense: Int)?
+        let dismiss: () -> Void
+
+        private var net: Int { point.income - point.expense }
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(point.label)
+                        .font(Theme.tileLabel)
+                        .foregroundStyle(Theme.quietText)
+                    // Said, not implied by a fade. A projected month is an
+                    // expectation, and reading one as a record is the whole
+                    // mistake this screen can cause.
+                    if point.projected {
+                        Text("planned")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.quietText)
+                    }
+                    Spacer(minLength: 8)
+                    Text(net.asMoney)
+                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.tint(forNet: net))
+                    Button(action: dismiss) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(Theme.quietText)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                HStack(spacing: 14) {
+                    figure("In", point.income, Theme.incomeTint)
+                    figure("Out", point.expense, Theme.expenseTint)
+                    if let lastYear {
+                        figure("Out a year ago", lastYear.expense, Theme.quietText)
+                    }
+                }
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.background, in: .rect(cornerRadius: 8))
+        }
+
+        private func figure(_ label: String, _ cents: Int, _ tint: Color) -> some View {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(Theme.quietText)
+                Text(cents.asMoney)
+                    .font(Theme.note)
+                    .monospacedDigit()
+                    .foregroundStyle(tint)
             }
         }
     }
