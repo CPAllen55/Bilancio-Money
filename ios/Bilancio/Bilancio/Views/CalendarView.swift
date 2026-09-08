@@ -50,6 +50,11 @@ final class CalendarModel {
 struct CalendarView: View {
     @State private var model = CalendarModel()
     @State private var picked: CalendarResponse.Day?
+    /// The grid on its own. A month is seven columns wide however small the
+    /// screen is, so the cells are the one thing here that a bigger screen
+    /// genuinely changes: at this size they can only carry weight, and at that
+    /// one they can carry the figure.
+    @State private var open = false
 
     var body: some View {
         Group {
@@ -78,12 +83,47 @@ struct CalendarView: View {
     }
 
     private func content(_ data: CalendarResponse) -> some View {
+        scroller(data)
+            .fullScreenCover(isPresented: $open) {
+                NavigationStack {
+                    VStack(alignment: .leading, spacing: 12) {
+                        strip(data)
+                        // Amounts here, and only here. Seven columns across a
+                        // phone leaves a cell about forty points wide, which
+                        // is narrower than a four figure sum — the figures
+                        // would overlap into a band and say less than the
+                        // colour already does. Turned sideways there is room
+                        // for both.
+                        Grid(data: data, showAmounts: true) { day in
+                            picked = day
+                            open = false
+                        }
+                        totals(data)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, Theme.cardPadding)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .background(Theme.background)
+                    .navigationTitle(Self.title(of: data.month))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .owlMark()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { open = false }
+                        }
+                    }
+                }
+                .tint(Theme.accent)
+            }
+    }
+
+    private func scroller(_ data: CalendarResponse) -> some View {
         ScrollView {
             VStack(spacing: Theme.sectionGap) {
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
                         strip(data)
-                        Grid(data: data) { picked = $0 }
+                        Grid(data: data, showAmounts: false) { picked = $0 }
                         totals(data)
                     }
                 }
@@ -101,6 +141,14 @@ struct CalendarView: View {
 
     private func strip(_ data: CalendarResponse) -> some View {
         HStack {
+            if !open {
+                Button { open = true } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .accessibilityLabel("Open the month on its own")
+                .padding(.trailing, 4)
+            }
             Button {
                 picked = nil
                 Task { await model.step(-1, from: data.month) }
@@ -118,6 +166,7 @@ struct CalendarView: View {
             } label: {
                 Image(systemName: "chevron.right")
             }
+            .padding(.trailing, 4)
             // Forward past the month we are in would be an empty grid with a
             // total of nothing, which reads as a fault rather than as a month
             // that has not happened.
@@ -167,6 +216,8 @@ struct CalendarView: View {
 /// them is read.
 private struct Grid: View {
     let data: CalendarResponse
+    /// Whether a cell has room for what the day cost.
+    let showAmounts: Bool
     let onPick: (CalendarResponse.Day) -> Void
 
     private static let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
@@ -190,6 +241,9 @@ private struct Grid: View {
         max(1, data.days.map(\.spent).max() ?? 1)
     }
 
+    /// Taller when a figure has to fit under the date.
+    private var cellHeight: CGFloat { showAmounts ? 56 : 40 }
+
     var body: some View {
         VStack(spacing: 6) {
             HStack(spacing: 4) {
@@ -203,13 +257,15 @@ private struct Grid: View {
 
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7),
                       spacing: 4) {
-                ForEach(0..<lead, id: \.self) { _ in Color.clear.frame(height: 40) }
+                ForEach(0..<lead, id: \.self) { _ in Color.clear.frame(height: cellHeight) }
 
                 ForEach(data.days) { day in
                     Button { onPick(day) } label: {
                         Cell(day: day,
                              weight: Double(day.spent) / Double(heaviest),
-                             ahead: day.date > data.today)
+                             ahead: day.date > data.today,
+                             showAmount: showAmounts,
+                             height: cellHeight)
                     }
                     .buttonStyle(.plain)
                 }
@@ -224,12 +280,32 @@ private struct Cell: View {
     /// Later than today. Nothing has been spent on it and nothing can have
     /// been, so an empty cell is a fact rather than a quiet day.
     let ahead: Bool
+    /// Room for what the day cost.
+    let showAmount: Bool
+    let height: CGFloat
+
+    /// Whole dollars. Cents in a grid of thirty-one cells are four characters
+    /// that never change the answer, and they cost the two that do.
+    private var rounded: String {
+        (Double(day.spent) / 100).formatted(.currency(code: "USD").precision(.fractionLength(0)))
+    }
 
     var body: some View {
         VStack(spacing: 2) {
             Text("\(day.dayOfMonth)")
                 .font(.system(size: 12, weight: .medium))
                 .monospacedDigit()
+
+            if showAmount {
+                // Nothing rather than "$0" on a quiet day. A grid of zeroes
+                // reads as broken, and the absence is the same information.
+                Text(day.spent > 0 ? rounded : " ")
+                    .font(.system(size: 10, weight: .semibold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+
             // A dot rather than a figure: which days carry a subscription is
             // the question, and the amount is a tap away.
             if day.subs.isEmpty {
@@ -241,7 +317,7 @@ private struct Cell: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 40)
+        .frame(height: height)
         .background(
             (ahead ? Theme.quietText.opacity(0.05)
                    : Theme.expenseTint.opacity(0.10 + 0.55 * min(1, weight)))
