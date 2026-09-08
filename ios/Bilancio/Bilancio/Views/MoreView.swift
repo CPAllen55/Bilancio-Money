@@ -49,7 +49,11 @@ struct MoreView: View {
         NavigationStack {
             List {
                 Section {
-                    row("The year ahead", "calendar",
+                    row("Calendar", "calendar",
+                        "What each day cost, and what lands when") {
+                        CalendarView()
+                    }
+                    row("The year ahead", "chart.line.uptrend.xyaxis",
                         "Where the year ends up, on the same plan") {
                         ForecastView()
                     }
