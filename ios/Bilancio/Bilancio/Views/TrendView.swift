@@ -347,7 +347,10 @@ private struct CategoryTrendChart: View {
                     chart(marks: marks, ago: ago, big: big)
 
                     if let picked {
-                        PickedSegment(picked: picked) { self.picked = nil }
+                        PickedSegment(picked: picked,
+                                      lastYear: showLastYear ? yearAgo.first { $0.label == picked.month }?.cents : nil) {
+                            self.picked = nil
+                        }
                     } else if !big {
                         Text("Pinch to zoom, drag to scroll through the months. Touch a segment for its figure, or hold and slide across them. Turn the phone, or open this on its own, for a wider view.")
                             .font(Theme.note)
@@ -586,29 +589,62 @@ private struct CategoryTrendChart: View {
 /// What one segment came to.
 private struct PickedSegment: View {
     let picked: CategoryTrendChart.Picked
+    /// The same months a year earlier, when the lines are on. The reader has
+    /// just touched a bar the line crosses, and the figure the line represents
+    /// is the thing they were comparing against.
+    let lastYear: Int?
     let dismiss: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(TrendResponse.Month.shortLabel(of: picked.month))
-                .font(Theme.tileLabel)
-                .foregroundStyle(Theme.quietText)
-            Text(picked.label)
-                .font(Theme.note)
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 0) {
-                Text(picked.cents.asMoney)
-                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                    .monospacedDigit()
-                // The month behind the part. A stack shows what something was
-                // made of at the cost of what it came to, and "of" is the word
-                // that puts the two back together.
-                Text("of \(picked.ofTotal.asMoney)")
-                    .font(.caption2)
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.quietText)
+            /* The readout is the way through, not just a label.
+             *
+             * Touching a segment already names a category and a month, which
+             * is exactly what the drill-down needs — so asking the reader to
+             * dismiss this and find the same category again in the strip below
+             * is asking them to say it twice. The chevron says it is a door.
+             */
+            NavigationLink {
+                CategoryMonthView(slug: picked.slug,
+                                  range: .month(picked.month),
+                                  title: picked.label,
+                                  monthLabel: TrendResponse.Month.shortLabel(of: picked.month))
+            } label: {
+                HStack(spacing: 8) {
+                    Text(TrendResponse.Month.shortLabel(of: picked.month))
+                        .font(Theme.tileLabel)
+                        .foregroundStyle(Theme.quietText)
+                    Text(picked.label)
+                        .font(Theme.note)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    VStack(alignment: .trailing, spacing: 0) {
+                        Text(picked.cents.asMoney)
+                            .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                            .monospacedDigit()
+                        // The month behind the part. A stack shows what
+                        // something was made of at the cost of what it came
+                        // to, and "of" is the word that puts the two back
+                        // together.
+                        Text("of \(picked.ofTotal.asMoney)")
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.quietText)
+                        if let lastYear, lastYear > 0 {
+                            Text("\(lastYear.asShortMoney) a year ago")
+                                .font(.caption2)
+                                .monospacedDigit()
+                                .foregroundStyle(Theme.quietText)
+                        }
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.quietText)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+
             Button(action: dismiss) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(Theme.quietText)
@@ -633,6 +669,9 @@ private struct ChartReadout: View {
     let month: String
     let value: Int
     let caption: String
+    /// What the comparison line was at this month, when one is drawn.
+    var secondary: Int? = nil
+    var secondaryLabel: String = ""
     let tint: Color
     let dismiss: () -> Void
 
@@ -645,10 +684,18 @@ private struct ChartReadout: View {
                 .font(Theme.note)
                 .lineLimit(1)
             Spacer(minLength: 8)
-            Text(value.asMoney)
-                .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(tint)
+            VStack(alignment: .trailing, spacing: 0) {
+                Text(value.asMoney)
+                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(tint)
+                if let secondary {
+                    Text("\(secondary.asMoney) \(secondaryLabel)")
+                        .font(.caption2)
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.quietText)
+                }
+            }
             Button(action: dismiss) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(Theme.quietText)
@@ -841,6 +888,17 @@ private struct NetChart: View {
                                 .lineStyle(.init(lineWidth: 1.6, dash: [4, 3]))
                                 .foregroundStyle(Theme.quietText)
                                 .interpolationMethod(.monotone)
+
+                                // A bullet where each month sits on the line,
+                                // so there is something to aim at and something
+                                // to have hit. Without them the line is a shape
+                                // with no months in it.
+                                PointMark(
+                                    x: .value("Month", m.month),
+                                    y: .value("Last year", Double(before) / 100)
+                                )
+                                .symbolSize(14)
+                                .foregroundStyle(Theme.quietText)
                             }
                         }
                     }
@@ -864,9 +922,13 @@ private struct NetChart: View {
                 if let month = picked, let m = series.first(where: { $0.month == month }) {
                     ChartReadout(month: month,
                                  value: m.net,
-                                 caption: showLastYear && lastYear[month] != nil
-                                     ? "against \((lastYear[month] ?? 0).asShortMoney) a year ago"
-                                     : (m.net < 0 ? "more out than in" : "more in than out"),
+                                 caption: m.net < 0 ? "more out than in" : "more in than out",
+                                 // The figure the bullet stands for, said as a
+                                 // figure. A caption saying "against $2.1k"
+                                 // rounds the thing being compared against,
+                                 // which is the half a comparison cannot round.
+                                 secondary: showLastYear ? lastYear[month] : nil,
+                                 secondaryLabel: "a year ago",
                                  tint: Theme.tint(forNet: m.net)) { picked = nil }
                 } else {
                     Text("Touch a month for what it came to.")
