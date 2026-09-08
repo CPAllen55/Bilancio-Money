@@ -443,17 +443,21 @@ private struct CategoryRun: View {
                             .cornerRadius(2)
                         }
 
+                        // One line through the bars rather than a dash on
+                        // each. Months with nothing a year ago are left out
+                        // instead of drawn at zero: a line dropping to the
+                        // floor says the category cost nothing, which is a
+                        // stronger claim than "no record that far back".
                         if showLastYear {
-                            ForEach(data, id: \.month) { p in
-                                if let before = lastYear[p.month], before > 0 {
-                                    RuleMark(
-                                        x: .value("Month", p.month),
-                                        yStart: .value("Last year", Double(before) / 100),
-                                        yEnd: .value("Last year", Double(before) / 100)
-                                    )
-                                    .lineStyle(.init(lineWidth: 1.5, dash: [3, 2]))
-                                    .foregroundStyle(Theme.quietText)
-                                }
+                            ForEach(data.filter { (lastYear[$0.month] ?? 0) > 0 }, id: \.month) { p in
+                                LineMark(
+                                    x: .value("Month", p.month),
+                                    y: .value("Last year", Double(lastYear[p.month] ?? 0) / 100),
+                                    series: .value("Series", "last year")
+                                )
+                                .lineStyle(.init(lineWidth: 1.6, dash: [4, 3]))
+                                .foregroundStyle(Theme.quietText)
+                                .interpolationMethod(.monotone)
                             }
                         }
                     }

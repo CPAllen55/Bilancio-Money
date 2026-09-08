@@ -433,17 +433,39 @@ private struct CategoryTrendChart: View {
                 }
             }
 
-            // Last year as a rule across each month rather than a second stack:
-            // the comparison is one number, and a second stack beside the first
-            // doubles the ink to say what a line already says.
-            ForEach(ago, id: \.label) { point in
-                if showLastYear, point.cents > 0 {
-                    RuleMark(
+            /* Last year as one line running through the bars, rather than a
+             * dash sitting on each of them.
+             *
+             * A dash per month says what that month was and nothing about the
+             * months either side, which leaves the reader doing the joining up
+             * — and the joining up is the whole question. A line has a shape,
+             * and the shape is the answer: this year is above it, below it, or
+             * following it.
+             *
+             * A second stack would say the same thing and double the ink, so
+             * it is still a line and not more bars.
+             *
+             * Months with nothing recorded a year ago are left out rather than
+             * drawn at zero. A line dropping to the floor reads as a year that
+             * spent nothing, which is a much stronger claim than "we were not
+             * keeping records yet".
+             */
+            if showLastYear {
+                ForEach(ago.filter { $0.cents > 0 }, id: \.label) { point in
+                    LineMark(
                         x: .value("Month", point.label),
-                        yStart: .value("Last year", Double(point.cents) / 100),
-                        yEnd: .value("Last year", Double(point.cents) / 100)
+                        y: .value("Last year", Double(point.cents) / 100),
+                        series: .value("Series", "last year")
                     )
-                    .lineStyle(.init(lineWidth: 1.5, dash: [3, 2]))
+                    .lineStyle(.init(lineWidth: 1.6, dash: [4, 3]))
+                    .foregroundStyle(Theme.quietText)
+                    .interpolationMethod(.monotone)
+
+                    PointMark(
+                        x: .value("Month", point.label),
+                        y: .value("Last year", Double(point.cents) / 100)
+                    )
+                    .symbolSize(14)
                     .foregroundStyle(Theme.quietText)
                 }
             }
@@ -801,23 +823,24 @@ private struct NetChart: View {
                     .opacity(picked == nil || picked == m.month ? 1 : 0.3)
                     }
 
-                    /* Last year as a rule across each month, the same way the
-                     * category chart draws it. A net can be negative, so the
-                     * rule is drawn whatever its sign — a month that lost
-                     * money last year is exactly the comparison worth having,
-                     * and suppressing zero would delete a year that broke
-                     * even rather than a year with no record.
+                    /* Last year as one line through the bars, the same way
+                     * the category chart draws it. Every month is plotted
+                     * whatever its sign, and zero is plotted too: a net can be
+                     * negative, a month that lost money last year is exactly
+                     * the comparison worth having, and a year that broke even
+                     * is a finding rather than a gap.
                      */
                     if showLastYear {
                         ForEach(series) { m in
                             if let before = lastYear[m.month] {
-                                RuleMark(
+                                LineMark(
                                     x: .value("Month", m.month),
-                                    yStart: .value("Last year", Double(before) / 100),
-                                    yEnd: .value("Last year", Double(before) / 100)
+                                    y: .value("Last year", Double(before) / 100),
+                                    series: .value("Series", "last year")
                                 )
-                                .lineStyle(.init(lineWidth: 1.5, dash: [3, 2]))
+                                .lineStyle(.init(lineWidth: 1.6, dash: [4, 3]))
                                 .foregroundStyle(Theme.quietText)
+                                .interpolationMethod(.monotone)
                             }
                         }
                     }
