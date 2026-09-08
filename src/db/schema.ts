@@ -50,7 +50,44 @@ export const users = pgTable("users", {
      "friend". Free-form because the reasons are a business matter and will
      change faster than a migration can keep up. */
   planNote: text("plan_note"),
-});
+
+  /* ── Who is taking the money ─────────────────────────────────────────────
+   *
+   * Two answers, because there have to be two. A subscription bought on the
+   * web goes through Stripe and costs nothing to collect; one bought inside
+   * the iOS app has to go through Apple's in-app purchase, because App Store
+   * guideline 3.1.1 leaves no choice about it. The same person could hold
+   * either, and `plan` above cannot tell them apart on its own.
+   *
+   * Recorded rather than inferred, for two reasons that both bite in
+   * production. Cancelling happens wherever the subscription was bought --
+   * Apple will not let anyone else cancel theirs -- so sending a subscriber to
+   * the wrong place is a support ticket at best. And a webhook from one
+   * processor must never quietly overwrite a subscription held at the other;
+   * knowing the source is what makes that check possible.
+   *
+   * NULL for a trial or a comped account, which is most rows most of the
+   * time: nobody is charging them, so there is no source to name. */
+  billingSource: text("billing_source"),
+  /* Stripe's two ids. The customer outlives any individual subscription --
+     somebody who cancels and comes back is the same customer -- so it is kept
+     even once the subscription is gone. */
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  /* Apple's original_transaction_id: the one identifier that stays fixed
+     across every renewal, upgrade and restore. The per-transaction ids change
+     every month and are no use for finding somebody again. */
+  appleOriginalTransactionId: text("apple_original_transaction_id"),
+}, (t) => [
+  /* One Stripe customer is one user. A unique index rather than a convention,
+     because the webhook finds a user BY customer id and two rows sharing one
+     would make that lookup silently pick a side. Partial: NULL is the normal
+     state and a plain unique index would allow only one row to have it. */
+  uniqueIndex("users_stripe_customer_idx").on(t.stripeCustomerId)
+    .where(sql`${t.stripeCustomerId} is not null`),
+  uniqueIndex("users_apple_original_txn_idx").on(t.appleOriginalTransactionId)
+    .where(sql`${t.appleOriginalTransactionId} is not null`),
+]);
 
 // 1b. Waitlist - people who left an email on the landing page, before any
 // account exists. Deliberately not tied to `users`: most rows will never

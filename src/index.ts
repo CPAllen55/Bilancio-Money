@@ -17,6 +17,7 @@ import accountRoutes from "./account-routes";
 import assetRoutes from "./asset-routes";
 import metalRoutes from "./metal-routes";
 import budgetRoutes from "./budget-routes";
+import billingRoutes from "./billing-routes";
 import logoRoutes from "./logo-routes";
 import adminRoutes from "./admin-routes";
 
@@ -137,6 +138,7 @@ app.route("/api", logoRoutes);
 /* Mounted last and on its own prefix. Every route under it answers 404 unless
    the caller is the one Clerk id in ADMIN_CLERK_USER_ID — 404 rather than 403,
    because "forbidden" tells an unauthenticated caller that the thing exists. */
+app.route("/api", billingRoutes);
 app.route("/api/admin", adminRoutes);
 
 // JSON, not an HTML error page — the front end is always expecting JSON here.

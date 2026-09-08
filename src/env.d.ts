@@ -40,6 +40,24 @@ declare global {
      * somebody who can already deploy.
      */
     ADMIN_CLERK_USER_ID?: string;
+
+    /* ── Stripe, for subscriptions bought on the web ─────────────────────
+     *
+     * All optional. Unset -- which is every environment until billing is
+     * deliberately switched on -- /api/billing/checkout answers 503 and the
+     * page does not offer to sell anything, rather than half-working.
+     *
+     * The iOS app never reaches any of this: App Store guideline 3.1.1
+     * requires in-app purchase for anything bought inside the app.
+     */
+    STRIPE_SECRET_KEY?: string;
+    /* The endpoint secret, which is NOT the API key. One per webhook
+       endpoint, so dev and production have different ones, and a webhook
+       verified against the wrong one fails closed. */
+    STRIPE_WEBHOOK_SECRET?: string;
+    /* Price ids from the Stripe dashboard -- price_..., not product_... */
+    STRIPE_PRICE_MONTHLY?: string;
+    STRIPE_PRICE_YEARLY?: string;
   }
 }
 
