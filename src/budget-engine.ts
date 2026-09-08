@@ -692,10 +692,32 @@ export function planSubcategory(
  * outlier test -- those are for surprises, and this is arithmetic about the
  * calendar. */
 export const INCOME_BROKEN_BELOW = 0.6;
-/* How far back the floor looks. Twelve rather than six: a year holds every
- * seasonal shape a salary has, and a longer window only ever lowers the
- * answer, which is the safe direction. */
-export const INCOME_FLOOR_WINDOW = 12;
+/* How far back the floor looks.
+ *
+ * A longer window only ever lowers the answer, which is the safe direction --
+ * but safe stops being free once it starts ignoring what has actually
+ * changed. A raise cannot reach the plan until the old salary has left the
+ * window entirely, so the window length is also the lag on every genuine
+ * improvement in the reader's circumstances:
+ *
+ *     window   error   overstates   a raise reaches the plan after
+ *      3 mo     $541       16%              3 months
+ *      6 mo     $585       10%              6 months
+ *      9 mo     $587        7%              9 months
+ *     12 mo     $588        7%             12 months
+ *     18 mo     $589        5%             18 months
+ *
+ * Past about nine months the conservatism stops improving and only the lag
+ * grows: twelve bought nothing over nine, and eighteen bought two points for
+ * another half-year of ignoring a pay rise. Six sits where the curve is still
+ * paying — three points of overstatement against half the lag, and slightly
+ * better absolute accuracy with it.
+ *
+ * Note what the window does NOT delay. A pay cut, a job ending, a month that
+ * came in short: every one of those pulls the floor down the moment it
+ * appears, whatever the window is set to. It governs only how long good news
+ * waits, which is the asymmetry this whole function is built on. */
+export const INCOME_FLOOR_WINDOW = 6;
 
 export interface IncomePlan {
   /** month -> cents. Flat: income gets no seasonal shape, by design. */

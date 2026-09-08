@@ -7620,7 +7620,7 @@ function bgIncomeWorking(row) {
     full.push('Ignored as short, so they could not drag the figure down: ' +
       shortMonths.join(', '));
   }
-  full.push('Planned at the lowest ordinary month of the last twelve — income ' +
+  full.push('Planned at the lowest ordinary month of the last six — income ' +
     'is deliberately under-counted rather than over.');
   return { short, full };
 }
@@ -7847,7 +7847,7 @@ function drawBudgeting() {
     'Worked from ' + bgData.monthsOfHistory + ' complete months. Each category is split into the ' +
     'merchants that bill you every month — rent, insurance, subscriptions, taken at what they charge ' +
     'now — and the variable spending left over, which is estimated. One-off costs are kept out of the ' +
-    'monthly figure and set aside separately. Income is planned from the lowest ordinary month of the last twelve, and bonuses are not counted at all — it is deliberately under-counted, because a plan that over-counts what comes in promises savings that never arrive. ' +
+    'monthly figure and set aside separately. Income is planned from the lowest ordinary month of the last six, and bonuses are not counted at all — it is deliberately under-counted, because a plan that over-counts what comes in promises savings that never arrive. ' +
     (moved || withPins
       ? 'You have moved ' + moved + ' baseline' + (moved === 1 ? '' : 's') +
         (withPins ? ' and pinned months in ' + withPins + ' categor' + (withPins === 1 ? 'y' : 'ies') : '') + '. '
