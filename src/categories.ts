@@ -244,6 +244,22 @@ export function classify(
  * so a code has to be four characters or more and carry at least two digits
  * before it is dropped.
  *
+ * ── Dates, which are the same problem wearing a different hat ──────────────
+ *
+ * None of the above touches a DATE, and a date is the commonest thing an ACH
+ * description carries: "ACME CORP DIR DEP 09/08/26" normalised to
+ * "acme corp dir dep 09 08 26", a new key every single month. The digit rule
+ * needs three digits in a row and a date has two; the code rule needs letters
+ * mixed in and a date has none. It fell straight between them, which is why a
+ * payroll deposit could not be filed the way a shop can — the rule matched
+ * one month and no others.
+ *
+ * So a trailing run of short numbers goes too. Trailing is what makes it safe:
+ * a name carries its number at the front or in the middle — 7 Eleven, 24h
+ * Fitness, Level 3 Communications — while a reference, a date and a store
+ * number are appended. Two branches of the same shop collapsing onto one key
+ * is not a loss either; that is what filing a merchant is for.
+ *
  * This is applied to stored keys as well as to fresh ones — see loadCategories
  * — so rules written before it keep matching without a migration.
  */
@@ -253,6 +269,9 @@ export function merchantKey(merchantName: string | null, name: string): string {
     .replace(/[^a-z0-9 ]+/g, " ")
     .replace(/\b\d{3,}\b/g, " ")
     .replace(/\b(?=[a-z0-9]{4,}\b)(?=(?:[a-z0-9]*\d){2})[a-z0-9]*[a-z][a-z0-9]*\b/g, " ")
+    /* Any number of short numeric tokens at the end, in one pass: the day, the
+       month and the year of a date are three of them in a row. */
+    .replace(/(?:\s+\d{1,2})+\s*$/, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 80);
