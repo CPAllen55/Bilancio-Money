@@ -356,17 +356,20 @@ struct MerchantLogo: View {
 /// navigation bar — at that size it reads as a smudge. The face survives being
 /// made small; the bar chart under it does not.
 ///
-/// The drawing itself, the same in both appearances.
+/// The drawing itself, in the appearance that suits the ground it sits on.
 ///
-/// It used to be an outlined head, tinted by the theme — because a head
-/// cropped out of the gold mark is a gold box with a face in it, and because
-/// an outline can be one colour in the light and another in the dark. What
-/// that cost was the owl: no glasses, no body, no stacks, and a shape that
-/// stopped matching the icon on the home screen the moment the icon changed.
+/// It used to be an outlined head, tinted by the theme. What that cost was the
+/// owl: no glasses, no body, no stacks, and a shape that stopped matching the
+/// icon on the home screen the moment the icon changed.
 ///
-/// So it is the icon now, small. Gold reads on both grounds without help,
-/// which is what made the tint worth losing — and the mark above a dashboard
-/// is finally the same object as the one that was tapped to get there.
+/// So it is the icon now, small — and there are two of them, because there
+/// always were. The gold owl is drawn on gold and the mint one on near-black,
+/// which is not a tint of the same picture but a second drawing made for the
+/// other ground. The asset catalog carries both and hands over whichever the
+/// appearance calls for, so nothing here has to ask which mode it is in.
+///
+/// The same pair now goes on the home screen: the app icon has a dark
+/// appearance for the first time, so the icon and the mark change together.
 struct OwlMark: View {
     var height: CGFloat = 38
 

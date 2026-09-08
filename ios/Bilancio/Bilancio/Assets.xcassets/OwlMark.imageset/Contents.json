@@ -1,6 +1,12 @@
 {
   "images" : [
-    { "filename" : "owl-mark.png", "idiom" : "universal", "scale" : "1x" }
+    { "filename" : "owl-mark.png", "idiom" : "universal", "scale" : "1x" },
+    {
+      "appearances" : [ { "appearance" : "luminosity", "value" : "dark" } ],
+      "filename" : "owl-mark-dark.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    }
   ],
   "info" : { "author" : "xcode", "version" : 1 }
 }
