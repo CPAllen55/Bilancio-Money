@@ -15,6 +15,7 @@ import { Hono } from "hono";
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { getDb } from "./db/client";
 import {
+  budgetPlansV2,
   categories, merchantRules, transactionOverrides, transactionSplits, transactions,
   accounts, items,
 } from "./db/schema";
@@ -146,6 +147,94 @@ cats.post("/categories", async (c) => {
       .returning();
 
     return c.json({ ok: true, created: true, category: created });
+  } finally {
+    c.executionCtx.waitUntil(close());
+  }
+});
+
+/* ------------------------------------------------------------------ delete -- */
+
+/**
+ * DELETE /api/categories/:id — remove a subcategory nothing is using.
+ *
+ * ── Why it refuses rather than reassigns ────────────────────────────────────
+ *
+ * Deleting a category that has spending filed under it has to put that
+ * spending somewhere, and every answer is a guess about what somebody meant.
+ * Moving it to the parent quietly changes what every total says. Moving it to
+ * Unsorted hides real spending in the one bucket nobody reads. Deleting the
+ * rows is unthinkable. So the answer is no, with the reason — and the reader
+ * re-files what is in there and comes back, which is the only version of this
+ * where they decided where the money went.
+ *
+ * ── What counts as in use ───────────────────────────────────────────────────
+ *
+ * Not just transactions. A merchant rule pointing here would start failing to
+ * resolve; a split would lose the part it names; a budget line would be
+ * planning for something that no longer exists; and a parent with children
+ * cannot go while they are still hanging from it. Each is reported by name,
+ * because "in use" without saying where is a dead end.
+ *
+ * System categories are never deletable. They are shared by every account and
+ * the classifier maps Plaid's taxonomy onto their slugs, so removing one for
+ * one person would break the mapping for that person and nobody else — which
+ * is the hardest kind of fault to find.
+ */
+cats.delete("/categories/:id", async (c) => {
+  const { db, ready, close } = getDb(c.env);
+  try {
+    await ready;
+    const auth = await requireUser(c, db);
+    if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+
+    const id = c.req.param("id");
+
+    const [category] = await db
+      .select()
+      .from(categories)
+      .where(eq(categories.id, id));
+    if (!category) return c.json({ error: "not_found" }, 404);
+
+    // Theirs, or nobody's business. A system category matches the first test
+    // and is refused by the second, which is the honest order to say it in.
+    if (category.userId !== auth.user.id) {
+      return c.json({
+        error: "bad_request",
+        reason: category.isSystem || category.userId === null
+          ? "that is a standard category and cannot be removed"
+          : "that is not your category",
+      }, 400);
+    }
+
+    const [children, overrides, splits, rules, plans] = await Promise.all([
+      db.select({ id: categories.id }).from(categories)
+        .where(and(eq(categories.parentId, id), isNull(categories.archivedAt))).limit(1),
+      db.select({ id: transactionOverrides.transactionId }).from(transactionOverrides)
+        .where(eq(transactionOverrides.categoryId, id)).limit(1),
+      db.select({ id: transactionSplits.id }).from(transactionSplits)
+        .where(eq(transactionSplits.categoryId, id)).limit(1),
+      db.select({ id: merchantRules.id }).from(merchantRules)
+        .where(eq(merchantRules.categoryId, id)).limit(1),
+      db.select({ id: budgetPlansV2.id }).from(budgetPlansV2)
+        .where(eq(budgetPlansV2.categoryId, id)).limit(1),
+    ]);
+
+    const blocking =
+      children.length ? "it still has subcategories under it"
+      : overrides.length ? "transactions are filed under it"
+      : splits.length ? "part of a split transaction is filed under it"
+      : rules.length ? "a merchant is filed under it"
+      : plans.length ? "it has a budget"
+      : null;
+
+    if (blocking) {
+      return c.json({ error: "in_use", reason: blocking }, 409);
+    }
+
+    await db.delete(categories).where(
+      and(eq(categories.id, id), eq(categories.userId, auth.user.id)),
+    );
+    return c.json({ ok: true, deleted: id });
   } finally {
     c.executionCtx.waitUntil(close());
   }

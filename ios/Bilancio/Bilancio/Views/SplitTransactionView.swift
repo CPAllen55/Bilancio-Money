@@ -262,7 +262,7 @@ struct SplitTransactionView: View {
                 }
 
                 Section {
-                    Picker("Category", selection: $editor.categoryId) {
+                    Picker("Subcategory", selection: $editor.categoryId) {
                         // In its own section rather than loose above them.
                         // A Picker that mixes bare rows with sections flattens
                         // the lot, which is how a hierarchy built out of
@@ -272,17 +272,19 @@ struct SplitTransactionView: View {
                         }
 
                         ForEach(editor.groupedFilable, id: \.parent.id) { group in
-                            Section(group.parent.label) {
+                            Section(group.parent.label.uppercased()) {
                                 ForEach(group.children) { cat in
-                                    Text(cat.label).tag(String?.some(cat.id))
+                                    SubcategoryRow(category: cat)
+                                        .tag(String?.some(cat.id))
                                 }
                             }
                         }
 
                         if !editor.orphanFilable.isEmpty {
-                            Section("Other") {
+                            Section("OTHER") {
                                 ForEach(editor.orphanFilable) { cat in
-                                    Text(cat.label).tag(String?.some(cat.id))
+                                    SubcategoryRow(category: cat)
+                                        .tag(String?.some(cat.id))
                                 }
                             }
                         }
@@ -303,21 +305,23 @@ struct SplitTransactionView: View {
                 Section {
                     ForEach($editor.drafts) { $draft in
                         VStack(alignment: .leading, spacing: 8) {
-                            Picker("Category", selection: $draft.categoryId) {
+                            Picker("Subcategory", selection: $draft.categoryId) {
                                 Section {
                                     Text("Choose…").tag(String?.none)
                                 }
                                 ForEach(editor.groupedPickable, id: \.parent.id) { group in
-                                    Section(group.parent.label) {
+                                    Section(group.parent.label.uppercased()) {
                                         ForEach(group.children) { cat in
-                                            Text(cat.label).tag(String?.some(cat.id))
+                                            SubcategoryRow(category: cat)
+                                                .tag(String?.some(cat.id))
                                         }
                                     }
                                 }
                                 if !editor.orphanPickable.isEmpty {
-                                    Section("Other") {
+                                    Section("OTHER") {
                                         ForEach(editor.orphanPickable) { cat in
-                                            Text(cat.label).tag(String?.some(cat.id))
+                                            SubcategoryRow(category: cat)
+                                                .tag(String?.some(cat.id))
                                         }
                                     }
                                 }
@@ -410,5 +414,29 @@ private struct CentsField: View {
         .keyboardType(.decimalPad)
         .multilineTextAlignment(.trailing)
         .monospacedDigit()
+    }
+}
+
+/// One choosable line in a category picker.
+///
+/// Categories and subcategories were drawn identically — a section heading and
+/// the rows under it are both a name in a list, and iOS grey-and-small is not
+/// enough of a difference when every line reads as something you could pick.
+/// Nothing can be filed on a category, only on one of its subcategories, so
+/// the two have to look like different kinds of thing.
+///
+/// The dot is what makes them different, and it is not decoration: it is the
+/// colour that subcategory is drawn in on every chart in the app, which makes
+/// the list of choices and the thing being chosen the same object.
+private struct SubcategoryRow: View {
+    let category: TransactionsResponse.Category
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(Color(hex: category.colour))
+                .frame(width: 8, height: 8)
+            Text(category.label)
+        }
     }
 }
