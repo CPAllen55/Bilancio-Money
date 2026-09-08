@@ -1953,6 +1953,12 @@
   /* Set apart and never the default-looking button on the page: everything here
      is irreversible and touches somebody's bank. */
   .danger{ margin-top:34px; padding-top:18px; border-top:1px dashed var(--hair-strong); }
+  .billing{ margin-top:22px; padding-top:18px; border-top:1px solid var(--hair); }
+  .billing-acts{ display:flex; gap:10px; flex-wrap:wrap; }
+  /* The paying action takes the affirmative colour the rest of the app uses
+     for a positive figure, so it does not read as a warning. */
+  .pay-btn{ color:var(--on-mint); background:var(--mint-dim); border-color:var(--mint-dim); }
+  .pay-btn:hover{ background:var(--mint-hot); border-color:var(--mint-hot); }
   .danger-btn{ color:var(--coral); border-color:rgba(255,92,114,.45); }
   .danger-btn:hover{ color:#fff; background:var(--coral); border-color:var(--coral); }
 
@@ -3246,6 +3252,16 @@
         You can review and revoke every connection you have made through Plaid at
         <a href="https://my.plaid.com" target="_blank" rel="noopener noreferrer">Plaid Portal</a>.
       </p>
+
+      <!-- Subscription. Hidden entirely until billing is switched on, rather
+           than shown greyed out: an account page that offers to sell you
+           something it cannot sell you is worse than one that says nothing. -->
+      <div class="billing" id="billing" hidden>
+        <p class="eyebrow">Subscription</p>
+        <p class="fc-method" id="billing-state" style="margin:6px 0 12px"></p>
+        <div class="billing-acts" id="billing-acts"></div>
+        <p class="msg" id="billing-msg"></p>
+      </div>
 
       <div class="danger" id="danger" hidden>
         <p class="eyebrow">Leaving</p>
@@ -10276,6 +10292,11 @@ async function renderBanks() {
   // must not stop the banks rendering, and vice versa.
   renderMetals().catch(err => say($('mt-msg'), err.message, 'bad'));
 
+  /* Alongside the banks, not awaited with them: whether somebody has paid
+     and whether their banks loaded are independent questions, and one
+     failing should not blank the other. */
+  drawBilling().catch(() => {});
+
   const res = await authed('/api/plaid/items');
   hasBanks = res.items.length > 0;
   const host = $('bank-list');
@@ -10384,6 +10405,80 @@ $('bank-list').addEventListener('click', async (e) => {
     say(msg, err.message, 'bad');
   }
 });
+
+/* ── The subscription panel ────────────────────────────────────────────
+
+     Where somebody subscribes decides where they cancel, and Apple will not
+     let anyone else cancel an App Store subscription. So an Apple subscriber
+     is told where to go rather than shown a button that cannot work.
+
+     Everything here is driven by /api/billing/status, including whether to
+     appear at all. The page never decides on its own that billing is
+     available -- that is a server fact, and a page that guesses it wrong
+     either hides a way to pay or offers one that 503s. */
+  async function drawBilling() {
+    const box = $('billing');
+    if (!box) return;
+    let s;
+    try { s = await authed('/api/billing/status'); }
+    catch { box.hidden = true; return; }
+    if (!s || !s.ok || !s.configured) { box.hidden = true; return; }
+    box.hidden = false;
+
+    const until = s.planUntil ? new Date(s.planUntil) : null;
+    const when = until
+      ? until.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      : null;
+
+    const state =
+      s.plan === 'free'   ? 'Your account is comped — there is nothing to pay.'
+      : s.plan === 'active' && s.manageAt === 'apple'
+        ? 'Subscribed through the App Store' + (when ? ', renewing ' + when : '') + '.'
+      : s.plan === 'active'
+        ? 'Subscribed' + (when ? ', renewing ' + when : '') + '.'
+      : s.plan === 'trial' && when   ? 'Your free month runs until ' + when + '.'
+      : s.plan === 'trial'           ? 'Your free month starts when you connect your first account.'
+      : 'Your access has ended. Everything already here stays visible; adding and editing need a subscription.';
+    $('billing-state').textContent = state;
+
+    const acts = $('billing-acts');
+    if (s.plan === 'free') { acts.innerHTML = ''; return; }
+    if (s.manageAt === 'apple') {
+      /* No button. Apple requires that an App Store subscription is cancelled
+         through Apple, and a button here could only ever fail. */
+      acts.innerHTML = '<p class="fc-method" style="margin:0">To change or cancel it, open ' +
+        'Settings on your iPhone, tap your name, then Subscriptions.</p>';
+      return;
+    }
+    acts.innerHTML = s.plan === 'active'
+      ? '<button type="button" class="ctl" data-bill="portal">Manage subscription</button>'
+      : '<button type="button" class="ctl pay-btn" data-bill="monthly">Subscribe — $4.99 a month</button>' +
+        '<button type="button" class="ctl" data-bill="yearly">or $47.88 a year</button>';
+  }
+
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-bill]');
+    if (!btn) return;
+    const what = btn.dataset.bill;
+    const msg = $('billing-msg');
+    btn.disabled = true;
+    msg.textContent = 'Opening…';
+    try {
+      const r = what === 'portal'
+        ? await authed('/api/billing/portal', { method: 'POST' })
+        : await authed('/api/billing/checkout', {
+            method: 'POST', body: JSON.stringify({ plan: what }),
+          });
+      /* Stripe's own page, in this tab. Not a new one: a payment flow that
+         opens behind a popup blocker is a payment flow that silently does
+         nothing. */
+      if (r && r.url) { window.location.href = r.url; return; }
+      msg.textContent = 'Could not open the payment page.';
+    } catch (err) {
+      msg.textContent = (err && err.message) || 'Could not open the payment page.';
+    }
+    btn.disabled = false;
+  });
 
 /* Two confirmations, the second typed. A mis-click cannot take somebody's
    financial history with it, and the phrase makes you state the outcome rather
