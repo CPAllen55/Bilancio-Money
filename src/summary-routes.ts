@@ -24,7 +24,7 @@ import {
   transactionSplits,
 } from "./db/schema";
 import { requireUser } from "./auth";
-import { classify, merchantKey } from "./categories";
+import { classify, merchantKey, keyContainsRule } from "./categories";
 import { buildShapedPlan, learnWindow, loadOverrides } from "./plan";
 import { judgeAll, type Charge, type Verdict } from "./recurring";
 import { partsOf, type Split } from "./splits";
@@ -59,6 +59,10 @@ export interface CategoryContext {
   kindOfSlug: Map<string, string>;
   /** normalised merchant key -> category slug */
   ruleBySlugKey: Map<string, string>;
+  /** The same rules, longest first, for the keys that match none of them
+   *  exactly. See resolveSlug for why a rule has to be able to match part of a
+   *  key rather than the whole of it. */
+  ruleRuns: { key: string; slug: string; words: number }[];
 }
 
 /**
@@ -145,7 +149,18 @@ export async function loadCategories(
     if (slug) ruleBySlugKey.set(merchantKey(null, r.matchKey), slug);
   }
 
-  return { list: rows, slugById, parentOfSlug, kindOfSlug, ruleBySlugKey };
+  /* The same rules as a list, longest first, for the keys that do not match
+     one exactly.
+
+     Longest first is the whole of the ordering: "acme corp payroll" and
+     "acme corp" can both be rules, and a deposit matching both belongs to the
+     more specific one. Sorted once here rather than per row, because this runs
+     against every transaction in the window. */
+  const ruleRuns = [...ruleBySlugKey.entries()]
+    .map(([key, slug]) => ({ key, slug, words: key.split(" ").length }))
+    .sort((a, b) => b.words - a.words || b.key.length - a.key.length);
+
+  return { list: rows, slugById, parentOfSlug, kindOfSlug, ruleBySlugKey, ruleRuns };
 }
 
 /**
@@ -191,7 +206,7 @@ interface Categorisable {
 function resolveSlug(
   row: Categorisable,
   ctx: CategoryContext,
-): { kind: string; slug: string | null; explicit: boolean } {
+): { kind: string; slug: string | null; explicit: boolean; key: string } {
   // Computed once: the merchant rule looks it up, and the wholesale clubs are
   // told apart from ordinary superstores by the same normalised name.
   const key = merchantKey(row.merchantName, row.name);
@@ -201,7 +216,9 @@ function resolveSlug(
   // wins over both a merchant rule and Plaid's guess.
   if (row.overrideCategoryId) {
     const slug = ctx.slugById.get(row.overrideCategoryId);
-    if (slug) return { kind: ctx.kindOfSlug.get(slug) ?? "spend", slug, explicit: true };
+    if (slug) {
+      return { kind: ctx.kindOfSlug.get(slug) ?? "spend", slug, explicit: true, key };
+    }
   }
 
   /* A rule can take a row out of the transfer ledger, but never put one in.
@@ -230,15 +247,35 @@ function resolveSlug(
    * both. That is visible and undoable — the rule is listed and can be
    * removed — where the money silently missing from expenses was not.
    */
-  const ruled = ctx.ruleBySlugKey.get(key);
-  if (ruled) {
-    const ruledKind = ctx.kindOfSlug.get(ruled) ?? "spend";
-    if (base.kind === "spend" || ruledKind === "spend") {
-      return { kind: ruledKind, slug: ruled, explicit: false };
+  /* An exact hit first, which is what an ordinary shop gets and is a Map
+     lookup. Failing that, a rule whose words appear as a run inside this key.
+
+     The second case exists for descriptions that carry something new every
+     month -- a payroll reference, a standing-order number. A rule is written
+     from one transaction, so an exact match filed that month and no other, and
+     the reader had no way to say "the part that repeats is the merchant".
+
+     A matched row also ADOPTS the rule's key as its merchant identity, which
+     is the half that matters to the budget. Filing fixes which category the
+     money lands in; adopting the key is what makes twelve differently-named
+     deposits into one merchant paying every month, which is the only thing
+     budget-engine.ts will accept as a commitment. */
+  let ruled = ctx.ruleBySlugKey.get(key);
+  let canonical = key;
+  if (!ruled) {
+    for (const r of ctx.ruleRuns) {
+      if (keyContainsRule(key, r.key)) { ruled = r.slug; canonical = r.key; break; }
     }
   }
 
-  return { ...base, explicit: false };
+  if (ruled) {
+    const ruledKind = ctx.kindOfSlug.get(ruled) ?? "spend";
+    if (base.kind === "spend" || ruledKind === "spend") {
+      return { kind: ruledKind, slug: ruled, explicit: false, key: canonical };
+    }
+  }
+
+  return { ...base, explicit: false, key: canonical };
 }
 
 /* ------------------------------------------------------------------ ranges -- */
@@ -1404,7 +1441,12 @@ export async function monthlyBuckets(
      transaction would be counted by different rules than its neighbours. */
   const add = (b: MonthBucket, kind: string, slug: string | null,
                inCents: number, outCents: number,
-               merchant?: string | null, charges = 1, credits = 1) => {
+               merchant?: string | null, charges = 1, credits = 1,
+               /* The key a merchant rule collapsed this row onto, where one
+                  did. Passed in rather than recomputed so that twelve payroll
+                  deposits with twelve different references file as one
+                  merchant -- see resolveSlug. */
+               canonicalKey?: string) => {
     if (kind === "transfer") return;
     b.income += inCents;
 
@@ -1415,7 +1457,7 @@ export async function monthlyBuckets(
       const bucket = bucketFor(slug, "income", ctx);
       b.byIncome[bucket] = (b.byIncome[bucket] ?? 0) + inCents;
 
-      const key = merchant ? merchantKey(null, merchant) : "";
+      const key = canonicalKey || (merchant ? merchantKey(null, merchant) : "");
       if (key) {
         const per = (b.byIncomeMerchant[bucket] ??= {});
         const cell = (per[key] ??= { cents: 0, charges: 0 });
@@ -1437,7 +1479,7 @@ export async function monthlyBuckets(
       /* And the same money again, one level down. Only spending: a budget is
          about what leaves, and a refund arriving from a shop is not a smaller
          commitment to it. */
-      const key = merchant ? merchantKey(null, merchant) : "";
+      const key = canonicalKey || (merchant ? merchantKey(null, merchant) : "");
       if (key) {
         const per = (b.byMerchant[bucket] ??= {});
         const cell = (per[key] ??= { cents: 0, charges: 0 });
@@ -1455,7 +1497,7 @@ export async function monthlyBuckets(
   for (const r of rows) {
     const b = buckets.get(r.ym);
     if (!b) continue;
-    const { kind, slug } = resolveSlug(
+    const { kind, slug, key } = resolveSlug(
       {
         categoryPrimary: r.categoryPrimary,
         categoryDetailed: r.categoryDetailed,
@@ -1466,7 +1508,7 @@ export async function monthlyBuckets(
       ctx,
     );
     add(b, kind, slug, Number(r.inCents), Number(r.outCents), r.merchant,
-        Number(r.charges) || 0, Number(r.credits) || 0);
+        Number(r.charges) || 0, Number(r.credits) || 0, key);
   }
 
   /* The second pass: the transactions held back above, counted whole rather
@@ -1494,10 +1536,10 @@ export async function monthlyBuckets(
       const b = buckets.get(r.ym);
       if (!b) continue;
       for (const part of partsFor(r as AmountRow, splits)) {
-        const { kind, slug } = resolveSlug(part.row, ctx);
+        const { kind, slug, key } = resolveSlug(part.row, ctx);
         const cents = Number(part.amount);   // Plaid: positive is money leaving
         add(b, kind, slug, cents < 0 ? -cents : 0, cents > 0 ? cents : 0,
-            part.row.merchantName ?? part.row.name);
+            part.row.merchantName ?? part.row.name, 1, 1, key);
       }
     }
   }

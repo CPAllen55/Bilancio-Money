@@ -12,7 +12,7 @@
  */
 
 import { Hono } from "hono";
-import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
 import {
   budgetPlansV2,
@@ -21,7 +21,7 @@ import {
 } from "./db/schema";
 import { requireUser } from "./auth";
 import { loadCategories } from "./summary-routes";
-import { merchantKey } from "./categories";
+import { merchantKey, stableRuleKey } from "./categories";
 import { checkSplits, remainderOf, type Split } from "./splits";
 
 const cats = new Hono<{ Bindings: Env }>();
@@ -300,7 +300,43 @@ cats.post("/transactions/:id/category", async (c) => {
 
     let rule = null;
     if (applyToMerchant) {
-      const key = merchantKey(tx.merchantName, tx.name);
+      const full = merchantKey(tx.merchantName, tx.name);
+      let key = full;
+
+      /* A rule for a merchant whose description changes every month.
+       *
+       * The rule is written from ONE transaction, so it used to carry that
+       * month's reference -- and matched that month and no other. A payroll
+       * deposit is the case that matters most and was the worst served: the
+       * steadiest money in the ledger, and the hardest thing in the app to
+       * file, because "apply to this merchant" quietly meant "apply to this
+       * one deposit".
+       *
+       * Rather than guess at reference formats -- there are endless ones, and
+       * a date, a run number and a four-letter code all look different -- the
+       * answer is taken from the reader's own ledger. If eleven other deposits
+       * share this one's first three words and none of them share the fourth,
+       * the description has said exactly where the name stops.
+       *
+       * Bounded to a year and to this user's own rows. It runs once, when a
+       * rule is made, not on any page load. */
+      if (key) {
+        const since = new Date();
+        since.setUTCFullYear(since.getUTCFullYear() - 1);
+        const seen = await db
+          .selectDistinct({
+            name: sql<string>`coalesce(${transactions.merchantName}, ${transactions.name})`,
+          })
+          .from(transactions)
+          .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+          .innerJoin(items, eq(accounts.itemId, items.id))
+          .where(and(
+            eq(items.userId, auth.user.id),
+            gte(transactions.date, since.toISOString().slice(0, 10)),
+          ));
+        key = stableRuleKey(full, seen.map((r) => merchantKey(null, String(r.name))));
+      }
+
       if (key) {
         const [saved] = await db
           .insert(merchantRules)
@@ -318,7 +354,12 @@ cats.post("/transactions/:id/category", async (c) => {
           })
           .returning();
         // id included so the front end can offer "just this one" and undo it.
-        rule = { id: saved.id, matchKey: saved.matchKey, displayName: saved.displayName };
+        // `shortened` lets it say so when the rule covers more than the exact
+        // description the reader was looking at.
+        rule = {
+          id: saved.id, matchKey: saved.matchKey, displayName: saved.displayName,
+          shortened: key !== full,
+        };
       }
     }
 

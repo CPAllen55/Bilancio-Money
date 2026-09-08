@@ -304,3 +304,80 @@ export function merchantKey(merchantName: string | null, name: string): string {
     .trim()
     .slice(0, 80);
 }
+
+/**
+ * Does `key` contain `rule` as a run of whole words?
+ *
+ * Merchant rules are stored as a normalised key and were matched by equality,
+ * which works for a shop and fails for anything whose description carries a
+ * reference that changes: the rule is written from ONE transaction, so it
+ * keeps that month's reference and matches that month and no other. A payroll
+ * deposit is the worst case and the most important — it is the steadiest money
+ * in the ledger and it was the hardest thing in the app to file.
+ *
+ * Whole words, not a substring: "pay" must not claim "paypal", and "acme" must
+ * not claim "acme dental". A run rather than a subset, because word order is
+ * most of what distinguishes two merchants that share a word.
+ */
+export function keyContainsRule(key: string, rule: string): boolean {
+  if (!rule || !key) return false;
+  if (key === rule) return true;
+  const hay = key.split(" ");
+  const needle = rule.split(" ");
+  if (needle.length > hay.length) return false;
+  for (let i = 0; i + needle.length <= hay.length; i++) {
+    let hit = true;
+    for (let j = 0; j < needle.length; j++) {
+      if (hay[i + j] !== needle[j]) { hit = false; break; }
+    }
+    if (hit) return true;
+  }
+  return false;
+}
+
+/* A rule has to say something. One short word claims far too much -- a rule of
+ * "payroll" would file every employer anybody ever had under one category --
+ * so a shortened key keeps at least two words, or one long one. */
+export const RULE_MIN_WORDS = 2;
+export const RULE_MIN_CHARS = 8;
+
+/**
+ * The part of a merchant's description that is actually the merchant.
+ *
+ * Given the key of the transaction being filed and the keys of everything else
+ * in the reader's ledger, this finds the longest leading run of words that
+ * recurs — which is the merchant — and drops the tail that does not, which is
+ * the reference, the pay period, or whatever else the bank appends.
+ *
+ * It is done from the reader's own data rather than by pattern, because the
+ * patterns are endless and the evidence is right there: a description whose
+ * first three words appear on eleven other deposits and whose fourth word
+ * appears on none of them has told you exactly where the name stops.
+ *
+ * Returns `key` unchanged when nothing recurs, which is the common case — an
+ * ordinary shop keys the same way every time and needs none of this.
+ */
+export function stableRuleKey(key: string, others: string[]): string {
+  const words = key.split(" ").filter(Boolean);
+  if (words.length < 2) return key;
+
+  /* Longest first: the most specific prefix that still recurs is the merchant,
+     and a shorter one would start claiming its neighbours. */
+  for (let n = words.length - 1; n >= RULE_MIN_WORDS; n--) {
+    const prefix = words.slice(0, n).join(" ");
+    if (prefix.length < RULE_MIN_CHARS) break;
+
+    let seen = 0, exact = 0;
+    for (const other of others) {
+      if (!keyContainsRule(other, prefix)) continue;
+      seen++;
+      if (other === key) exact++;
+    }
+    /* Three sightings, and at least one of them keyed differently from this
+       transaction. Both halves matter: three says it recurs rather than being
+       a coincidence, and the difference says the tail really is varying —
+       without it an ordinary shop would have its name shortened for no reason. */
+    if (seen >= 3 && seen - exact >= 2) return prefix;
+  }
+  return key;
+}
