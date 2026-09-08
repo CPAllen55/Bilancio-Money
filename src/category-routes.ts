@@ -215,7 +215,9 @@ cats.delete("/categories/:id", async (c) => {
         .where(eq(transactionSplits.categoryId, id)).limit(1),
       db.select({ id: merchantRules.id }).from(merchantRules)
         .where(eq(merchantRules.categoryId, id)).limit(1),
-      db.select({ id: budgetPlansV2.id }).from(budgetPlansV2)
+      // Keyed on (user, category) rather than by an id of its own, so the
+      // category is what there is to select.
+      db.select({ id: budgetPlansV2.categoryId }).from(budgetPlansV2)
         .where(eq(budgetPlansV2.categoryId, id)).limit(1),
     ]);
 
