@@ -192,6 +192,15 @@ enum SummaryRange: Hashable, CaseIterable {
         case .all: return "All time"
         }
     }
+    /// The one month this range is about, when it is about one month.
+    ///
+    /// Nil for spans and aggregates, which are several months and have no
+    /// single one to point at.
+    var month: String? {
+        if case .month(let m) = self { return m }
+        return nil
+    }
+
 }
 
 extension APIClient {

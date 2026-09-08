@@ -19,6 +19,13 @@ final class CategoryMonthModel {
     enum State { case loading, loaded(TransactionsResponse), failed(String) }
     private(set) var state: State = .loading
 
+    /// The months either side of the one being read.
+    ///
+    /// Fetched separately and allowed to fail: this screen answers "which rows
+    /// made this month heavy", and the run it sits in is context rather than
+    /// the answer. A trend that would not load must not take the rows with it.
+    private(set) var trend: TrendResponse?
+
     let slug: String
     /// Any range the API understands, not just a single month — the Tracker
     /// can be showing several months trailing, and a drill-down that silently
@@ -36,6 +43,10 @@ final class CategoryMonthModel {
     }
 
     func load() async {
+        // Started first and read after, so the two requests overlap rather
+        // than queue: the rows are what the screen is for and should not wait
+        // on the context around them.
+        async let history = try? client.trend(months: 12)
         do {
             // `bucket` is the drill-down the Worker already understands, so the
             // filtering happens where the category is resolved rather than here
@@ -46,6 +57,7 @@ final class CategoryMonthModel {
         } catch {
             state = .failed(error.localizedDescription)
         }
+        trend = await history
     }
 }
 
@@ -130,6 +142,13 @@ struct CategoryMonthView: View {
                 // rollup over the whole set rather than the empty list it sends
                 // for an unbucketed page.
                 if !data.vendors.isEmpty {
+                    if let trend = model.trend {
+                        CategoryRun(series: trend.series,
+                                    slug: model.slug,
+                                    categories: data.categories,
+                                    highlight: model.range.month)
+                    }
+
                     VendorPie(vendors: data.vendors, total: data.sum.out)
                 }
 
@@ -341,5 +360,114 @@ private struct VendorPie: View {
         guard drawn > 0 else { return "" }
         let pct = Double(slice.cents) / Double(drawn) * 100
         return pct.formatted(.number.precision(.fractionLength(pct < 10 ? 1 : 0))) + "%"
+    }
+}
+
+// MARK: - The run this month sits in
+
+/// One category across the last twelve months, with the month being read
+/// picked out of them.
+///
+/// The pie below says how this month was divided. It cannot say whether the
+/// month was ordinary — and that is usually the next question, because a
+/// category is only worth opening when something about it looked wrong. A run
+/// of twelve bars answers it before the pie is reached.
+private struct CategoryRun: View {
+    let series: [TrendResponse.Month]
+    let slug: String
+    let categories: [TransactionsResponse.Category]
+    /// `YYYY-MM`, when the screen is about one month. A range covering several
+    /// has nothing to pick out, and the run is still worth showing.
+    let highlight: String?
+
+    @State private var picked: String?
+
+    /// A parent's own line is the sum of its children, so the figure comes
+    /// from `byParent` for one and `byCategory` for the other. Reading the
+    /// wrong one gives a parent nothing and a leaf everything.
+    private var isParent: Bool {
+        categories.contains { $0.parentSlug == slug }
+    }
+
+    private var points: [(month: String, cents: Int)] {
+        series.map { m in
+            let source = isParent ? (m.byParent ?? [:]) : (m.byCategory ?? [:])
+            return (m.month, source[slug] ?? 0)
+        }
+    }
+
+    private var colour: Color {
+        categories.first { $0.slug == slug }.map { Color(hex: $0.colour) } ?? Theme.accent
+    }
+
+    var body: some View {
+        let data = points
+        guard data.contains(where: { $0.cents > 0 }) else { return AnyView(EmptyView()) }
+
+        return AnyView(
+            Card {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("The last twelve months")
+                        .font(Theme.tileLabel)
+                        .foregroundStyle(Theme.quietText)
+
+                    Chart {
+                        ForEach(data, id: \.month) { p in
+                            BarMark(
+                                x: .value("Month", p.month),
+                                y: .value("Spend", Double(p.cents) / 100)
+                            )
+                            // The month being read is the one at full strength.
+                            // Everything else steps back rather than it
+                            // stepping forward: the bar is already the colour
+                            // the category is drawn in everywhere else.
+                            .foregroundStyle(colour.opacity(
+                                p.month == highlight || picked == p.month ? 1 : 0.32))
+                            .cornerRadius(2)
+                        }
+                    }
+                    .chartXSelection(value: $picked)
+                    .chartXAxis {
+                        AxisMarks(values: .automatic(desiredCount: 5)) { value in
+                            AxisGridLine()
+                            AxisValueLabel {
+                                if let key = value.as(String.self) {
+                                    Text(TrendResponse.Month.shortLabel(of: key))
+                                }
+                            }
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
+                    }
+                    .frame(height: 130)
+                    .animation(.snappy(duration: 0.2), value: picked)
+
+                    if let month = picked, let p = data.first(where: { $0.month == month }) {
+                        HStack(spacing: 8) {
+                            Text(TrendResponse.Month.shortLabel(of: month))
+                                .font(Theme.tileLabel)
+                                .foregroundStyle(Theme.quietText)
+                            Spacer(minLength: 8)
+                            Text(p.cents.asMoney)
+                                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                                .monospacedDigit()
+                            Button { picked = nil } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(Theme.quietText)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 10)
+                        .background(Theme.background, in: .rect(cornerRadius: 8))
+                    } else {
+                        Text("Touch a month for what it cost.")
+                            .font(Theme.note)
+                            .foregroundStyle(Theme.quietText)
+                    }
+                }
+            }
+        )
     }
 }

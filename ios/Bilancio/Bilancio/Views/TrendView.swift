@@ -163,6 +163,10 @@ private struct CategoryTrendChart: View {
         let slug: String
         let label: String
         let cents: Int
+        /// What the whole month came to, so the part has something to be a
+        /// part of. A figure on its own says nothing about whether it was a
+        /// lot, and that is the question a stacked bar invites.
+        let ofTotal: Int
     }
 
     /// Slug to label and colour for whichever level is being drawn.
@@ -198,6 +202,18 @@ private struct CategoryTrendChart: View {
                 return Segment(month: m.month, slug: cat.slug, label: cat.label,
                                colour: Color(hex: cat.colour), cents: cents)
             }
+        }
+    }
+
+    /// What each month came to, across whatever is on screen.
+    ///
+    /// The chart is a stack, and a stack shows the parts at the cost of the
+    /// whole: the eye can compare two months' worth of Groceries and cannot
+    /// read what either month cost. Held here so both the readout and the
+    /// annotation say the same figure.
+    private var monthTotals: [String: Int] {
+        segments.reduce(into: [:]) { out, seg in
+            out[seg.month, default: 0] += seg.cents
         }
     }
 
@@ -377,6 +393,34 @@ private struct CategoryTrendChart: View {
                          || (picked?.month == seg.month && picked?.slug == seg.slug) ? 1 : 0.25)
             }
 
+            /* What each month came to, written over its stack.
+             *
+             * Only when the chart has the screen. Twelve months across a phone
+             * gives each bar about thirty points, which is narrower than a
+             * five figure sum — the labels would overlap into a band and say
+             * less than nothing. Opened or turned sideways there is room, and
+             * the total is the first thing anybody looks for.
+             *
+             * Drawn as a point with no symbol rather than annotated onto a
+             * bar: an annotation on a stacked mark attaches to that segment,
+             * and the topmost segment is not the top of the stack.
+             */
+            if big {
+                ForEach(Array(monthTotals), id: \.key) { month, cents in
+                    PointMark(
+                        x: .value("Month", month),
+                        y: .value("Spend", Double(cents) / 100)
+                    )
+                    .symbolSize(0)
+                    .annotation(position: .top, spacing: 2) {
+                        Text(cents.asShortMoney)
+                            .font(.system(size: 9, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.quietText)
+                    }
+                }
+            }
+
             // Last year as a rule across each month rather than a second stack:
             // the comparison is one number, and a second stack beside the first
             // doubles the ink to say what a line already says.
@@ -491,7 +535,8 @@ private struct CategoryTrendChart: View {
             running += Double(seg.cents) / 100
             if value <= running {
                 picked = Picked(month: month, slug: seg.slug,
-                                label: seg.label, cents: seg.cents)
+                                label: seg.label, cents: seg.cents,
+                                ofTotal: monthTotals[month] ?? seg.cents)
                 return
             }
         }
@@ -518,9 +563,18 @@ private struct PickedSegment: View {
                 .font(Theme.note)
                 .lineLimit(1)
             Spacer(minLength: 8)
-            Text(picked.cents.asMoney)
-                .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                .monospacedDigit()
+            VStack(alignment: .trailing, spacing: 0) {
+                Text(picked.cents.asMoney)
+                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                    .monospacedDigit()
+                // The month behind the part. A stack shows what something was
+                // made of at the cost of what it came to, and "of" is the word
+                // that puts the two back together.
+                Text("of \(picked.ofTotal.asMoney)")
+                    .font(.caption2)
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.quietText)
+            }
             Button(action: dismiss) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(Theme.quietText)
