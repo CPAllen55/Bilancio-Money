@@ -44,6 +44,11 @@ struct TransactionsResponse: Decodable {
         let colour: String
         let parentSlug: String?
         let kind: String
+        /// One of the standard categories, shared by every account. Optional
+        /// because not every endpoint that returns a category says — absent is
+        /// read as system, which is the safe way round: it makes a category
+        /// undeletable rather than offering to delete something shared.
+        let isSystem: Bool?
     }
 
     struct Row: Decodable, Identifiable, Hashable {
@@ -81,6 +86,9 @@ extension TransactionsResponse.Category {
     /// Transactions belong to leaves. A parent is a rollup, and filing a row on
     /// one would double-count it against its own children.
     var isLeaf: Bool { parentSlug != nil }
+
+    /// Whether this one belongs to the reader and can be removed.
+    var isMine: Bool { isSystem == false }
 }
 
 extension APIClient {

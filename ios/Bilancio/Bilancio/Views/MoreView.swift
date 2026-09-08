@@ -66,6 +66,10 @@ struct MoreView: View {
                 }
 
                 Section {
+                    row("Categories", "square.grid.2x2",
+                        "The tree everything is filed into") {
+                        CategoriesView()
+                    }
                     row("Banks", "creditcard", "Connections, and signing out") {
                         BanksView()
                     }
