@@ -385,81 +385,43 @@ private struct PlanHistoryChart: View {
         }
     }
 
+    /// How many months are on screen. Pinching changes it; the window stays
+    /// centred on the month being edited, and there is no scrolling — a drag
+    /// belongs to the plan here, and a chart that scrolls has to decide
+    /// between the two every time a finger moves.
+    @State private var window: Int?
+    @State private var windowAtPinchStart: Int?
+    @State private var open = false
+
+    private var clampedWindow: Int {
+        min(max(3, window ?? editor.months.count), max(3, editor.months.count))
+    }
+
+    /// The months on screen, centred on the one being edited.
+    private var windowed: [Bar] {
+        let all = bars
+        guard clampedWindow < all.count,
+              let centre = all.firstIndex(where: { $0.month == editor.month })
+        else { return all }
+        let half = clampedWindow / 2
+        let lower = min(max(0, centre - half), all.count - clampedWindow)
+        return Array(all[lower..<(lower + clampedWindow)])
+    }
+
     var body: some View {
-        let data = bars
-        let colour = Color(hex: editor.row.colour)
-
         VStack(alignment: .leading, spacing: 6) {
-            Chart {
-                ForEach(data) { bar in
-                BarMark(
-                    x: .value("Month", bar.label),
-                    y: .value("Amount", Double(bar.amount) / 100)
-                )
-                // Weight means spent, and only spent. Giving the edited month
-                // full weight too made September solid against a caption that
-                // says solid is what was spent — and September has not happened
-                // yet, so that drew a projection as history in the one place
-                // the whole chart exists to keep them apart. The annotation
-                // below is emphasis enough.
-                .foregroundStyle(colour.opacity(bar.isSpent ? 1 : 0.35))
-                .opacity(picked == nil || picked == bar.label ? 1 : 0.35)
-                .annotation(position: .top, spacing: 2) {
-                    if picked == bar.label {
-                        VStack(spacing: 0) {
-                            Text(bar.amount.asShortMoney)
-                            Text(bar.isSpent ? "spent" : "plan").opacity(0.7)
-                        }
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(colour)
-                    } else if bar.isEdited && picked == nil {
-                        VStack(spacing: 0) {
-                            Text(bar.amount.asShortMoney)
-                            if !bar.isSpent { Text("plan").opacity(0.7) }
-                        }
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(colour)
-                    }
+            HStack {
+                Spacer()
+                Button { open = true } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 12, weight: .semibold))
                 }
-                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.accent)
+                .accessibilityLabel("Open the year on its own")
+            }
 
-                // A month with an unsaved figure on it. Marked rather than
-                // recoloured: the bar's own weight already means spent or not,
-                // and a second meaning loaded onto the same channel would make
-                // both unreadable.
-                ForEach(data.filter { editor.pendingMonths.contains($0.month) }) { bar in
-                    PointMark(
-                        x: .value("Month", bar.label),
-                        y: .value("Amount", Double(bar.amount) / 100)
-                    )
-                    .symbolSize(26)
-                    .foregroundStyle(Theme.accent)
-                }
-            }
-            .chartXSelection(value: $picked)
-            // Touching the chart moves the edit, which is the point of showing
-            // the year while a figure can still be typed. Nothing is lost by
-            // moving: each month's figure is held against that month, so
-            // stepping away and back returns to what was typed.
-            .onChange(of: picked) { _, chosen in
-                guard let chosen, let bar = bars.first(where: { $0.label == chosen }) else { return }
-                editor.month = bar.month
-            }
-            .animation(.snappy(duration: 0.2), value: picked)
-            .chartYAxis {
-                AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
-            }
-            .chartXAxis {
-                // Every third month. Twelve labels at this width overlap into a
-                // band, and the edited month is called out above its own bar.
-                AxisMarks(values: .automatic(desiredCount: 4)) { value in
-                    AxisGridLine()
-                    AxisValueLabel {
-                        if let s = value.as(String.self) { Text(s) }
-                    }
-                }
-            }
-            .frame(height: 150)
+            chart(big: false)
 
             if let prior = priorTotal, prior > 0 {
                 Label("\(prior.asMoney) in the same months a year ago",
@@ -468,6 +430,137 @@ private struct PlanHistoryChart: View {
                     .foregroundStyle(Theme.quietText)
             }
         }
+        .fullScreenCover(isPresented: $open) {
+            NavigationStack {
+                VStack(alignment: .leading, spacing: 10) {
+                    chart(big: true)
+                    Text("Drag a month up or down to plan it. Pinch to look closer. A month that has already happened cannot be dragged — what it cost is not a plan.")
+                        .font(Theme.note)
+                        .foregroundStyle(Theme.quietText)
+                }
+                .padding(.horizontal, Theme.cardPadding)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(Theme.background)
+                .navigationTitle(editor.row.label)
+                .navigationBarTitleDisplayMode(.inline)
+                .owlMark()
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { open = false }
+                    }
+                }
+            }
+            .tint(Theme.accent)
+        }
+    }
+
+    private func chart(big: Bool) -> some View {
+        let data = big ? windowed : bars
+        let colour = Color(hex: editor.row.colour)
+
+        return Chart {
+            ForEach(data) { bar in
+                BarMark(
+                    x: .value("Month", bar.month),
+                    y: .value("Amount", Double(bar.amount) / 100)
+                )
+                // Weight means spent, and only spent. Giving the edited month
+                // full weight too drew a projection as history in the one place
+                // the whole chart exists to keep them apart.
+                .foregroundStyle(colour.opacity(bar.isSpent ? 1 : 0.35))
+                .opacity(picked == nil || picked == bar.month ? 1 : 0.35)
+                .annotation(position: .top, spacing: 2) {
+                    if picked == bar.month || (bar.isEdited && picked == nil) {
+                        VStack(spacing: 0) {
+                            Text(bar.amount.asShortMoney)
+                            Text(bar.isSpent ? "spent" : "plan").opacity(0.7)
+                        }
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(colour)
+                    }
+                }
+            }
+
+            // A month with an unsaved figure on it. Marked rather than
+            // recoloured: the bar's own weight already means spent or not, and
+            // a second meaning on the same channel would make both unreadable.
+            ForEach(data.filter { editor.pendingMonths.contains($0.month) }) { bar in
+                PointMark(
+                    x: .value("Month", bar.month),
+                    y: .value("Amount", Double(bar.amount) / 100)
+                )
+                .symbolSize(26)
+                .foregroundStyle(Theme.accent)
+            }
+        }
+        .chartXSelection(value: $picked)
+        // Touching the chart moves the edit, which is the point of showing the
+        // year while a figure can still be typed. Nothing is lost by moving:
+        // each month's figure is held against that month.
+        .onChange(of: picked) { _, chosen in
+            guard let chosen else { return }
+            editor.month = chosen
+        }
+        .animation(.snappy(duration: 0.2), value: picked)
+        .chartYAxis {
+            AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: big ? 6 : 4)) { value in
+                AxisGridLine()
+                AxisValueLabel {
+                    if let key = value.as(String.self) { Text(BudgetEditor.shortLabel(key)) }
+                }
+            }
+        }
+        .frame(minHeight: big ? 220 : 150, maxHeight: big ? .infinity : 150)
+        .chartOverlay { proxy in
+            if big {
+                GeometryReader { geo in
+                    /* Dragging a bar sets that month's plan.
+                     *
+                     * It writes a pin, which is what "takes precedence" means
+                     * here — a pinned month is absolute and is not moved by the
+                     * baseline or by the shape the year has. That is the same
+                     * thing typing a figure into the box does, so a drag and a
+                     * typed number cannot disagree about what they meant.
+                     *
+                     * Only months that have not happened. A bar for a spent
+                     * month is drawn at what it cost, so dragging it would move
+                     * a figure the chart is not showing and then snap back —
+                     * which reads as broken rather than as refused.
+                     */
+                    Rectangle().fill(.clear).contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 3)
+                                .onChanged { value in
+                                    guard let plot = proxy.plotFrame else { return }
+                                    let origin = geo[plot].origin
+                                    guard let month: String =
+                                            proxy.value(atX: value.location.x - origin.x),
+                                          let dollars: Double =
+                                            proxy.value(atY: value.location.y - origin.y),
+                                          editor.row.spent[month] == nil
+                                    else { return }
+                                    editor.month = month
+                                    editor.pinnedAmount = max(0, Int((dollars * 100).rounded()))
+                                }
+                        )
+                }
+            }
+        }
+        .simultaneousGesture(
+            MagnifyGesture()
+                .onChanged { value in
+                    guard big else { return }
+                    let base = windowAtPinchStart ?? clampedWindow
+                    if windowAtPinchStart == nil { windowAtPinchStart = base }
+                    // Pinching out shows fewer months, which is what zooming
+                    // in means for a time axis.
+                    window = Int((Double(base) / value.magnification).rounded())
+                }
+                .onEnded { _ in windowAtPinchStart = nil }
+        )
     }
 
     /// Absent rather than zero when the history does not reach back — a
