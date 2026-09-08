@@ -103,7 +103,7 @@ struct TrendView: View {
                                    prior: data.priorSeries,
                                    categories: data.categories,
                                    drilled: $drilled)
-                NetChart(series: data.series)
+                NetChart(series: data.series, prior: data.priorSeries)
                 RunningTotalChart(series: data.series)
                 YearAgoCard(now: data.series, before: data.priorSeries)
             }
@@ -145,6 +145,12 @@ private struct CategoryTrendChart: View {
     /// What the window was when the current pinch started, so the gesture is
     /// measured from where it began rather than compounding each frame.
     @State private var windowAtPinchStart: Int?
+
+    /// Shared with every other chart that can draw last year — see
+    /// `LastYearToggle`. This one used to draw the rules unconditionally,
+    /// which is the same busyness the Budgeting chart already offered a way
+    /// out of.
+    @AppStorage("showLastYear") private var showLastYear = false
 
     /// The month at the left edge of what is on screen.
     ///
@@ -250,8 +256,13 @@ private struct CategoryTrendChart: View {
         }
         // The year-ago rule is drawn on the same axis, so an axis that cannot
         // reach it would draw it along the top edge and call that a comparison.
-        for point in yearAgo where keys.contains(point.label) {
-            tallest = max(tallest, point.cents)
+        // Only when it is drawn: an axis making room for a line that is turned
+        // off is the outlier problem again, with nothing on screen to explain
+        // the empty space.
+        if showLastYear {
+            for point in yearAgo where keys.contains(point.label) {
+                tallest = max(tallest, point.cents)
+            }
         }
         guard tallest > 0 else { return nil }
         return Double(tallest) / 100 * 1.12
@@ -359,6 +370,7 @@ private struct CategoryTrendChart: View {
     /// the run is on screen, and the way back up out of a drill.
     private var subheader: some View {
         HStack {
+            LastYearToggle(on: $showLastYear, available: yearAgo.contains { $0.cents > 0 })
             Spacer()
             if clampedWindow < series.count {
                 Text("\(clampedWindow) of \(series.count) months")
@@ -425,7 +437,7 @@ private struct CategoryTrendChart: View {
             // the comparison is one number, and a second stack beside the first
             // doubles the ink to say what a line already says.
             ForEach(ago, id: \.label) { point in
-                if point.cents > 0 {
+                if showLastYear, point.cents > 0 {
                     RuleMark(
                         x: .value("Month", point.label),
                         yStart: .value("Last year", Double(point.cents) / 100),
@@ -757,12 +769,24 @@ private struct DrillStrip: View {
 
 private struct NetChart: View {
     let series: [TrendResponse.Month]
+    /// The same months a year earlier, in the same order.
+    let prior: [TrendResponse.Month]
     @State private var picked: String?
+    @AppStorage("showLastYear") private var showLastYear = false
+
+    /// Last year's net, by the month it is drawn under.
+    private var lastYear: [String: Int] {
+        Dictionary(uniqueKeysWithValues: zip(series, prior).map { ($0.month, $1.net) })
+    }
 
     var body: some View {
         Maximisable(title: "Net, month by month") { maximised in
             VStack(alignment: .leading, spacing: 10) {
-                Chart(series) { m in
+                LastYearToggle(on: $showLastYear,
+                               available: lastYear.values.contains { $0 != 0 })
+
+                Chart {
+                    ForEach(series) { m in
                     // Coloured per bar rather than per series: a run of months
                     // is not all one thing, and the months that went backwards
                     // are the ones worth finding at a glance.
@@ -775,6 +799,28 @@ private struct NetChart: View {
                     // stepping forward: a bar already at full strength has
                     // nowhere brighter to go.
                     .opacity(picked == nil || picked == m.month ? 1 : 0.3)
+                    }
+
+                    /* Last year as a rule across each month, the same way the
+                     * category chart draws it. A net can be negative, so the
+                     * rule is drawn whatever its sign — a month that lost
+                     * money last year is exactly the comparison worth having,
+                     * and suppressing zero would delete a year that broke
+                     * even rather than a year with no record.
+                     */
+                    if showLastYear {
+                        ForEach(series) { m in
+                            if let before = lastYear[m.month] {
+                                RuleMark(
+                                    x: .value("Month", m.month),
+                                    yStart: .value("Last year", Double(before) / 100),
+                                    yEnd: .value("Last year", Double(before) / 100)
+                                )
+                                .lineStyle(.init(lineWidth: 1.5, dash: [3, 2]))
+                                .foregroundStyle(Theme.quietText)
+                            }
+                        }
+                    }
                 }
                 .chartXSelection(value: $picked)
                 .chartXAxis {
@@ -795,7 +841,9 @@ private struct NetChart: View {
                 if let month = picked, let m = series.first(where: { $0.month == month }) {
                     ChartReadout(month: month,
                                  value: m.net,
-                                 caption: m.net < 0 ? "more out than in" : "more in than out",
+                                 caption: showLastYear && lastYear[month] != nil
+                                     ? "against \((lastYear[month] ?? 0).asShortMoney) a year ago"
+                                     : (m.net < 0 ? "more out than in" : "more in than out"),
                                  tint: Theme.tint(forNet: m.net)) { picked = nil }
                 } else {
                     Text("Touch a month for what it came to.")

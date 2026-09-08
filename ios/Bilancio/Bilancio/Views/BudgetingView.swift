@@ -637,10 +637,10 @@ private struct MoneyOverTime: View {
     /// the chart exactly as it was rather than failing the screen.
     let trend: TrendResponse?
 
-    /// Remembered rather than reset each visit. Somebody who turned the lines
-    /// off found them too busy, and showing them again tomorrow is not a
-    /// feature — it is the same complaint on a loop.
-    @AppStorage("budgetShowLastYear") private var showLastYear = false
+    /// Shared with the Trend charts — see `LastYearToggle`. Somebody who wants
+    /// the comparison wants it where they are reading, and one switch per
+    /// chart reads as four that have forgotten each other.
+    @AppStorage("showLastYear") private var showLastYear = false
 
     /// The month under the last touch.
     @State private var picked: String?
@@ -717,13 +717,7 @@ private struct MoneyOverTime: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Spacer()
-                    if hasLastYear {
-                        Toggle("Last year", isOn: $showLastYear)
-                            .toggleStyle(.button)
-                            .font(Theme.tileLabel)
-                            .buttonStyle(.bordered)
-                            .controlSize(.mini)
-                    }
+                    LastYearToggle(on: $showLastYear, available: hasLastYear)
                 }
 
                 legend

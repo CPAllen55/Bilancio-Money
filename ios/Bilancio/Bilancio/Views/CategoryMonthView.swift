@@ -144,6 +144,7 @@ struct CategoryMonthView: View {
                 if !data.vendors.isEmpty {
                     if let trend = model.trend {
                         CategoryRun(series: trend.series,
+                                    prior: trend.priorSeries,
                                     slug: model.slug,
                                     categories: data.categories,
                                     highlight: model.range.month)
@@ -374,6 +375,8 @@ private struct VendorPie: View {
 /// of twelve bars answers it before the pie is reached.
 private struct CategoryRun: View {
     let series: [TrendResponse.Month]
+    /// The same months a year earlier, in the same order.
+    let prior: [TrendResponse.Month]
     let slug: String
     let categories: [TransactionsResponse.Category]
     /// `YYYY-MM`, when the screen is about one month. A range covering several
@@ -381,6 +384,7 @@ private struct CategoryRun: View {
     let highlight: String?
 
     @State private var picked: String?
+    @AppStorage("showLastYear") private var showLastYear = false
 
     /// A parent's own line is the sum of its children, so the figure comes
     /// from `byParent` for one and `byCategory` for the other. Reading the
@@ -396,6 +400,14 @@ private struct CategoryRun: View {
         }
     }
 
+    /// The same category a year earlier, by the month it is drawn under.
+    private var lastYear: [String: Int] {
+        Dictionary(uniqueKeysWithValues: zip(series, prior).map { now, before in
+            let source = isParent ? (before.byParent ?? [:]) : (before.byCategory ?? [:])
+            return (now.month, source[slug] ?? 0)
+        })
+    }
+
     private var colour: Color {
         categories.first { $0.slug == slug }.map { Color(hex: $0.colour) } ?? Theme.accent
     }
@@ -407,9 +419,14 @@ private struct CategoryRun: View {
         return AnyView(
             Card {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("The last twelve months")
-                        .font(Theme.tileLabel)
-                        .foregroundStyle(Theme.quietText)
+                    HStack {
+                        Text("The last twelve months")
+                            .font(Theme.tileLabel)
+                            .foregroundStyle(Theme.quietText)
+                        Spacer()
+                        LastYearToggle(on: $showLastYear,
+                                       available: lastYear.values.contains { $0 > 0 })
+                    }
 
                     Chart {
                         ForEach(data, id: \.month) { p in
@@ -424,6 +441,20 @@ private struct CategoryRun: View {
                             .foregroundStyle(colour.opacity(
                                 p.month == highlight || picked == p.month ? 1 : 0.32))
                             .cornerRadius(2)
+                        }
+
+                        if showLastYear {
+                            ForEach(data, id: \.month) { p in
+                                if let before = lastYear[p.month], before > 0 {
+                                    RuleMark(
+                                        x: .value("Month", p.month),
+                                        yStart: .value("Last year", Double(before) / 100),
+                                        yEnd: .value("Last year", Double(before) / 100)
+                                    )
+                                    .lineStyle(.init(lineWidth: 1.5, dash: [3, 2]))
+                                    .foregroundStyle(Theme.quietText)
+                                }
+                            }
                         }
                     }
                     .chartXSelection(value: $picked)

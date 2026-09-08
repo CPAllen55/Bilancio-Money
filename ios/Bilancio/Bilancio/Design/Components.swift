@@ -487,6 +487,10 @@ struct Maximisable<Content: View>: View {
                     .background(Theme.background)
                     .navigationTitle(title)
                     .navigationBarTitleDisplayMode(.inline)
+                    // The mark comes with it. A chart opened on its own is a
+                    // whole screen with nothing else on it, and a whole screen
+                    // of this app should say whose it is.
+                    .owlMark()
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
                             Button("Done") { open = false }
@@ -494,6 +498,36 @@ struct Maximisable<Content: View>: View {
                     }
             }
             .tint(Theme.accent)
+        }
+    }
+}
+
+// MARK: - Last year
+
+/// Whether the charts draw the same months a year earlier.
+///
+/// One preference rather than one per chart. Somebody who wants the comparison
+/// wants it on the screen they are reading, and having turned it on once they
+/// do not expect to turn it on again on the next tab — a per-chart switch reads
+/// as four switches that have forgotten each other.
+///
+/// Remembered across launches, because turning it off is a judgement about how
+/// busy a chart should be and showing the lines again tomorrow is the same
+/// complaint on a loop.
+struct LastYearToggle: View {
+    @Binding var on: Bool
+    /// Nothing to compare against — a year the app has no record of. The
+    /// control is hidden rather than disabled: a switch that does nothing is a
+    /// question about what is broken.
+    let available: Bool
+
+    var body: some View {
+        if available {
+            Toggle("Last year", isOn: $on)
+                .toggleStyle(.button)
+                .font(Theme.tileLabel)
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
         }
     }
 }
