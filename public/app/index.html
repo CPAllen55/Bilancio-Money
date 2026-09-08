@@ -7545,17 +7545,88 @@ function bgNowLine(height) {
     '" y1="' + (BG_PT - 10) + '" x2="' + x + '" y2="' + (height - 2) + '"/>';
 }
 
+/* What this category plans, month by month, with the reader's hand on it.
+
+   A typed baseline REPLACES. It used to scale the shape by baseline/computed,
+   which meant typing 900 into Groceries produced a budget of 1,001 — the page
+   quietly disagreeing with the number in the box in front of you. See
+   applyOverride in src/plan.ts; this has to say the same thing, because this
+   is what the page draws between an edit and the next round trip.
+
+   A pinned month still beats a typed baseline. Naming one month is the more
+   specific of the two statements. */
 function bgPlanOf(row) {
-  const scale = row.baselineOverride && row.baseline > 0
-    ? row.baselineOverride / row.baseline : 1;
   const out = {};
   for (const m of bgData.months) {
     const pin = row.pinned[m];
     out[m] = pin !== undefined && pin !== null
       ? Math.max(0, Math.round(pin))
-      : Math.max(0, Math.round((row.computed[m] || 0) * scale));
+      : row.baselineOverride > 0
+        ? Math.max(0, Math.round(row.baselineOverride))
+        : Math.max(0, Math.round(row.computed[m] || 0));
   }
   return out;
+}
+
+/* The first month still to come, which is the one a figure should be quoted
+   from: a category's readout should describe what it is about to do, not what
+   it did in January. */
+function bgNextMonth() {
+  return bgData.months.find(m => !bgPast(m)) || bgData.months[bgData.months.length - 1];
+}
+
+/* The arithmetic behind one category, in words.
+
+   The engine works a subcategory out as bills plus variable spending, and both
+   halves are checkable: "Oakwood Properties $2,300 every month" is either true
+   of the reader's transactions or it is not. Showing the sum rather than
+   asserting the total is the whole reason the engine keeps its working —
+   a budget nobody can audit is a number nobody believes.
+
+   Returns the short form for the row and a longer one for the tooltip. */
+function bgWorking(row) {
+  const m = bgNextMonth();
+  const p = (row.parts && row.parts[m]) || null;
+  const bills = row.committed || [];
+  const short = [], full = [];
+
+  if (row.baselineOverride > 0) {
+    /* An overridden category still says what it would otherwise have planned.
+       Without it the reader cannot tell a figure they set last March from one
+       the engine chose, and Reset becomes a button with no stated effect. */
+    short.push('you set ' + money0(row.baselineOverride));
+    if (p) short.push('history says ' + money0(p.auto));
+  } else if (p) {
+    if (bills.length) {
+      short.push(bills.length === 1
+        ? escapeHtml(bills[0].name) + ' ' + money0(bills[0].perMonth[m] ?? bills[0].cents)
+        : bills.length + ' bills ' + money0(p.committed));
+    }
+    if (p.variable > 0) {
+      short.push(money0(p.variable) + (bills.length ? ' variable' : ' a month'));
+    }
+    if (!bills.length && p.variable <= 0) short.push('nothing yet');
+  }
+
+  for (const b of bills) {
+    full.push(b.name + ' — ' + money(b.perMonth[m] ?? b.cents) + ' a month' +
+      (b.step ? ', changed ' + monthLabel(b.step.at) : '') +
+      (b.seasonal ? ', varies by season' : ''));
+  }
+  if (p && p.variable > 0) {
+    full.push('Variable spending — ' + money(p.variable) + ', from ' +
+      (row.variableBasis === 'recent' ? 'the last 3 months'
+       : row.variableBasis === 'sparse' ? 'occasional months, spread out'
+       : 'the middle month of ' + row.monthsUsed) +
+      (row.step ? ' (stepped ' + monthLabel(row.step.at) + ')' : ''));
+  }
+
+  if (row.irregularPerMonth > 0) {
+    short.push(money0(row.irregularPerMonth) + '/mo set aside');
+    full.push('Set aside for one-offs — ' + money(row.irregularPerMonth) + ' a month, from ' +
+      (row.outliers || []).map(o => monthLabel(o.month)).join(', '));
+  }
+  return { short, full };
 }
 
 function bgTotals() {
@@ -7712,8 +7783,10 @@ function drawBudgeting() {
   const withPins = bgData.categories.filter(r => Object.keys(r.pinned).length).length;
   const moved = bgData.categories.filter(r => r.baselineOverride).length;
   $('bg-note').textContent =
-    'Worked from ' + bgData.monthsOfHistory + ' complete months. One-off costs are kept out of the ' +
-    'monthly figure and set aside separately; a month that runs heavy every year keeps running heavy. ' +
+    'Worked from ' + bgData.monthsOfHistory + ' complete months. Each category is split into the ' +
+    'merchants that bill you every month — rent, insurance, subscriptions, taken at what they charge ' +
+    'now — and the variable spending left over, which is estimated. One-off costs are kept out of the ' +
+    'monthly figure and set aside separately. ' +
     (moved || withPins
       ? 'You have moved ' + moved + ' baseline' + (moved === 1 ? '' : 's') +
         (withPins ? ' and pinned months in ' + withPins + ' categor' + (withPins === 1 ? 'y' : 'ies') : '') + '. '
@@ -7729,19 +7802,18 @@ function bgLeaf(row) {
   const open = bgOpen.has(row.slug);
   const pins = Object.keys(row.pinned).length;
 
-  const note = [];
-  if (row.irregularPerMonth > 0) {
-    note.push(money(row.irregularPerMonth) + '/mo set aside for one-offs');
-  }
-  if (row.outliers.length) {
-    note.push(row.outliers.length + ' one-off' + (row.outliers.length === 1 ? '' : 's') +
-      ' left out (' + row.outliers.map(o => monthLabel(o.month)).join(', ') + ')');
-  }
+  /* The sum, not the total. See bgWorking. */
+  const work = bgWorking(row);
+  const note = work.short.slice();
   if (pins) note.push(pins + ' month' + (pins === 1 ? '' : 's') + ' pinned');
 
   return '<div class="bg-leaf" data-slug="' + escapeHtml(row.slug) + '">' +
       '<div><div class="bg-name">' + escapeHtml(row.label) + '</div>' +
-        (note.length ? '<div class="bg-note">' + escapeHtml(note.join(' · ')) + '</div>' : '') + '</div>' +
+        (note.length
+          ? '<div class="bg-note"' +
+            (work.full.length ? ' title="' + escapeHtml(work.full.join('\n')) + '"' : '') +
+            '>' + escapeHtml(note.join(' · ')) + '</div>'
+          : '') + '</div>' +
       '<input class="bg-in' + (row.baselineOverride ? ' moved' : '') + '" type="number" min="0" step="1" ' +
         'inputmode="decimal" data-baseline="' + escapeHtml(row.slug) + '" ' +
         'aria-label="Monthly budget for ' + escapeHtml(row.label) + '" ' +

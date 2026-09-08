@@ -1243,7 +1243,28 @@ export interface MonthBucket {
   income: number;
   expense: number;
   byCategory: Record<string, number>;
+  /* Spending broken down one level further, by the merchant it went to:
+     bucket slug -> merchant key -> cents.
+
+     The query below has always grouped by merchant -- it has to, because a
+     merchant rule can send one shop's rows to a different category than its
+     Plaid guess -- and this was throwing that away on the next line. Keeping
+     it is what lets the budget tell rent from a supermarket, and it costs one
+     Map per month rather than a second trip to the database.
+
+     Keyed by merchantKey rather than by the printed name, so "SQ *BLUE BOTTLE
+     #417" and "Blue Bottle Coffee" are one merchant. `merchantNames` carries
+     one printable spelling back for each key.
+
+     `charges` is how many times the merchant billed, not how much: it is what
+     separates a landlord from a supermarket. Both can total the same steady
+     figure every month -- a shop visited six times averages out at least as
+     smoothly as one rent cheque -- and only the count tells them apart. */
+  byMerchant: Record<string, Record<string, { cents: number; charges: number }>>;
 }
+
+/** merchantKey -> the shortest spelling seen for it, for printing. */
+export type MerchantNames = Map<string, string>;
 
 /**
  * Monthly income and spending, with categories resolved.
@@ -1262,10 +1283,16 @@ export async function monthlyBuckets(
   accountIds: string[],
   ctx: CategoryContext,
   span: string[],
+  /* Somewhere to put the printable merchant names, for the one caller that
+     wants them. A Map handed in rather than a second return value, because
+     every other caller ignores merchants entirely and widening the return
+     type would make all of them destructure something they do not use. */
+  names: MerchantNames = new Map(),
 ): Promise<Map<string, MonthBucket>> {
   const blank = (): MonthBucket => ({
     total: 0, income: 0, expense: 0,
     byCategory: Object.fromEntries(ctx.list.map((cat) => [cat.slug, 0])),
+    byMerchant: {},
   });
   const buckets = new Map(span.map((ym) => [ym, blank()]));
   if (!accountIds.length || !span.length) return buckets;
@@ -1282,6 +1309,12 @@ export async function monthlyBuckets(
       overrideCategoryId: transactionOverrides.categoryId,
       outCents: sql<string>`coalesce(sum(case when ${transactions.amount} > 0 then ${transactions.amount} else 0 end), 0)::text`,
       inCents: sql<string>`coalesce(sum(case when ${transactions.amount} < 0 then -${transactions.amount} else 0 end), 0)::text`,
+      /* How many rows this group collapsed. Free -- the rows are already
+         being scanned and grouped, and count(*) is the cheapest aggregate
+         there is -- and without it the budget cannot tell a bill from a shop.
+         Only the outgoing ones are counted, for the same reason only outgoing
+         money is filed by merchant. */
+      charges: sql<string>`(count(*) filter (where ${transactions.amount} > 0))::text`,
     })
     .from(transactions)
     .leftJoin(
@@ -1320,7 +1353,8 @@ export async function monthlyBuckets(
      what either does to a month has to be the same thing or a split
      transaction would be counted by different rules than its neighbours. */
   const add = (b: MonthBucket, kind: string, slug: string | null,
-               inCents: number, outCents: number) => {
+               inCents: number, outCents: number,
+               merchant?: string | null, charges = 1) => {
     if (kind === "transfer") return;
     b.income += inCents;
     if (outCents > 0) {
@@ -1330,6 +1364,22 @@ export async function monthlyBuckets(
       // and income belongs behind the bars as a level, never as one of them.
       const bucket = bucketFor(slug, "spend", ctx);
       b.byCategory[bucket] = (b.byCategory[bucket] ?? 0) + outCents;
+
+      /* And the same money again, one level down. Only spending: a budget is
+         about what leaves, and a refund arriving from a shop is not a smaller
+         commitment to it. */
+      const key = merchant ? merchantKey(null, merchant) : "";
+      if (key) {
+        const per = (b.byMerchant[bucket] ??= {});
+        const cell = (per[key] ??= { cents: 0, charges: 0 });
+        cell.cents += outCents;
+        cell.charges += charges;
+        /* The shortest spelling wins. Store numbers and branch codes make the
+           others longer, not clearer: "WM SUPERCENTER #2648" and "Walmart"
+           are the same shop and only one of them is worth printing. */
+        const held = names.get(key);
+        if (!held || merchant!.length < held.length) names.set(key, merchant!);
+      }
     }
   };
 
@@ -1346,7 +1396,8 @@ export async function monthlyBuckets(
       },
       ctx,
     );
-    add(b, kind, slug, Number(r.inCents), Number(r.outCents));
+    add(b, kind, slug, Number(r.inCents), Number(r.outCents), r.merchant,
+        Number(r.charges) || 0);
   }
 
   /* The second pass: the transactions held back above, counted whole rather
@@ -1376,7 +1427,8 @@ export async function monthlyBuckets(
       for (const part of partsFor(r as AmountRow, splits)) {
         const { kind, slug } = resolveSlug(part.row, ctx);
         const cents = Number(part.amount);   // Plaid: positive is money leaving
-        add(b, kind, slug, cents < 0 ? -cents : 0, cents > 0 ? cents : 0);
+        add(b, kind, slug, cents < 0 ? -cents : 0, cents > 0 ? cents : 0,
+            part.row.merchantName ?? part.row.name);
       }
     }
   }

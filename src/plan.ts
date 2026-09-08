@@ -15,6 +15,7 @@ import { eq } from "drizzle-orm";
 import type { getDb } from "./db/client";
 import { budgetPlansV2 } from "./db/schema";
 import { shapeBudget, type Shape } from "./budget-shape";
+import { planSubcategory, type SubPlan, type MerchantHistory } from "./budget-engine";
 
 type Db = ReturnType<typeof getDb>["db"];
 
@@ -51,11 +52,24 @@ export async function loadOverrides(db: Db, userId: string): Promise<Map<string,
 /**
  * The shape, with the reader's own hand applied over it.
  *
- * A baseline override SCALES rather than replaces, so the year keeps the shape
- * history gave it: somebody who takes groceries from 480 to 430 has said "about
- * a tenth less", not "every month is 430", and December should still be
- * December. A month override is absolute, because that is what naming one
- * month means.
+ * The override REPLACES. A typed figure is the figure.
+ *
+ * It used to scale: a baseline of 430 against a shape whose baseline was 480
+ * multiplied every month by 0.896, on the reasoning that the reader had said
+ * "about a tenth less" rather than "every month is 430", and that December
+ * should still be December.
+ *
+ * That is a defensible reading and it produced an indefensible result. Typing
+ * 900 into Groceries and getting a budget of 1,001 is not a nuance, it is the
+ * page ignoring the reader — and the discrepancy grew with whatever seasonal
+ * shape happened to be fitted underneath, so the same number meant different
+ * things in different categories. Worse, the scale was recomputed from live
+ * history: as the shape's own baseline moved, the stored figure silently
+ * changed meaning.
+ *
+ * A month override was always absolute, because that is what naming one month
+ * means. Now the baseline is too, and both say the same thing: what you typed
+ * is what you get. December is still available — pin December.
  */
 export function applyOverride(
   shape: Shape,
@@ -63,14 +77,13 @@ export function applyOverride(
   over: Override | undefined,
 ): Record<string, number> {
   const plan: Record<string, number> = {};
-  const scale = over && over.baseline > 0 && shape.baseline > 0
-    ? over.baseline / shape.baseline : 1;
-
   for (const m of months) {
     const pinned = over?.byMonth?.[m];
     plan[m] = pinned !== undefined && pinned !== null
       ? Math.max(0, Math.round(pinned))
-      : Math.max(0, Math.round((shape.plan[m] ?? 0) * scale));
+      : over && over.baseline > 0
+        ? Math.max(0, Math.round(over.baseline))
+        : Math.max(0, Math.round(shape.plan[m] ?? 0));
   }
   return plan;
 }
@@ -96,8 +109,8 @@ export interface Planned {
   byCategory: Record<string, Record<string, number>>;
   /** month -> cents. */
   income: Record<string, number>;
-  /** slug -> the unedited shape, for anything that wants to explain itself. */
-  shapes: Map<string, Shape>;
+  /** slug -> the whole working, for anything that wants to explain itself. */
+  subPlans: Map<string, SubPlan>;
   incomeShape: Shape;
   monthsOfHistory: number;
 }
@@ -105,13 +118,22 @@ export interface Planned {
 interface CategoryLike {
   id: string; slug: string; parentSlug: string | null; kind: string;
 }
-interface BucketLike { income: number; byCategory: Record<string, number> }
+interface BucketLike {
+  income: number;
+  byCategory: Record<string, number>;
+  byMerchant?: Record<string, Record<string, { cents: number; charges: number }>>;
+}
 
 /**
- * Every leaf shaped and edited, plus income, for the months asked for.
+ * Every leaf planned and edited, plus income, for the months asked for.
  *
- * Income is one line rather than a breakdown, because monthlyBuckets keeps
- * income as a monthly total — and for a budget that is the right grain anyway.
+ * Spending goes through budget-engine.ts, which splits each subcategory into
+ * the merchants that bill every month and the variable spending left over.
+ *
+ * Income does not, and stays on the older shapeBudget: monthlyBuckets files
+ * income as a monthly total with no merchant behind it, so there is nothing
+ * for the engine to read — and for a budget "what comes in" is the right
+ * grain anyway, rather than which of two employers it came from.
  */
 export function buildShapedPlan(
   categories: CategoryLike[],
@@ -119,18 +141,42 @@ export function buildShapedPlan(
   learn: string[],
   months: string[],
   overrides: Map<string, Override>,
+  /* Printable merchant names, from monthlyBuckets. Only the readout needs
+     them, so a caller that is not going to show its working can leave them
+     out and get merchant keys instead of spellings. */
+  names: Map<string, string> = new Map(),
 ): Planned {
-  const history = (slug: string) =>
-    learn.map((m) => ({ month: m, amount: buckets.get(m)?.byCategory[slug] ?? 0 }));
-
   const byCategory: Record<string, Record<string, number>> = {};
-  const shapes = new Map<string, Shape>();
+  const subPlans = new Map<string, SubPlan>();
 
   for (const cat of categories) {
     if (!cat.parentSlug || cat.kind !== "spend") continue;   // leaves only
-    const shape = shapeBudget(history(cat.slug), months);
-    shapes.set(cat.slug, shape);
-    byCategory[cat.slug] = applyOverride(shape, months, overrides.get(cat.id));
+
+    const totals = learn.map((m) => buckets.get(m)?.byCategory[cat.slug] ?? 0);
+    /* This subcategory's merchants, month by month. A month with no spending
+       here still gets an entry, because "billed in four of the last six" has
+       to be able to count the two it missed. */
+    const merchants: MerchantHistory = new Map(
+      learn.map((m) => [m, buckets.get(m)?.byMerchant?.[cat.slug] ?? {}]),
+    );
+
+    const over = overrides.get(cat.id);
+    const sub = planSubcategory(
+      cat.slug, totals, merchants, names, learn, months,
+      over && over.baseline > 0 ? over.baseline : undefined,
+    );
+    subPlans.set(cat.slug, sub);
+
+    /* A pinned month beats everything, including the baseline the reader
+       typed: naming one month is the more specific statement of the two. */
+    const plan: Record<string, number> = {};
+    for (const m of months) {
+      const pinned = over?.byMonth?.[m];
+      plan[m] = pinned !== undefined && pinned !== null
+        ? Math.max(0, Math.round(pinned))
+        : sub.plan[m] ?? 0;
+    }
+    byCategory[cat.slug] = plan;
   }
 
   const incomeShape = shapeBudget(
@@ -142,5 +188,5 @@ export function buildShapedPlan(
     incomeShape, months, incomeCat ? overrides.get(incomeCat.id) : undefined,
   );
 
-  return { byCategory, income, shapes, incomeShape, monthsOfHistory: learn.length };
+  return { byCategory, income, subPlans, incomeShape, monthsOfHistory: learn.length };
 }

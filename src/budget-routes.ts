@@ -39,9 +39,12 @@ import { eq } from "drizzle-orm";
 import { getDb } from "./db/client";
 import { budgetPlansV2 } from "./db/schema";
 import { requireUser } from "./auth";
-import { loadCategories, monthlyBuckets, ownedAccountIds } from "./summary-routes";
+import {
+  loadCategories, monthlyBuckets, ownedAccountIds, type MerchantNames,
+} from "./summary-routes";
 import { applyOverride, loadOverrides, learnWindow, type Override } from "./plan";
 import { shapeBudget } from "./budget-shape";
+import { planSubcategory, type MerchantHistory } from "./budget-engine";
 
 const budget = new Hono<{ Bindings: Env }>();
 
@@ -81,21 +84,45 @@ budget.get("/budget", async (c) => {
       ownedAccountIds(db, auth.user.id, "all", true),
     ]);
 
+    /* The printable merchant spellings, collected as the buckets are built.
+       Nothing extra is read for them -- the query already groups by merchant
+       so that a merchant rule can move one shop's rows, and this keeps what it
+       was throwing away. */
+    const names: MerchantNames = new Map();
     const [buckets, overrides] = await Promise.all([
-      monthlyBuckets(db, auth.user.id, ids, ctx, learn),
+      monthlyBuckets(db, auth.user.id, ids, ctx, learn, names),
       loadOverrides(db, auth.user.id),
     ]);
-
-    const history = (slug: string) =>
-      learn.map((m) => ({ month: m, amount: buckets.get(m)?.byCategory[slug] ?? 0 }));
 
     /* Only leaves are planned. A parent's figure is the sum of its children,
        which is the only way the parts can be edited and the whole stay true. */
     const leaves = ctx.list.filter((cat) => cat.parentSlug && cat.kind === "spend");
 
     const rows = leaves.map((cat) => {
-      const shape = shapeBudget(history(cat.slug), planMonths);
       const over = overrides.get(cat.id);
+
+      const totals = learn.map((m) => buckets.get(m)?.byCategory[cat.slug] ?? 0);
+      /* This subcategory's merchants, month by month. A month with nothing
+         spent here still gets an entry, because "billed in four of the last
+         six" has to be able to count the two it missed. */
+      const merchants: MerchantHistory = new Map(
+        learn.map((m) => [m, buckets.get(m)?.byMerchant?.[cat.slug] ?? {}]),
+      );
+      const sub = planSubcategory(
+        cat.slug, totals, merchants, names, learn, planMonths,
+        over && over.baseline > 0 ? over.baseline : undefined,
+      );
+
+      /* A pinned month beats the baseline: naming one month is the more
+         specific statement of the two. */
+      const plan: Record<string, number> = {};
+      for (const m of planMonths) {
+        const pinned = over?.byMonth?.[m];
+        plan[m] = pinned !== undefined && pinned !== null
+          ? Math.max(0, Math.round(pinned))
+          : sub.plan[m] ?? 0;
+      }
+
       const spent = Object.fromEntries(
         learn.filter((m) => planMonths.includes(m))
           .map((m) => [m, buckets.get(m)?.byCategory[cat.slug] ?? 0]),
@@ -113,22 +140,38 @@ budget.get("/budget", async (c) => {
           return [m, buckets.get(`${Number(y) - 1}-${mo}`)?.byCategory[cat.slug] ?? 0];
         }),
       );
+      /* What the engine would say with the reader's hand taken off it. Kept
+         separately so Reset has somewhere to go back to, and so the readout
+         can show an overridden category what it is overriding. */
+      const computed = Object.fromEntries(
+        planMonths.map((m) => [m, sub.parts[m]?.auto ?? 0]),
+      );
+
       return {
         id: cat.id, slug: cat.slug, label: cat.label, colour: cat.colour,
         parentSlug: cat.parentSlug,
         spent,
         priorSpent,
-        // Before the reader's edits, so a Reset has something to go back to.
-        computed: shape.plan,
-        plan: applyOverride(shape, planMonths, over),
-        baseline: shape.baseline,
+        computed,
+        plan,
         baselineOverride: over && over.baseline > 0 ? over.baseline : null,
         pinned: over?.byMonth ?? {},
-        irregularPerMonth: shape.irregularPerMonth,
-        outliers: shape.outliers,
-        seasonal: shape.seasonal,
-        basis: shape.basis,
-        monthsUsed: shape.monthsUsed,
+        /* The arithmetic, so the page can show its working rather than assert
+           a figure. Every line here is checkable against the reader's own
+           transactions, which is the whole point of shipping it. */
+        parts: sub.parts,
+        committed: sub.committed.map((c) => ({
+          name: c.name, cents: c.cents, perMonth: c.perMonth,
+          seasonal: c.seasonal, step: c.step, since: c.since, months: c.months,
+        })),
+        variableLevel: sub.variableLevel,
+        variableBasis: sub.variableBasis,
+        step: sub.step,
+        baseline: sub.committed.reduce((s, c) => s + c.cents, 0) + sub.variableLevel,
+        irregularPerMonth: sub.irregularPerMonth,
+        outliers: sub.outliers,
+        seasonal: sub.seasonal,
+        monthsUsed: sub.monthsUsed,
       };
     });
 
