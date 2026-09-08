@@ -356,20 +356,30 @@ struct MerchantLogo: View {
 /// navigation bar — at that size it reads as a smudge. The face survives being
 /// made small; the bar chart under it does not.
 ///
-/// One outlined shape, tinted, rather than two pieces of artwork. The gold
-/// mark is drawn on an opaque gold ground, so a head cropped out of it is a
-/// gold box with a face in it. The outlined one is drawn on transparency and
-/// takes whatever colour the theme hands it.
+/// The drawing itself, the same in both appearances.
+///
+/// It used to be an outlined head, tinted by the theme — because a head
+/// cropped out of the gold mark is a gold box with a face in it, and because
+/// an outline can be one colour in the light and another in the dark. What
+/// that cost was the owl: no glasses, no body, no stacks, and a shape that
+/// stopped matching the icon on the home screen the moment the icon changed.
+///
+/// So it is the icon now, small. Gold reads on both grounds without help,
+/// which is what made the tint worth losing — and the mark above a dashboard
+/// is finally the same object as the one that was tapped to get there.
 struct OwlMark: View {
     var height: CGFloat = 38
 
     var body: some View {
         Image("OwlMark")
-            .renderingMode(.template)
             .resizable()
+            .interpolation(.high)
             .scaledToFit()
             .frame(height: height)
-            .foregroundStyle(Theme.markTint)
+            // The corners the system would put on it anyway, at the radius it
+            // uses: shown at this size the plate is read as an app icon, and
+            // a square one reads as an app icon drawn wrong.
+            .clipShape(.rect(cornerRadius: height * 0.2237))
             .accessibilityHidden(true)
     }
 }
