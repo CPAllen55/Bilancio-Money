@@ -129,15 +129,16 @@ export const SEASONAL_SLUGS = new Set(["utilities"]);
 
 /* Where the answer is just an average of the last few months.
  *
- * Restaurants are the one line people hold the dial on directly: nobody skips
- * the rent because they are over budget, and everybody skips a dinner. So the
- * question a budget asks — what will this cost next month — is answered by
- * what they have been choosing lately, not by what they used to choose.
+ * Eating out is the money people hold the dial on directly: nobody skips the
+ * rent because they are over budget, and everybody skips a dinner, a coffee
+ * or a drive-through. So the question a budget asks — what will this cost
+ * next month — is answered by what they have been choosing lately, not by
+ * what they used to choose.
  *
  * Every pattern-finding tool is switched off for these: no season, no step
  * detection, no trend. Each exists to find a pattern, and the premise here is
  * that there is none to find, so each can only fit noise. Measured on
- * restaurants alone across twenty households:
+ * restaurants across twenty households:
  *
  *     plain median                    $64 a month wrong
  *     plain median + season           $63
@@ -145,8 +146,33 @@ export const SEASONAL_SLUGS = new Set(["utilities"]);
  *     median + trend + season         $67   <- the old engine
  *
  * The trend is not neutral, it is harmful: fitted to noise it points
- * somewhere, and where it points is wrong about half the time. */
-export const AVERAGE_SLUGS = new Set(["dining"]);
+ * somewhere, and where it points is wrong about half the time.
+ *
+ * ── Coffee and fast food ────────────────────────────────────────────────────
+ *
+ * They join on the behavioural argument, which carries over exactly. The
+ * statistical one does not, and was worth measuring rather than assuming: a
+ * coffee habit is twenty small purchases a month against a restaurant's four
+ * large ones, so its monthly total is three times steadier — and a short
+ * window on an already-steady series is buying responsiveness with variance
+ * it does not need to spend.
+ *
+ * It turns out to buy it cheaply. Error in dollars a month, against how often
+ * the habit changes:
+ *
+ *                        3mo    6mo   12mo  median
+ *     coffee     never   $10     $9     $9     $9
+ *                6-mo    $15    $18    $23    $30
+ *     fast food  never   $13    $12    $11    $11
+ *                6-mo    $17    $21    $26    $29
+ *     dining     never   $30    $28    $27    $28
+ *                6-mo    $40    $42    $48    $60
+ *
+ * A household whose habits never move pays one to three dollars a month for
+ * the short window; one that changes them twice a year saves twelve to
+ * twenty. Not a close trade, and the same shape for all three — the steadier
+ * the category, the less the short window costs when it is wrong. */
+export const AVERAGE_SLUGS = new Set(["dining", "coffee", "fast-food"]);
 
 /* How many recent months an averaged category looks at.
  *
