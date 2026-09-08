@@ -15,7 +15,9 @@ import { eq } from "drizzle-orm";
 import type { getDb } from "./db/client";
 import { budgetPlansV2 } from "./db/schema";
 import { shapeBudget, type Shape } from "./budget-shape";
-import { planSubcategory, type SubPlan, type MerchantHistory } from "./budget-engine";
+import {
+  planSubcategory, planIncome, type SubPlan, type MerchantHistory,
+} from "./budget-engine";
 
 type Db = ReturnType<typeof getDb>["db"];
 
@@ -122,6 +124,8 @@ interface BucketLike {
   income: number;
   byCategory: Record<string, number>;
   byMerchant?: Record<string, Record<string, { cents: number; charges: number }>>;
+  byIncome?: Record<string, number>;
+  byIncomeMerchant?: Record<string, Record<string, { cents: number; charges: number }>>;
 }
 
 /**
@@ -179,13 +183,37 @@ export function buildShapedPlan(
     byCategory[cat.slug] = plan;
   }
 
+  /* Income, projected the same conservative way /api/budget does it.
+
+     This has to be the same call rather than a second implementation kept in
+     step by hand -- the Overview's savings tile, the Tracker's plan and the
+     Trend forecast all read this, and a Budgeting page that promises one
+     number while the Overview promises another is worse than either. */
+  const incomeParts = categories
+    .filter((c) => c.kind === "income" && c.parentSlug)
+    .map((c) => planIncome(
+      learn.map((m) => buckets.get(m)?.byIncome?.[c.slug] ?? 0),
+      new Map(learn.map((m) => [m, buckets.get(m)?.byIncomeMerchant?.[c.slug] ?? {}])),
+      names, learn, months,
+    ));
+
+  const incomeCat = categories.find((c) => c.slug === "income" && !c.parentSlug);
+  const incomeOver = incomeCat ? overrides.get(incomeCat.id) : undefined;
+  const income: Record<string, number> = {};
+  for (const m of months) {
+    const pinned = incomeOver?.byMonth?.[m];
+    income[m] = pinned !== undefined && pinned !== null
+      ? Math.max(0, Math.round(pinned))
+      : incomeOver && incomeOver.baseline > 0
+        ? Math.max(0, Math.round(incomeOver.baseline))
+        : incomeParts.reduce((s, p) => s + (p.plan[m] ?? 0), 0);
+  }
+
+  /* Still fitted, for the callers that describe income's HISTORY rather than
+     its projection -- how many months there are, and what a normal one was. */
   const incomeShape = shapeBudget(
     learn.map((m) => ({ month: m, amount: buckets.get(m)?.income ?? 0 })),
     months,
-  );
-  const incomeCat = categories.find((c) => c.slug === "income" && !c.parentSlug);
-  const income = applyOverride(
-    incomeShape, months, incomeCat ? overrides.get(incomeCat.id) : undefined,
   );
 
   return { byCategory, income, subPlans, incomeShape, monthsOfHistory: learn.length };

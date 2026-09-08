@@ -1288,6 +1288,21 @@ export interface MonthBucket {
      figure every month -- a shop visited six times averages out at least as
      smoothly as one rent cheque -- and only the count tells them apart. */
   byMerchant: Record<string, Record<string, { cents: number; charges: number }>>;
+  /* Money IN, filed the same two ways.
+
+     Income used to be a single monthly figure, on the reasoning that a budget
+     asks what comes in rather than which of two employers it came from. That
+     is true of the total and false of the projection: a salary and a tax
+     refund are both "income" and only one of them is going to happen again
+     next month. Projected from one blended line, a good year quietly promises
+     savings that never arrive.
+
+     Kept separate from byCategory rather than folded into it. Income slugs and
+     spending slugs do not collide, so one map would have worked -- and every
+     consumer that treats byCategory as spending would have started counting
+     wages as an expense. */
+  byIncome: Record<string, number>;
+  byIncomeMerchant: Record<string, Record<string, { cents: number; charges: number }>>;
 }
 
 /** merchantKey -> the shortest spelling seen for it, for printing. */
@@ -1320,6 +1335,7 @@ export async function monthlyBuckets(
     total: 0, income: 0, expense: 0,
     byCategory: Object.fromEntries(ctx.list.map((cat) => [cat.slug, 0])),
     byMerchant: {},
+    byIncome: {}, byIncomeMerchant: {},
   });
   const buckets = new Map(span.map((ym) => [ym, blank()]));
   if (!accountIds.length || !span.length) return buckets;
@@ -1336,12 +1352,19 @@ export async function monthlyBuckets(
       overrideCategoryId: transactionOverrides.categoryId,
       outCents: sql<string>`coalesce(sum(case when ${transactions.amount} > 0 then ${transactions.amount} else 0 end), 0)::text`,
       inCents: sql<string>`coalesce(sum(case when ${transactions.amount} < 0 then -${transactions.amount} else 0 end), 0)::text`,
-      /* How many rows this group collapsed. Free -- the rows are already
-         being scanned and grouped, and count(*) is the cheapest aggregate
-         there is -- and without it the budget cannot tell a bill from a shop.
-         Only the outgoing ones are counted, for the same reason only outgoing
-         money is filed by merchant. */
+      /* How many rows this group collapsed, each way. Free -- the rows are
+         already being scanned and grouped, and count(*) is the cheapest
+         aggregate there is.
+
+         Two counts rather than one because they answer different questions.
+         Outgoing: is this merchant a bill or a shop? A landlord charges once a
+         month and a supermarket six times, and the totals alone cannot tell
+         them apart. Incoming: how many paydays landed? A fortnightly salary
+         puts three paycheques in three months of every year, so the monthly
+         total swings by half while nothing whatever has changed about the
+         job -- and the count is the only thing that says so. */
       charges: sql<string>`(count(*) filter (where ${transactions.amount} > 0))::text`,
+      credits: sql<string>`(count(*) filter (where ${transactions.amount} < 0))::text`,
     })
     .from(transactions)
     .leftJoin(
@@ -1381,9 +1404,28 @@ export async function monthlyBuckets(
      transaction would be counted by different rules than its neighbours. */
   const add = (b: MonthBucket, kind: string, slug: string | null,
                inCents: number, outCents: number,
-               merchant?: string | null, charges = 1) => {
+               merchant?: string | null, charges = 1, credits = 1) => {
     if (kind === "transfer") return;
     b.income += inCents;
+
+    if (inCents > 0) {
+      /* Which income bucket, by the same rule the Tracker uses -- money in can
+         only land in an income category, so a refund filed under Home is still
+         income and lands in Refunds. */
+      const bucket = bucketFor(slug, "income", ctx);
+      b.byIncome[bucket] = (b.byIncome[bucket] ?? 0) + inCents;
+
+      const key = merchant ? merchantKey(null, merchant) : "";
+      if (key) {
+        const per = (b.byIncomeMerchant[bucket] ??= {});
+        const cell = (per[key] ??= { cents: 0, charges: 0 });
+        cell.cents += inCents;
+        cell.charges += credits;
+        const held = names.get(key);
+        if (!held || merchant!.length < held.length) names.set(key, merchant!);
+      }
+    }
+
     if (outCents > 0) {
       b.expense += outCents;
       // Spending can only land in a spending bucket. An expense filed under an
@@ -1424,7 +1466,7 @@ export async function monthlyBuckets(
       ctx,
     );
     add(b, kind, slug, Number(r.inCents), Number(r.outCents), r.merchant,
-        Number(r.charges) || 0);
+        Number(r.charges) || 0, Number(r.credits) || 0);
   }
 
   /* The second pass: the transactions held back above, counted whole rather

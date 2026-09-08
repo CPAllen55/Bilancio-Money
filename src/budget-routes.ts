@@ -42,9 +42,11 @@ import { requireUser } from "./auth";
 import {
   loadCategories, monthlyBuckets, ownedAccountIds, type MerchantNames,
 } from "./summary-routes";
-import { applyOverride, loadOverrides, learnWindow, type Override } from "./plan";
+import { loadOverrides, learnWindow, type Override } from "./plan";
 import { shapeBudget } from "./budget-shape";
-import { planSubcategory, type MerchantHistory } from "./budget-engine";
+import {
+  planSubcategory, planIncome, type MerchantHistory,
+} from "./budget-engine";
 
 const budget = new Hono<{ Bindings: Env }>();
 
@@ -175,19 +177,70 @@ budget.get("/budget", async (c) => {
       };
     });
 
-    /* Income is one line rather than a breakdown. monthlyBuckets files spending
-       by category and keeps income only as a monthly total, and for a budget
-       that is the right grain anyway — the question is what comes in, not which
-       of two employers it came from. It gets the same treatment as everything
-       else, so a December bonus that lands two years running shows up as a
-       December that plans higher. */
+    /* Income, one bucket at a time, and deliberately conservative.
+
+       This was a single line fitted to the monthly total, with a December
+       bonus landing twice in a row planning a heavier December. That is the
+       right treatment for spending and the wrong one here: a salary and a tax
+       refund are both "income" and only one of them happens again next month,
+       and blended into one series a good year quietly promises savings that
+       never arrive.
+
+       So each income subcategory is projected on its own by the rule in
+       budget-engine.ts -- high months dropped rather than saved for, short
+       months ignored so they cannot drag the floor down, and the smallest of
+       what is left over the last twelve. Summed afterwards.
+
+       Salary & Wages carries almost all of it for almost everybody, which is
+       the point of splitting them: the refunds line projects to nothing on its
+       own, where blended it was quietly propping the total up. */
+    const incomeLeaves = ctx.list.filter(
+      (cat) => cat.kind === "income" && cat.parentSlug,
+    );
+    const incomeParts = incomeLeaves.map((cat) => {
+      const totals = learn.map((m) => buckets.get(m)?.byIncome?.[cat.slug] ?? 0);
+      const merchants: MerchantHistory = new Map(
+        learn.map((m) => [m, buckets.get(m)?.byIncomeMerchant?.[cat.slug] ?? {}]),
+      );
+      const got = planIncome(totals, merchants, names, learn, planMonths);
+      return {
+        slug: cat.slug, label: cat.label, colour: cat.colour,
+        level: got.level, plan: got.plan,
+        dropped: got.dropped, short: got.short, payers: got.payers,
+        spent: Object.fromEntries(
+          learn.filter((m) => planMonths.includes(m))
+            .map((m) => [m, buckets.get(m)?.byIncome?.[cat.slug] ?? 0]),
+        ),
+      };
+    }).filter((r) => r.level > 0 || Object.values(r.spent).some((v) => v > 0));
+
+    /* Salary & Wages first, then whatever else pays, largest first. The order
+       is the claim: for almost everybody one line is the income and the rest
+       is noise around it, and a list that opens with Refunds says otherwise. */
+    incomeParts.sort((a, b) =>
+      (a.slug === "salary" ? -1 : b.slug === "salary" ? 1 : 0) || b.level - a.level);
+
+    const incomeComputed = Object.fromEntries(
+      planMonths.map((m) => [m, incomeParts.reduce((s, p) => s + (p.plan[m] ?? 0), 0)]),
+    );
+
+    /* The old shape is still built, for the fields the page reads that describe
+       history rather than the projection. */
     const incomeShape = shapeBudget(
       learn.map((m) => ({ month: m, amount: buckets.get(m)?.income ?? 0 })),
       planMonths,
     );
     const incomeCat = ctx.list.find((cat) => cat.slug === "income" && !cat.parentSlug);
     const incomeOver = incomeCat ? overrides.get(incomeCat.id) : undefined;
-    const incomePlan = applyOverride(incomeShape, planMonths, incomeOver);
+    const incomePlan: Record<string, number> = {};
+    for (const m of planMonths) {
+      const pinned = incomeOver?.byMonth?.[m];
+      incomePlan[m] = pinned !== undefined && pinned !== null
+        ? Math.max(0, Math.round(pinned))
+        : incomeOver && incomeOver.baseline > 0
+          ? Math.max(0, Math.round(incomeOver.baseline))
+          : incomeComputed[m];
+    }
 
     const expenseByMonth: Record<string, number> = {};
     for (const m of planMonths) {
@@ -208,8 +261,15 @@ budget.get("/budget", async (c) => {
       income: {
         id: incomeCat?.id ?? null,
         plan: incomePlan,
-        computed: incomeShape.plan,
-        baseline: incomeShape.baseline,
+        computed: incomeComputed,
+        baseline: incomeParts.reduce((s, p) => s + p.level, 0),
+        /* Where it comes from, and what was left out of it.
+         *
+         * Named sources rather than parts: a spending row already ships a
+         * `parts` object keyed by month, and two fields sharing a name with
+         * different shapes on sibling objects is how a client ends up
+         * iterating an array as though it were a map. */
+        sources: incomeParts,
         baselineOverride: incomeOver && incomeOver.baseline > 0 ? incomeOver.baseline : null,
         pinned: incomeOver?.byMonth ?? {},
         spent: Object.fromEntries(

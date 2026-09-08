@@ -171,14 +171,23 @@ const TRANSFER_BY_DETAILED: Record<string, string> = {
 };
 
 /** Money coming in has its own tree — interest earned is not interest paid. */
+/* Where money coming in lands.
+ *
+ * Only the codes Plaid can actually identify are listed. Everything else --
+ * INCOME_OTHER_INCOME included, which is Plaid saying "income, and I do not
+ * know what kind" -- falls through to Salary & Wages rather than to Other
+ * Income. See classify.
+ */
 const INCOME_BY_DETAILED: Record<string, string> = {
   INCOME_WAGES: "salary",
   INCOME_INTEREST_EARNED: "interest-earned",
   INCOME_DIVIDENDS: "dividends",
   INCOME_TAX_REFUND: "refunds",
+  /* Named, and deliberately not wages: both are regular monthly money, but a
+     pension and a benefit are not pay and filing them as pay would make the
+     Salary line answer a question nobody asked of it. */
   INCOME_RETIREMENT_PENSION: "other-income",
   INCOME_UNEMPLOYMENT: "other-income",
-  INCOME_OTHER_INCOME: "other-income",
 };
 
 export interface Classified {
@@ -195,7 +204,26 @@ export function classify(
   merchant?: string,
 ): Classified {
   if (primary === "INCOME") {
-    const slug = (detailed && INCOME_BY_DETAILED[detailed]) || "other-income";
+    /* Salary & Wages is where unidentified income goes.
+     *
+     * It used to be Other Income, and that was wrong in a way that mattered.
+     * Plenty of payroll reaches Plaid as INCOME_OTHER_INCOME -- a direct
+     * deposit whose description is the employer's ACH name and a reference
+     * number is not something a classifier can recognise -- so a salary that
+     * arrived on the same day, from the same payer, for the same amount, every
+     * month for two years was filed under the bucket that exists for money you
+     * cannot count on. It is the most countable money most people have.
+     *
+     * The cost of the swap is a one-off -- a gift, a friend settling up -- also
+     * landing under Salary & Wages. That is the better error of the two: it is
+     * visible on the Tracker and takes one merchant rule to correct, whereas
+     * the old error hid the reader's largest and steadiest income among the
+     * scraps and gave them no reason to look.
+     *
+     * It also costs nothing in the budget. Income is projected from the floor
+     * of the last twelve months, so a gift that arrives once contributes zero
+     * to the plan whichever bucket it is filed in. */
+    const slug = (detailed && INCOME_BY_DETAILED[detailed]) || "salary";
     return { kind: "income", slug };
   }
   if (primary && (TRANSFER_PRIMARY.has(primary) || TRANSFER_PRIMARY_ALWAYS.has(primary))) {
