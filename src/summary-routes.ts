@@ -253,6 +253,33 @@ interface Window { start: Date; end: Date; label: string; }
 function resolveRange(range: string, today: Date) {
   const y = today.getFullYear(), m = today.getMonth(), d = today.getDate();
 
+  /* day:YYYY-MM-DD — one named day.
+   *
+   * The calendar shows a month as days and can say what each one cost. Asked
+   * which rows made up a day, it had nothing to ask for: the narrowest range
+   * was a whole month, so the client would have had to pull the month and sift
+   * it, and a busy month does not fit in one page.
+   *
+   * The day before is the comparison, because that is the only one that means
+   * anything at this width — a day against the same day last month says more
+   * about which weekday it fell on than about spending.
+   */
+  const oneDay = /^day:(\d{4})-(\d{2})-(\d{2})$/.exec(range);
+  if (oneDay) {
+    const dy = Number(oneDay[1]), dm = Number(oneDay[2]) - 1, dd = Number(oneDay[3]);
+    const start = new Date(Date.UTC(dy, dm, dd));
+    return {
+      current: { start, end: start, label: `${MONTH_LABELS[dm]} ${dd}` },
+      previous: {
+        start: new Date(Date.UTC(dy, dm, dd - 1)),
+        end: new Date(Date.UTC(dy, dm, dd - 1)),
+        label: "The day before",
+      },
+      daysElapsed: 1,
+      daysInPeriod: 1,
+    };
+  }
+
   // month:YYYY-MM — one named calendar month, whole. Every other range is an
   // aggregate ending today, which cannot answer "what did March cost me".
   const named = /^month:(\d{4})-(\d{2})$/.exec(range);
