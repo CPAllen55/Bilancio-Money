@@ -2172,6 +2172,10 @@
   .bv-verdict.bad{ color:var(--coral); }
   .bv-none{ margin-left:auto; font-size:11.5px; color:var(--muted);
              min-width:98px; text-align:right; }
+  /* Spending with no plan behind it. Coral, and in the same weight the other
+     verdicts take, because it is a verdict rather than an absence -- see the
+     bar it labels. */
+  .bv-none.unplanned{ color:var(--coral); font-weight:600; }
   .bv-row{ display:flex; align-items:center; gap:12px; margin-bottom:4px; }
   .bv-row .btrack{ flex:1 1 auto; position:relative; overflow:visible; height:12px; }
   /* The Overview's bar, here too. Same class, same caption, same two-layer
@@ -3139,7 +3143,7 @@
 
     <section class="panel" id="v-tracker">
       <h2 class="view">Against the plan</h2>
-      <p class="lede">How much of each budget has gone. Green is within it, red is past it — a full bar is the whole budget, and beyond that a line marks where it ran out, so the red past the line is the overspend. A category with no budget set yet shows its spending in green. Pick a month, and how many months back from it to include.</p>
+      <p class="lede">How much of each budget has gone. Green is within it, red is past it — a full bar is the whole budget, and beyond that a line marks where it ran out, so the red past the line is the overspend. A category with no budget set yet shows red until you give it one — money going out against no plan is the one thing a plan cannot vouch for. Pick a month, and how many months back from it to include.</p>
       <div class="bar" style="padding-top:0">
         <span class="bv-controls">
           <select class="ctl" id="bud-range" aria-label="Month"></select>
@@ -9316,7 +9320,12 @@ function budgetPair(label, colour, actual, budget, expand, opts) {
     share
       ? '<span class="bv-verdict">' + Math.round(pct) + '% of income</span>'
       : !hasBudget
-        ? '<span class="bv-none">no budget yet</span>'
+        /* Coloured with the bar, and for the same reason: a grey aside next
+           to a red bar reads as a footnote about the bar rather than as the
+           reason for it. Income keeps the quiet version -- there is nothing
+           wrong with earning money against no plan. */
+        ? '<span class="bv-none' + (income || share ? '' : ' unplanned') + '">' +
+          'no budget yet</span>'
         : income
           ? '<span class="bv-verdict' + (over ? ' good' : '') + '">' +
             money(Math.abs(actual - budget)) + (over ? ' above plan' : ' to go') + '</span>'
@@ -9337,20 +9346,33 @@ function budgetPair(label, colour, actual, budget, expand, opts) {
    * put a magenta bar on Travel & Entertainment and a bottle-green one on
    * Auto & Transport — read as "red" and as "a different green" by anyone
    * scanning the column, because that is what a bar of that colour means on
-   * every other row. The bar answers one question, "is this past its budget",
-   * and a question with two answers gets two colours.
+   * every other row. The bar answers one question and a question with two
+   * answers gets two colours.
    *
-   * No budget is green: nothing has been exceeded. The category keeps its own
-   * colour in the swatch beside its name, which is where identity belongs —
-   * next to the label, not inside the measurement. */
-  /* Coral means "past a limit". Income has no limit to be past, and a share of
-     a whole cannot exceed the whole, so both of those stay mint however they
-     land. Only a spending row can turn amber, and only a spending row can turn
-     red.
+   * Unbudgeted spending is red.
+   *
+   * This used to be green, on the reasoning that nothing can be exceeded when
+   * there is no limit to exceed. That reading is defensible and it is the
+   * wrong one, because it answers a question nobody is asking. A reader
+   * scanning this column is not asking "has a rule been broken" — they are
+   * asking "is my money going where I meant it to", and money leaving against
+   * no plan at all is the clearest case of no.
+   *
+   * Green on an unplanned category is worse than uninformative: it is
+   * reassuring. It says the row has been looked at and found fine, when in
+   * fact it has never been looked at. Red says the opposite and says it
+   * honestly — this is unbudgeted, and it stays flagged until somebody sets a
+   * figure, at which point it is judged like every other row.
+   *
+   * Income and share rows are untouched. Income has no limit to be past, and
+   * a share of a whole cannot exceed the whole, so a red bar on either would
+   * be an accusation with nothing behind it. */
+  /* Only a spending row can turn amber, and only a spending row can turn red.
 
      The caption's ink travels with the fill: the amber is light in both themes
      and the white that reads on mint and coral would vanish on it. */
-  const fill = (over && !income) ? 'var(--bar-coral)'
+  const unplanned = !hasBudget && !income && !share;
+  const fill = ((over || unplanned) && !income) ? 'var(--bar-coral)'
              : near ? 'var(--bar-near)'
              : 'var(--bar-mint)';
   // One ink for every fill now that all three are dark enough to carry it.
