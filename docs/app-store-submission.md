@@ -49,6 +49,43 @@ what is stored is a plan and a date, which is entitlement rather than a record
 of purchases; if you would rather over-declare, add it, but then add it to the
 manifest too or the two documents disagree.
 
+## Subscriptions — guideline 3.1.2
+
+The most common rejection for a subscription app, and all of it is about what
+is **inside the binary**, not the listing. At the point of purchase the app has
+to show the title, the length of the period and the price, and carry working
+links to the Terms of Use and the Privacy Policy. `Views/SubscriptionView.swift`
+does all four: title and price on each row, the period read from StoreKit
+rather than from the product's name, and the two links in the footer. A
+reviewer taps them, so they have to resolve — both are served as static pages
+from this repo.
+
+Two fields in App Store Connect have to agree with that:
+
+- **App Privacy Policy URL** → `https://bilanciomoney.com/privacy`
+- **License Agreement** → either Apple's standard EULA, or
+  `https://bilanciomoney.com/terms` as a custom one. Whichever is chosen, it
+  must be the same document the app links to.
+
+Each subscription product also needs its own display name, description, and a
+**review screenshot** before it can be submitted. A subscription that has never
+shipped inside a binary cannot be reviewed, so the products have to be attached
+to the build being submitted.
+
+## The demo account's plan
+
+Comp it before submitting: `plan = "free"`, which has no expiry.
+
+A reviewer working through a `trial` account can run the clock out mid-review,
+and everything after that point is read-only — they would be looking at a
+different app than the one being submitted, and would be right to reject it.
+`POST /api/admin/users/:id/plan` with `{"plan": "free", "note": "app review"}`
+does it, from an admin session.
+
+Do not comp it by giving it a long trial. `free` is the state that means "this
+account does not expire"; a trial with a far-off date is the same thing said in
+a way that eventually stops being true.
+
 ## Export compliance
 
 Already answered in the project: `ITSAppUsesNonExemptEncryption` is `NO`. The

@@ -110,18 +110,26 @@ struct SubscriptionView: View {
                 offer(status)
             }
 
-            Section {
-                Button {
-                    Task { await store.restore() }
-                } label: {
-                    HStack(spacing: 8) {
-                        if store.purchasing == "restore" { ProgressView() }
-                        Text("Restore purchases")
+            if status.configured {
+                /* Apple requires this of any app that sells a subscription,
+                   and it is the only way back for somebody who reinstalled or
+                   changed phone. Hidden when there is nothing to sell: a build
+                   with no in-app purchase in it has nothing to restore, and a
+                   button whose only possible answer is "nothing found" is
+                   worse than no button. */
+                Section {
+                    Button {
+                        Task { await store.restore() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if store.purchasing == "restore" { ProgressView() }
+                            Text("Restore purchases")
+                        }
                     }
+                    .disabled(store.purchasing != nil)
+                } footer: {
+                    Text("If you have subscribed before on this Apple Account — on another phone, or before reinstalling — this brings it back.")
                 }
-                .disabled(store.purchasing != nil)
-            } footer: {
-                Text("If you have subscribed before on this Apple Account — on another phone, or before reinstalling — this brings it back.")
             }
 
             if let problem = store.problem {
@@ -154,11 +162,17 @@ struct SubscriptionView: View {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(product.displayName)
                                     .font(Theme.body)
-                                if !product.description.isEmpty {
-                                    Text(product.description)
-                                        .font(.caption2)
-                                        .foregroundStyle(Theme.quietText)
-                                }
+                                /* How long a period is, spelled out. Required
+                                   next to the price by guideline 3.1.2, and it
+                                   takes the place of the App Store Connect
+                                   description here rather than sitting under
+                                   it -- the required line is the one that has
+                                   to be easy to find, and marketing copy
+                                   stacked on top of it makes it less so. The
+                                   description is still on the listing. */
+                                Text(period(product) ?? product.description)
+                                    .font(.caption2)
+                                    .foregroundStyle(Theme.quietText)
                             }
                             Spacer(minLength: 8)
                             if store.purchasing == product.id {
@@ -180,8 +194,39 @@ struct SubscriptionView: View {
         } header: {
             Text(status.plan == "trial" ? "When the trial ends" : "Subscribe")
         } footer: {
-            Text("Billed through your Apple Account. It renews until you cancel, which you can do in Settings at any time.")
+            /* The disclosure guideline 3.1.2 asks for, in the place it asks
+               for it: at the point of purchase, in the app itself. Title,
+               length and price are on the rows above; what remains is that it
+               renews, how to stop it, and two links that have to actually
+               work. A reviewer taps them. */
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Billed through your Apple Account. It renews automatically at the end of each period until you cancel, which you can do at any time in Settings, under your Apple Account, then Subscriptions.")
+                HStack(spacing: 14) {
+                    Link("Terms of Use", destination: Bilancio.termsURL)
+                    Link("Privacy Policy", destination: Bilancio.privacyURL)
+                }
+                .font(Theme.note)
+            }
         }
+    }
+
+    /// How long one period is, said in words.
+    ///
+    /// From StoreKit rather than from the product's name: the name is metadata
+    /// somebody types into App Store Connect and could say anything, and this
+    /// is the figure the purchase is actually made on.
+    private func period(_ product: Product) -> String? {
+        guard let p = product.subscription?.subscriptionPeriod else { return nil }
+        let n = p.value
+        let unit: String
+        switch p.unit {
+        case .day:   unit = n == 1 ? "day" : "days"
+        case .week:  unit = n == 1 ? "week" : "weeks"
+        case .month: unit = n == 1 ? "month" : "months"
+        case .year:  unit = n == 1 ? "year" : "years"
+        @unknown default: return nil
+        }
+        return n == 1 ? "Renews every \(unit)" : "Renews every \(n) \(unit)"
     }
 
     private func plan(_ status: BillingStatus) -> String {
