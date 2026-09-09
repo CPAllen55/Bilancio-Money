@@ -29,6 +29,7 @@ import { getDb } from "./db/client";
 import { users, waitlist, items } from "./db/schema";
 import { requireUser } from "./auth";
 import { addMonths, type Plan } from "./entitlement";
+import { selfTest } from "./apple";
 
 const admin = new Hono<{ Bindings: Env }>();
 
@@ -217,6 +218,32 @@ admin.post("/users/:id/plan", async (c) => {
       user: { id: row.id, email: row.email, plan: row.plan,
               planUntil: row.planUntil, planNote: row.planNote },
     });
+  } finally {
+    c.executionCtx.waitUntil(close());
+  }
+});
+
+/**
+ * GET /api/admin/apple-check
+ *
+ * Whether in-app purchase is wired up, and if not, which part is not.
+ *
+ * Admin-only and 404 to everyone else, like the rest of this file. It reports
+ * which binding names are set and never what they are set to -- a secret that
+ * is half printed is still a secret that has been printed.
+ *
+ * The Apple call it makes is a read against a transaction id that cannot
+ * exist. Nothing is written, nothing is charged, and the useful part is not
+ * the answer but which failure comes back: a 404 is a key Apple read and
+ * checked, a 401 is one it rejected.
+ */
+admin.get("/apple-check", async (c) => {
+  const { db, ready, close } = getDb(c.env);
+  try {
+    await ready;
+    const me = await requireAdmin(c, db);
+    if (!me) return c.json({ error: "not_found" }, 404);
+    return c.json({ ok: true, ...(await selfTest(c.env)) });
   } finally {
     c.executionCtx.waitUntil(close());
   }
