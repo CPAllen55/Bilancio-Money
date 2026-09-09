@@ -277,8 +277,18 @@ export async function subscriptionStatus(
     if (res.status === 401) {
       /* The key, the key id and the issuer id have to belong to each other,
          and to an In-App Purchase key rather than an App Store Connect API
-         key. All three read as 401 and none of them will fix themselves. */
-      throw new AppleError("Apple rejected our credentials.", 502);
+         key. Every one of those reads as 401 and none will fix itself.
+
+         The body is usually empty, and occasionally carries an errorCode that
+         says which. Worth the read either way: guessing between four causes
+         is expensive and this sometimes removes three of them. */
+      const detail = await res.text().catch(() => "");
+      throw new AppleError(
+        "Apple rejected our credentials" +
+        (detail ? `: ${detail.slice(0, 300)}` : "") +
+        ` (${host === HOSTS[0] ? "production" : "sandbox"})`,
+        502,
+      );
     }
     if (!res.ok) {
       const body = await res.text().catch(() => "");
@@ -395,10 +405,16 @@ export async function selfTest(env: Env): Promise<AppleCheck> {
     return {
       present, keyReadable: true, appleAccepts: rejected ? false : null,
       says: rejected
-        ? "Apple rejected the key. Almost always an App Store Connect API key " +
-          "where an In-App Purchase key belongs -- they look identical. Check " +
-          "the key came from Users and Access, Integrations, In-App Purchase, " +
-          "and that the issuer id is the one shown on that same page."
+        ? "Apple rejected the key. The key itself is well-formed, so this is " +
+          "a mismatch between the three, or an account that cannot use the " +
+          "API yet. In order of likelihood: (1) APPLE_KEY_ID is not the ten " +
+          "characters in the .p8's own filename, SubscriptionKey_XXXXXXXXXX" +
+          ".p8; (2) APPLE_ISSUER_ID was copied from the App Store Connect API " +
+          "section rather than the In-App Purchase one, which shows its own; " +
+          "(3) the secret was edited but not redeployed, so the Worker still " +
+          "holds the old value; (4) the Paid Applications Agreement is not " +
+          "Active yet, which is worth ruling the others out before assuming. " +
+          `Apple said: ${message}`
         : `Could not finish the check: ${message}`,
     };
   }
