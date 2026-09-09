@@ -112,6 +112,27 @@
     "kind": "spend"
   },
   {
+    "slug": "maintenance",
+    "label": "Maintenance and Improvement",
+    "colour": "#81A121",
+    "sortOrder": 33,
+    "parent": "home"
+  },
+  {
+    "slug": "lawn-garden",
+    "label": "Lawn and Garden",
+    "colour": "#219AA1",
+    "sortOrder": 34,
+    "parent": "home"
+  },
+  {
+    "slug": "pool",
+    "label": "Pool",
+    "colour": "#214EA1",
+    "sortOrder": 35,
+    "parent": "home"
+  },
+  {
     "slug": "transportation",
     "label": "Auto & Transport",
     "colour": "#8B45C4",
@@ -224,12 +245,33 @@
     "kind": "spend"
   },
   {
+    "slug": "hobbies",
+    "label": "Hobbies",
+    "colour": "#2174A1",
+    "sortOrder": 55,
+    "parent": "shopping"
+  },
+  {
+    "slug": "electronics",
+    "label": "Electronics",
+    "colour": "#A18E21",
+    "sortOrder": 56,
+    "parent": "shopping"
+  },
+  {
     "slug": "events",
     "label": "Events & Outings",
     "colour": "#c76fb2",
     "sortOrder": 56,
     "parent": "entertainment",
     "kind": "spend"
+  },
+  {
+    "slug": "clothing",
+    "label": "Clothing",
+    "colour": "#B6542B",
+    "sortOrder": 57,
+    "parent": "shopping"
   },
   {
     "slug": "subscriptions",
@@ -288,35 +330,24 @@
     "kind": "spend"
   },
   {
-    "slug": "family",
-    "label": "Family",
-    "colour": "#6fbf73",
-    "sortOrder": 70,
-    "parent": null,
-    "kind": "spend"
-  },
-  {
     "slug": "kids",
-    "label": "Kids & Childcare",
-    "colour": "#6fbf73",
-    "sortOrder": 71,
-    "parent": "family",
+    "label": "Kids",
+    "colour": "#E36A7A",
+    "sortOrder": 70,
     "kind": "spend"
   },
   {
     "slug": "pets",
     "label": "Pets",
-    "colour": "#c77d2e",
-    "sortOrder": 72,
-    "parent": "family",
+    "colour": "#9C5A2B",
+    "sortOrder": 71,
     "kind": "spend"
   },
   {
     "slug": "education",
     "label": "Education",
-    "colour": "#4f9ad8",
-    "sortOrder": 73,
-    "parent": "family",
+    "colour": "#0E7C9E",
+    "sortOrder": 72,
     "kind": "spend"
   },
   {
@@ -382,6 +413,111 @@
     "sortOrder": 92,
     "parent": "giving-work",
     "kind": "spend"
+  },
+  {
+    "slug": "daycare",
+    "label": "Daycare",
+    "colour": "#B62B2B",
+    "sortOrder": 701,
+    "parent": "kids"
+  },
+  {
+    "slug": "babysitting",
+    "label": "Babysitting",
+    "colour": "#25D025",
+    "sortOrder": 702,
+    "parent": "kids"
+  },
+  {
+    "slug": "kid-clothing",
+    "label": "Kid Clothing",
+    "colour": "#259DD0",
+    "sortOrder": 703,
+    "parent": "kids"
+  },
+  {
+    "slug": "kid-supplies",
+    "label": "Kid School Supplies",
+    "colour": "#2121A1",
+    "sortOrder": 704,
+    "parent": "kids"
+  },
+  {
+    "slug": "kid-health",
+    "label": "Kid Healthcare",
+    "colour": "#D09425",
+    "sortOrder": 705,
+    "parent": "kids"
+  },
+  {
+    "slug": "kid-education",
+    "label": "Kid Education",
+    "colour": "#CC5CC6",
+    "sortOrder": 706,
+    "parent": "kids"
+  },
+  {
+    "slug": "kid-activities",
+    "label": "Kid Activities",
+    "colour": "#25D0BF",
+    "sortOrder": 707,
+    "parent": "kids"
+  },
+  {
+    "slug": "kid-gifts",
+    "label": "Kid Gifts",
+    "colour": "#5C6DCC",
+    "sortOrder": 708,
+    "parent": "kids"
+  },
+  {
+    "slug": "vet",
+    "label": "Vet Visits",
+    "colour": "#D0D025",
+    "sortOrder": 711,
+    "parent": "pets"
+  },
+  {
+    "slug": "pet-food",
+    "label": "Food and Treats",
+    "colour": "#A12167",
+    "sortOrder": 712,
+    "parent": "pets"
+  },
+  {
+    "slug": "pet-sitting",
+    "label": "Pet Sitting",
+    "colour": "#CC785C",
+    "sortOrder": 713,
+    "parent": "pets"
+  },
+  {
+    "slug": "pet-medication",
+    "label": "Medication",
+    "colour": "#21A167",
+    "sortOrder": 714,
+    "parent": "pets"
+  },
+  {
+    "slug": "pet-toys",
+    "label": "Pet Toys",
+    "colour": "#CC5C78",
+    "sortOrder": 715,
+    "parent": "pets"
+  },
+  {
+    "slug": "tuition-fees",
+    "label": "Tuition and Fees",
+    "colour": "#9425D0",
+    "sortOrder": 721,
+    "parent": "education"
+  },
+  {
+    "slug": "books-supplies",
+    "label": "Books and Supplies",
+    "colour": "#A16721",
+    "sortOrder": 722,
+    "parent": "education"
   },
   {
     "slug": "unsorted",

@@ -50,12 +50,27 @@ const BY_DETAILED: Record<string, string> = {
   // and different money, from sitting down. Restaurants are not: they stay in
   // Dining & Drinks, which is the category that exists to hold them.
   FOOD_AND_DRINK_FAST_FOOD: "fast-food",
-  GENERAL_MERCHANDISE_PET_SUPPLIES: "pets",
+  /* ── Kids, Pets and Education used to be leaves under Family ───────────
+   *
+   * They are categories in their own right now, each with its own children,
+   * and these three codes have to be re-pointed at a LEAF rather than at the
+   * parent they became.
+   *
+   * This is not cosmetic. Only leaves are budgeted -- buildShapedPlan skips
+   * anything without a parent -- so a code still aimed at "pets" would file
+   * real spending into a category the planner never looks at, and the money
+   * would appear in every total while being planned for by nothing.
+   *
+   * Nothing needs migrating for it. Categories resolve at read time, so
+   * re-pointing a code moves the whole of history with it: every vet bill
+   * ever synced lands in Vet Visits the next time it is read. */
+  GENERAL_MERCHANDISE_PET_SUPPLIES: "pet-food",
+  MEDICAL_VETERINARY_SERVICES: "vet",
   RENT_AND_UTILITIES_RENT: "housing",
   RENT_AND_UTILITIES_INTERNET_AND_CABLE: "utilities",
   GENERAL_SERVICES_INSURANCE: "insurance",
-  GENERAL_SERVICES_EDUCATION: "education",
-  GENERAL_SERVICES_CHILDCARE: "kids",
+  GENERAL_SERVICES_EDUCATION: "tuition-fees",
+  GENERAL_SERVICES_CHILDCARE: "daycare",
   GENERAL_SERVICES_ACCOUNTING_AND_FINANCIAL_PLANNING: "business",
   // Interest you pay is an obligation, not a bank fee — and it is emphatically
   // not the same thing as interest you earn.
@@ -71,6 +86,13 @@ const BY_DETAILED: Record<string, string> = {
   GENERAL_MERCHANDISE_DEPARTMENT_STORES: "general-stores",
   GENERAL_MERCHANDISE_DISCOUNT_STORES: "general-stores",
   GENERAL_MERCHANDISE_CONVENIENCE_STORES: "general-stores",
+  /* What was bought, where Plaid says so. These three used to fall through to
+     General Stores, which is where a purchase goes when nothing is known about
+     it -- and a wardrobe, a laptop and a set of golf clubs are three different
+     decisions that happen to share a shop. */
+  GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES: "clothing",
+  GENERAL_MERCHANDISE_ELECTRONICS: "electronics",
+  GENERAL_MERCHANDISE_SPORTING_GOODS: "hobbies",
 
   // Entertainment. A subscription is a standing commitment and a night out is
   // a decision, so they are worth seeing apart.
@@ -88,6 +110,16 @@ const BY_DETAILED: Record<string, string> = {
   TRANSPORTATION_TAXIS_AND_RIDE_SHARES: "rideshare",
   TRAVEL_FLIGHTS: "airlines",
   LOAN_PAYMENTS_CAR_PAYMENT: "car-payment",
+
+  /* Work on the house, which is not the same money as living in it. All four
+     of these used to reach Housing through the primary below, and Housing is
+     where the rent or the mortgage lives -- the one line in the ledger that
+     never moves. Mixing a new roof into it made the steadiest figure anybody
+     has look like it wandered. */
+  HOME_IMPROVEMENT_HARDWARE: "maintenance",
+  HOME_IMPROVEMENT_REPAIR_AND_MAINTENANCE: "maintenance",
+  HOME_IMPROVEMENT_FURNITURE: "maintenance",
+  HOME_IMPROVEMENT_SECURITY: "maintenance",
 };
 
 /**
@@ -118,7 +150,10 @@ const BY_PRIMARY: Record<string, string> = {
   GENERAL_MERCHANDISE: "general-stores",
   ENTERTAINMENT: "events",
   PERSONAL_CARE: "personal",
-  HOME_IMPROVEMENT: "housing",
+  /* Anything else under home improvement, for the same reason as the four
+     detailed codes above: it is work on the house, not the cost of having
+     one. */
+  HOME_IMPROVEMENT: "maintenance",
   RENT_AND_UTILITIES: "utilities",
   TRANSPORTATION: "transport",
   TRAVEL: "travel",
