@@ -24,6 +24,11 @@ struct BillingStatus: Decodable {
     /// when it is not — an account screen offering to sell something it cannot
     /// sell is worse than one that says nothing.
     let configured: Bool
+    /// The account id to attach to a purchase, so that Apple itself records
+    /// which account bought it and can say so later. Optional because an older
+    /// server does not send one, and a purchase without it still works — it
+    /// just falls back to first-claim-wins on the server.
+    let accountToken: UUID?
 
     var isActive: Bool { plan == "active" || plan == "trial" }
     var boughtOnApple: Bool { source == "apple" }
@@ -51,13 +56,13 @@ extension APIClient {
         try await get("/api/billing/status")
     }
 
-    /// Hand Apple's signed transaction to the server, which verifies the
-    /// signature itself and decides what it means.
+    /// Hand Apple's signed transaction to the server, which decides what it
+    /// means.
     ///
     /// The app deliberately does not read the payload and report what it found:
     /// anything the phone decodes it also could have written, and the question
-    /// this answers is who has paid. The server verifies the JWS against
-    /// Apple's chain and answers with the plan it has recorded.
+    /// this answers is who has paid. The server takes an identifier out of it
+    /// and asks Apple directly, then answers with the plan it has recorded.
     @discardableResult
     func sendAppleTransaction(_ jws: String) async throws -> AppleReceiptAccepted {
         try await send("POST", "/api/billing/apple", body: ["signedTransaction": jws])

@@ -31,6 +31,20 @@ final class SubscriptionStore {
     /// so the caller knows to re-read the plan.
     private(set) var changed = false
 
+    /// Which Bilancio account is buying, attached to the purchase as
+    /// StoreKit's `appAccountToken`.
+    ///
+    /// Apple stores it and hands it back in its own description of the
+    /// transaction, which is what lets the server be told by Apple — rather
+    /// than by this phone — whose subscription it is. Without one, an original
+    /// transaction id is just a number somebody might have learned, and the
+    /// server has nothing better than first-claim-wins to go on.
+    ///
+    /// Fetched rather than derived: the phone does not otherwise know the
+    /// account's id, and it must be exactly the id the server will compare it
+    /// against.
+    private var accountToken: UUID?
+
     /// Written in init, read in deinit, and nowhere else — `deinit` runs
     /// outside the actor, which is the whole reason this needs saying.
     nonisolated(unsafe) private var updates: Task<Void, Never>?
@@ -60,10 +74,15 @@ final class SubscriptionStore {
         problem = nil
         defer { loading = false }
         do {
+            /* Both together. The token is wanted before the first tap, not
+               after it -- attaching one to a purchase is only possible while
+               the purchase is being made. */
+            async let status = try? client.billingStatus()
+            async let fetched = Product.products(for: Self.productIDs)
+            accountToken = await status?.accountToken
             // Sorted by price so monthly comes before yearly without this
             // having to know which is which.
-            products = try await Product.products(for: Self.productIDs)
-                .sorted { $0.price < $1.price }
+            products = try await fetched.sorted { $0.price < $1.price }
         } catch {
             problem = error.localizedDescription
         }
@@ -74,7 +93,13 @@ final class SubscriptionStore {
         problem = nil
         defer { purchasing = nil }
         do {
-            switch try await product.purchase() {
+            /* No token means an older server, or a status call that failed.
+               The purchase still goes through -- refusing to sell somebody a
+               subscription because a side request did not answer would be a
+               poor trade. */
+            let options: Set<Product.PurchaseOption> =
+                accountToken.map { [.appAccountToken($0)] } ?? []
+            switch try await product.purchase(options: options) {
             case .success(let verification):
                 await hand(over: verification)
             case .userCancelled:
@@ -113,10 +138,11 @@ final class SubscriptionStore {
     /// Send the signed transaction to the server and let it decide.
     ///
     /// `jwsRepresentation` is handed over whether or not StoreKit says it
-    /// verified: the phone's opinion is not evidence, and the server checks the
-    /// signature against Apple's chain regardless. Finishing only after the
-    /// server has taken it means a transaction survives a failed request and is
-    /// delivered again rather than being dropped on the floor.
+    /// verified: the phone's opinion is not evidence. The server does not
+    /// believe the payload either — it takes the transaction id out of it and
+    /// asks Apple. Finishing only after the server has taken it means a
+    /// transaction survives a failed request and is delivered again rather than
+    /// being dropped on the floor.
     private func hand(over result: VerificationResult<Transaction>) async {
         do {
             _ = try await client.sendAppleTransaction(result.jwsRepresentation)

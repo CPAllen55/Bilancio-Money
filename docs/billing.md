@@ -1,7 +1,6 @@
 # Billing
 
-Two processors, one column. This document is the contract between them, and
-the brief for the iOS half, which does not exist yet.
+Two processors, one column. This document is the contract between them.
 
 ## Why there are two
 
@@ -81,26 +80,27 @@ STRIPE_PRICE_MONTHLY     price_…   — not prod_…
 STRIPE_PRICE_YEARLY      price_…
 ```
 
-## The iOS half — built, except the endpoint it calls
-
-The app is written. `POST /api/billing/apple` is not, so a purchase completes
-at Apple, is handed over, and the request fails — which leaves the transaction
-unfinished and therefore redelivered, so nothing is lost while that endpoint is
-missing. Writing it is the remaining half, and it wants a real sandbox
-transaction to verify against.
-
-### What the app builds
+## The iOS half
 
 StoreKit 2, two auto-renewable subscriptions in one subscription group so a
 user can move between monthly and yearly without holding both.
 
-1. Fetch products, show prices **from StoreKit** — never hard-coded, because
-   Apple localises and converts them.
-2. On purchase, and on `Transaction.updates`, send the signed transaction to
-   the server (below) and refresh entitlement from `/api/billing/status`.
-3. Offer **Restore Purchases**. Apple rejects subscription apps without it.
-4. Read `canSubscribeHere` from `/api/billing/status` rather than deciding
-   locally, so the rule lives in one place.
+`API/Subscriptions.swift` — products fetched by id, prices read **from
+StoreKit** rather than hard-coded (Apple localises and converts them),
+`Transaction.updates` listened to from birth so renewals and purchases made on
+another device arrive, and Restore, which Apple requires.
+
+`API/Billing.swift` — `GET /api/billing/status`, and the handover below.
+
+`Views/SubscriptionView.swift` — More → Subscription. Shows the plan and when
+it runs out; offers the products only when the server says billing is
+configured and this device may sell; shows an Apple subscriber where to cancel
+and gives them no button; says nothing about price or checkout anywhere else.
+
+The signed transaction is handed over whether or not StoreKit says it verified,
+and the local transaction is finished only after the server has accepted it.
+The phone's opinion is not evidence, and a transaction dropped because a
+request failed is a person who paid and cannot prove it.
 
 ### What the app must not do
 
@@ -112,56 +112,106 @@ user can move between monthly and yearly without holding both.
   subscription is cancelled through Apple; `/api/billing/portal` already
   answers 409 for an Apple subscriber, and the app should not ask.
 
-### What was built
+## The Apple half — Apple is asked, not believed
 
-`API/Subscriptions.swift` — StoreKit 2. Products fetched by id, prices read
-from StoreKit, `Transaction.updates` listened to from birth so renewals and
-purchases made on another device arrive, and Restore.
+| endpoint | auth | what it does |
+|---|---|---|
+| `POST /api/billing/apple` | user | `{signedTransaction}` → `{plan, planUntil}` |
+| `POST /api/billing/apple-notifications` | none needed | renewals, expiries, refunds |
 
-`API/Billing.swift` — `GET /api/billing/status`, and the call to the endpoint
-below.
+### Why no signature is verified anywhere
 
-`Views/SubscriptionView.swift` — More → Subscription. Shows the plan and when
-it runs out; offers the products only when the server says billing is
-configured and this device may sell; shows an Apple subscriber where to cancel
-and gives them no button; says nothing about price or checkout anywhere else.
+The obvious thing to do with StoreKit's JWS is check it: ES256, public key from
+the leaf certificate in the `x5c` header, chain walked to Apple's Root CA G3,
+validity windows checked at every hop. That is a real amount of cryptography,
+it is the code that decides who has paid, and it is wrong in ways nobody
+notices until somebody is already in for free.
 
-The signed transaction is handed over whether or not StoreKit says it
-verified, and the local transaction is finished only after the server has
-accepted it. The phone's opinion is not evidence, and a transaction dropped
-because a request failed is a person who paid and cannot prove it.
+So it is not written. Instead **every payload the server believes came back
+from `api.storekit.itunes.apple.com` over TLS**, in answer to a request signed
+with our own App Store Connect key. The certificate authenticating that
+connection is checked by the runtime, by people who do nothing else. That is a
+better chain of trust than one written here.
 
-### The server endpoint to add
+The rule that follows shapes `src/apple.ts` and both routes:
+
+> A payload that arrived from a phone is a **pointer**, never evidence.
+
+It is read exactly far enough to get an `originalTransactionId` out of it, and
+that id is then put to Apple. A phone that lies about its payload has managed
+to ask a question.
+
+The same reasoning is why the notifications endpoint needs no signature check.
+Nothing in a notification is believed either: it is read for a transaction id,
+that id is put to Apple in a fresh request, and what Apple answers is what gets
+written. A forged notification achieves either nothing (an id Apple does not
+know) or the truth about a subscription — which is what would have been written
+anyway. That is a stronger position than a verified webhook whose contents are
+then trusted.
+
+### Whose subscription it is
+
+An original transaction id is not a secret, so "I know this id" must not mean
+"this is mine". Two things stand between them:
+
+1. **`appAccountToken`.** The app attaches the account's `users.id` — already a
+   UUID, which is the form Apple requires — to the purchase. Apple stores it
+   and returns it in *its own* description of the transaction. When it is
+   there it settles the question, because Apple is the one saying it.
+2. **First claim wins**, for purchases made before the app started sending one.
+   A subscription already recorded against another account is refused with 409.
+
+### What counts as paid
+
+Apple's subscription status: 1 active, 3 billing retry, 4 grace period. `2`
+(expired) and `5` (revoked) do not, and a `revocationDate` ends access whatever
+the status says — a refund is Apple taking the money back, not a payment that
+will sort itself out. Billing retry and grace period keeping access is the same
+call as `past_due` on the Stripe side.
+
+Two guards on the way out, both about not making things worse:
+
+- **A comped account is never touched.** The id is recorded so the
+  subscription behind it is known when the comp ends; the plan is left alone.
+- **An expired transaction may only end the subscription it belongs to.**
+  Restoring on a new phone replays old transactions, and one from two years ago
+  must not knock somebody out of a trial or out of a Stripe subscription.
+
+### Environment
+
+Production is tried first and sandbox second, on a 404. There is no field that
+can be trusted to say which one a transaction came from — `environment` lives
+inside the payload we have decided not to trust — and an id is unknown in the
+other world, so the answer is unambiguous. A TestFlight build buys in sandbox
+and works without being told.
+
+### Bindings
+
+All four together, all optional; with any missing, `/api/billing/apple` answers
+503 and the app offers nothing.
 
 ```
-POST /api/billing/apple           auth: user
-  { "signedTransaction": "<JWS from StoreKit>" }
-  → { ok, plan, planUntil }
+APPLE_ISSUER_ID      the UUID shown on the key page
+APPLE_KEY_ID         10 characters
+APPLE_PRIVATE_KEY    the .p8 contents, whole, BEGIN and END lines included
+APPLE_BUNDLE_ID      com.bilanciomoney.Bilancio
 ```
 
-It must:
+The key is an **In-App Purchase** key — App Store Connect → Users and Access →
+Integrations → In-App Purchase — **not** an App Store Connect API key. They
+look identical, both download as a `.p8`, and the wrong one answers 401 to
+everything. The issuer id is on that same page and is not the same UUID as the
+App Store Connect API issuer id.
 
-1. Verify the JWS — ES256, public key from the leaf certificate in the `x5c`
-   header, chain terminating at Apple's Root CA G3.
-2. Check the `bundleId` matches, so a transaction signed for another app is
-   refused.
-3. Read `originalTransactionId` and `expiresDate`.
-4. Refuse if that `original_transaction_id` already belongs to a **different**
-   user — one purchase, one account, or a single family subscription unlocks
-   any number of them.
-5. Write `plan = "active"`, `plan_until = expiresDate`,
-   `billing_source = "apple"`, and the id.
+The `.p8` downloads once and cannot be downloaded again. It goes into
+`wrangler secret put APPLE_PRIVATE_KEY` and nowhere else — not into the repo,
+not into `.dev.vars` that gets committed, not pasted into a chat window.
 
-Plus `POST /api/billing/apple-notifications` for App Store Server
-Notifications V2, unauthenticated and verified the same way, handling
-`DID_RENEW`, `EXPIRED`, `DID_CHANGE_RENEWAL_STATUS` and `REFUND`.
-
-**Why this is not written yet.** The verification needs Apple's root
-certificate and a real signed payload to test against, and shipping untested
-signature verification on the path that decides who has paid is not a trade
-worth making. It should be written once the Mac can produce a sandbox
-transaction to verify against — with the certificate supplied as a binding,
-not pasted from memory into source.
+Point App Store Server Notifications V2 at
+`https://<host>/api/billing/apple-notifications` in App Store Connect → your
+app → General → App Information → App Store Server Notifications. Sandbox and
+production have separate URL fields; both want this one. The "send test
+notification" button answers `{ok: true, test: true}`.
 
 ### Sandbox testing
 
