@@ -262,6 +262,39 @@ for (const [idx, mo] of MONTHS.entries()) {
      "TRANSFER_OUT", "TRANSFER_OUT_ACCOUNT_TRANSFER");
 }
 
+/* ── The most recent day ────────────────────────────────────────────────────
+
+ * Five named merchants on the newest date in the ledger, rather than whatever
+ * the dice produced.
+ *
+ * The Transactions tab is newest-first, so this is the first screenful anybody
+ * sees — a new user on their first sync, and the App Store listing, which is
+ * screenshotted from this data. Left to chance the top of the list is as
+ * likely to be Sushi Ko and Local Roasters as anything recognisable, and an
+ * invented restaurant has no logo because no such restaurant exists.
+ *
+ * These five are the household names most likely to have a logo waiting in
+ * Plaid's CDN, and one from each of the categories a person actually looks at:
+ * a grocery shop, an online order, a warehouse run, fuel, a ride.
+ *
+ * Fixed amounts rather than jittered. Everything else in this file is random
+ * within a shape, which is right for two years of history and wrong for the
+ * one row somebody is going to photograph — a screenshot that changes every
+ * time it is retaken cannot be checked against anything.
+ *
+ * Dated TODAY, not a hard-coded day, so this stays the top of the list however
+ * long from now it is reseeded. */
+const HEADLINE = [
+  ["Whole Foods Market", 9240, "FOOD_AND_DRINK", "FOOD_AND_DRINK_GROCERIES"],
+  ["Amazon", 4715, "GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_ONLINE_MARKETPLACES"],
+  ["Costco", 18630, "GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_ONLINE_MARKETPLACES"],
+  ["Shell", 5180, "TRANSPORTATION", "TRANSPORTATION_GAS"],
+  ["Uber", 2340, "TRANSPORTATION", "TRANSPORTATION_TAXIS_AND_RIDE_SHARES"],
+];
+for (const [name, cents, primary, detailed] of HEADLINE) {
+  tx(CARD, TODAY, cents, name, primary, detailed);
+}
+
 /* The one-offs that must not become monthly budgets. Placed well inside the
    learning window and unmistakably singular — two of them, so a reader can see
    it is a rule rather than one lucky special case. */
@@ -447,8 +480,14 @@ try {
      them (Netflix, Spotify) usually have logos of their own anyway. */
   const RECENT = 30;
   const recent = [...rows].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, RECENT);
+  /* The headline five are named on purpose and are not up for swapping. If
+     Plaid has never sent a logo for one of them it shows a monogram, which is
+     the honest answer -- quietly turning Costco into Target because Target had
+     a picture would be answering a question nobody asked. */
+  const pinned = new Set(HEADLINE.map(([name]) => name));
   let dressed = 0;
   for (const r of recent) {
+    if (pinned.has(r.name)) continue;
     if (logoFor(r.name)) continue;
     const pool = POOL_OF[r.detailed];
     if (!pool) continue;
@@ -462,6 +501,11 @@ try {
 
   const matched = new Set(rows.map((r) => r.name).filter((n) => logoFor(n)));
   const top = recent.filter((r) => logoFor(r.name)).length;
+  const missing = HEADLINE.map(([n]) => n).filter((n) => !logoFor(n));
+  if (missing.length) {
+    console.log(`Note: no logo yet for ${missing.join(", ")} — ` +
+                "they will show a monogram. `npm run logos` lists what is available.");
+  }
   console.log(known.length
     ? `Logos: ${matched.size} of the demo's merchants matched one Plaid has already sent.\n` +
       `       ${top} of the newest ${recent.length} rows carry one` +
