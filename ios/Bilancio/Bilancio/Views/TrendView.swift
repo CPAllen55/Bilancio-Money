@@ -176,11 +176,30 @@ private struct CategoryTrendChart: View {
     }
 
     /// Slug to label and colour for whichever level is being drawn.
+    ///
+    /// Only the ones that actually happened. The category list is everybody's
+    /// list -- Pets and Kids are on it whether or not this person has either
+    /// -- and an empty category costs a colour in the scale, a capsule in the
+    /// drill strip and a row in the breakdown while saying nothing. Judged
+    /// across the whole fetched range rather than the visible window, so
+    /// categories do not appear and disappear as the chart is scrolled.
     private var visible: [TransactionsResponse.Category] {
-        if let drilled {
-            return categories.filter { $0.parentSlug == drilled }
+        let level = drilled == nil
+            ? categories.filter { $0.kind == "spend" && $0.parentSlug == nil }
+            : categories.filter { $0.parentSlug == drilled }
+        let spent = spentSlugs
+        return level.filter { spent.contains($0.slug) }
+    }
+
+    /// Every slug with money against it somewhere in the range, at whichever
+    /// level is being drawn.
+    private var spentSlugs: Set<String> {
+        var seen: Set<String> = []
+        for m in series {
+            let source = drilled == nil ? (m.byParent ?? [:]) : (m.byCategory ?? [:])
+            for (slug, cents) in source where cents > 0 { seen.insert(slug) }
         }
-        return categories.filter { $0.kind == "spend" && $0.parentSlug == nil }
+        return seen
     }
 
     /// One bar segment: a month, a category, and the money in it.
