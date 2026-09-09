@@ -24,7 +24,12 @@ extension APIClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["email": email])
+        /* Which of the two front doors this came through. The list is read by
+           somebody deciding who to invite, and "asked from the app" and "asked
+           from the website" are not the same signal. */
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: ["email": email, "source": "ios"],
+        )
 
         let data: Data
         let response: URLResponse

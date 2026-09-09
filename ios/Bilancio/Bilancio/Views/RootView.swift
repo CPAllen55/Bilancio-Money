@@ -136,10 +136,11 @@ private struct SignedOutView: View {
              * people who had just decided to try it.
              */
             VStack(spacing: 4) {
-                Text("Bilancio is invitation only for now.")
+                Text("Bilancio is opening gradually. Join the waitlist and we'll be in touch.")
                     .font(Theme.note)
                     .foregroundStyle(.secondary)
-                Button("Ask for an invitation") { joining = true }
+                    .multilineTextAlignment(.center)
+                Button("Join the waitlist") { joining = true }
                     .font(Theme.note)
             }
             .padding(.top, 20)
@@ -200,7 +201,7 @@ private struct WaitlistView: View {
                     }
                 }
             }
-            .navigationTitle("Ask for an invitation")
+            .navigationTitle("Join the waitlist")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
