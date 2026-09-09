@@ -65,6 +65,16 @@ knowing the source is what makes that check possible. Both checks are in
 | `POST /api/billing/stripe-webhook` | **signature** | grants and revokes |
 | `GET /api/billing/status` | user | plan, when it ends, where it is managed |
 
+`status` answers **per caller**. A purchase made inside the iOS app has to go
+through Apple and one made in a browser goes through Stripe, so "is billing
+switched on" has two different answers; `configured` and `canSubscribeHere`
+reflect the Apple bindings when the caller sends `X-Bilancio-Client: ios` and
+the Stripe ones otherwise. The header is a hint and is treated as one — nothing
+is granted by it, and the worst a lie achieves is being shown the wrong thing
+to buy. This is what lets the app ship before the Apple secrets exist: the
+subscription screen shows the plan and offers nothing, rather than offering
+products App Store Connect does not yet have.
+
 The webhook is unauthenticated by necessity — Stripe has no session — and
 therefore signature-verified before a byte of it is believed. It reads
 `req.text()`, never `req.json()`: the signature is over the bytes Stripe sent

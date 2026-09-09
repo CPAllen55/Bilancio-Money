@@ -313,17 +313,33 @@ billing.get("/billing/status", async (c) => {
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
 
+    /* Which processor this caller would be buying through.
+     *
+     * Not a preference: a purchase made inside the iOS app has to go through
+     * Apple (guideline 3.1.1) and one made in a browser goes through Stripe,
+     * so "is billing switched on" has two different answers depending on who
+     * is asking. Answered here rather than in each client, so the rule lives
+     * in one place -- which is what the field below has always promised and
+     * did not previously do.
+     *
+     * The header is a hint from the caller and is treated as one. Nothing is
+     * granted by it; the worst a lie achieves is being shown the wrong thing
+     * to buy, and the purchase itself is verified either way. */
+    const onApple = c.req.header("x-bilancio-client") === "ios";
+    const sellable = onApple ? appleConfigured(c.env) : !!c.env.STRIPE_SECRET_KEY;
+
     return c.json({
       ok: true,
       plan: auth.user.plan,
       planUntil: auth.user.planUntil,
       source: auth.user.billingSource ?? null,
-      /* Whether this device can sell. The web can; the iOS app must not, and
-         reads this rather than deciding for itself, so the rule lives in one
-         place if it ever changes. */
-      canSubscribeHere: true,
+      /* Whether this device can sell, to this caller. False on iOS until the
+         Apple bindings are set, which is what lets the app ship with the
+         subscription screen showing a plan and offering nothing -- rather
+         than offering products that App Store Connect does not yet have. */
+      canSubscribeHere: sellable,
       manageAt: auth.user.billingSource === "apple" ? "apple" : "stripe",
-      configured: !!c.env.STRIPE_SECRET_KEY || appleConfigured(c.env),
+      configured: sellable,
       /* Handed to StoreKit as the purchase's appAccountToken, so that Apple
          itself will later tell us which account bought it. It is the user id
          and nothing more secret than that -- the caller is already
