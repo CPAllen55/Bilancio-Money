@@ -18,8 +18,8 @@ an auto-renewable subscription.
 **Promotional text** (170, editable without a new build)
 
 ```
-Simple, intuitive, effective. Every account in one place, sorted the way you
-actually think about money — and a plan you can see yourself keeping.
+Simple, intuitive, effective. See where the money actually goes, then set a
+plan that keeps you on track to what you are saving for.
 ```
 
 *Effective rather than powerful.* Powerful is the most overused word on the
@@ -45,10 +45,17 @@ budget,spending,expenses,tracker,finance,bank,transactions,networth,categories,s
 **Description**
 
 ```
-Simple, intuitive, effective — one place to see your own money clearly.
+Simple, intuitive, effective — take control of your money with insight you
+can act on and a plan that keeps you on track.
 
-Bilancio Money connects to your accounts, sorts what comes in and goes out,
-and shows you whether the month is going the way you meant it to.
+Most people do not overspend because they are careless. They overspend
+because nobody ever showed them where it was going.
+
+Bilancio Money connects to your accounts and shows you exactly that: not a pie
+chart of last month, but two years of it, down to the shop and the day. Then
+it turns what it learns into a budget built from what you actually spend
+rather than a number you guessed — so the plan is one you can keep, and
+keeping it is what gets you where you are going.
 
 It cannot move your money, spend it, or touch it. It reads.
 
@@ -61,7 +68,8 @@ figure. Pinch to zoom, drag to scroll, and turn on Last Year to run a line
 through the bars showing where you stood at the same point twelve months ago.
 
 Budgeting — a plan per subcategory, built from what you actually spend rather
-than a number you guessed. Open the chart on its own and drag a month up or
+than a number you guessed, so it is a plan you can keep. Watch each month
+against it as it happens. Open the chart on its own and drag a month up or
 down to set it by hand.
 
 Transactions — search, filter, and split a single purchase across categories.
