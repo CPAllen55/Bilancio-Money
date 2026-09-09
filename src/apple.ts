@@ -327,3 +327,79 @@ export async function subscriptionStatus(
 
   return null;
 }
+
+/* ------------------------------------------------------------- self-test -- */
+
+/** What is wrong with the Apple setup, said without saying any of it. */
+export interface AppleCheck {
+  /** Which bindings are present. Names only -- never a value, not even a
+      prefix: this is reachable over the network and a secret that is half
+      printed is still a secret that has been printed. */
+  present: Record<string, boolean>;
+  /** Whether the .p8 imports as a P-256 key in PKCS#8 form. False means the
+      wrong file, or a key that lost its BEGIN/END lines on the way in. */
+  keyReadable: boolean;
+  /** Whether Apple accepted the credentials. This is the one that catches an
+      App Store Connect API key used where an In-App Purchase key belongs --
+      the failure that otherwise waits until the first real purchase. */
+  appleAccepts: boolean | null;
+  /** What to do about it, if anything. */
+  says: string;
+}
+
+/**
+ * Ask Apple a question we know the answer to.
+ *
+ * The transaction id below is deliberately not a real one, so the interesting
+ * part is not the answer but which failure comes back. A 404 from both
+ * environments means Apple read the token, checked it, and simply does not
+ * know that id -- which is exactly what a working key looks like. A 401 means
+ * it never got that far.
+ *
+ * Nothing is written and nothing is charged; this is a read against an id that
+ * cannot exist.
+ */
+export async function selfTest(env: Env): Promise<AppleCheck> {
+  const present = {
+    APPLE_ISSUER_ID: !!env.APPLE_ISSUER_ID,
+    APPLE_KEY_ID: !!env.APPLE_KEY_ID,
+    APPLE_PRIVATE_KEY: !!env.APPLE_PRIVATE_KEY,
+    APPLE_BUNDLE_ID: !!env.APPLE_BUNDLE_ID,
+  };
+  const missing = Object.entries(present).filter(([, v]) => !v).map(([k]) => k);
+  if (missing.length) {
+    return {
+      present, keyReadable: false, appleAccepts: null,
+      says: `Not set yet: ${missing.join(", ")}. All four are needed together.`,
+    };
+  }
+
+  try { await signingKey(env); }
+  catch (err) {
+    return {
+      present, keyReadable: false, appleAccepts: null,
+      says: err instanceof AppleError ? err.message
+          : "The Apple private key could not be read.",
+    };
+  }
+
+  try {
+    await subscriptionStatus(env, "1");
+    return {
+      present, keyReadable: true, appleAccepts: true,
+      says: "Apple accepted the key. Everything here is set up correctly.",
+    };
+  } catch (err) {
+    const message = err instanceof AppleError ? err.message : String(err);
+    const rejected = message.includes("rejected our credentials");
+    return {
+      present, keyReadable: true, appleAccepts: rejected ? false : null,
+      says: rejected
+        ? "Apple rejected the key. Almost always an App Store Connect API key " +
+          "where an In-App Purchase key belongs -- they look identical. Check " +
+          "the key came from Users and Access, Integrations, In-App Purchase, " +
+          "and that the issuer id is the one shown on that same page."
+        : `Could not finish the check: ${message}`,
+    };
+  }
+}
