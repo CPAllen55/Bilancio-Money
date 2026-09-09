@@ -340,34 +340,61 @@ export async function subscriptionStatus(
 
 /* ------------------------------------------------------------- self-test -- */
 
-/** What is wrong with the Apple setup, said without saying any of it. */
+/** What is wrong with the Apple setup, said without saying the one secret. */
 export interface AppleCheck {
-  /** Which bindings are present. Names only -- never a value, not even a
-      prefix: this is reachable over the network and a secret that is half
-      printed is still a secret that has been printed. */
+  /** Which bindings are present. */
   present: Record<string, boolean>;
-  /** Whether the .p8 imports as a P-256 key in PKCS#8 form. False means the
-      wrong file, or a key that lost its BEGIN/END lines on the way in. */
+  /* The two identifiers, printed.
+   *
+   * Deliberate, and a narrower rule than "never print a value". A key id and a
+   * bundle id are not credentials -- Apple prints the key id in the filename
+   * it hands you and shows it in its own UI, and the bundle id is in the
+   * binary and on the App Store. Neither signs anything. The private key is
+   * the secret, and it is not here.
+   *
+   * Printed because the likeliest failure is a key id that does not match the
+   * key, and comparing two strings by eye takes seconds where guessing takes
+   * an evening. */
+  keyId: string | null;
+  bundleId: string | null;
+  /** Whether the issuer id is even shaped like the UUID Apple issues. */
+  issuerLooksRight: boolean;
+  /** Whether the .p8 imports as a P-256 key in PKCS#8 form. */
   keyReadable: boolean;
-  /** Whether Apple accepted the credentials. This is the one that catches an
-      App Store Connect API key used where an In-App Purchase key belongs --
-      the failure that otherwise waits until the first real purchase. */
+  /* What each of Apple's two worlds made of the token. "accepted" means Apple
+     read it, checked it, and answered about the id -- which is all we need to
+     know. Both are probed rather than stopping at the first refusal, because
+     which ones refuse is the thing that separates a wrong key id from an
+     account that cannot use the API yet. */
+  production: string;
+  sandbox: string;
   appleAccepts: boolean | null;
-  /** What to do about it, if anything. */
   says: string;
 }
 
+/** One host's verdict on our token, from the status code alone. */
+async function probe(host: string, token: string): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(`${host}/inApps/v1/subscriptions/1`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (err) {
+    return `unreachable: ${(err as Error).message}`;
+  }
+  // 404 is the expected answer: the token was read and the id does not exist.
+  if (res.status === 404 || res.ok) return "accepted";
+  if (res.status === 401) return "rejected";
+  const body = await res.text().catch(() => "");
+  return `http ${res.status}${body ? `: ${body.slice(0, 200)}` : ""}`;
+}
+
 /**
- * Ask Apple a question we know the answer to.
+ * Ask Apple a question we know the answer to, in both of its worlds.
  *
- * The transaction id below is deliberately not a real one, so the interesting
- * part is not the answer but which failure comes back. A 404 from both
- * environments means Apple read the token, checked it, and simply does not
- * know that id -- which is exactly what a working key looks like. A 401 means
- * it never got that far.
- *
- * Nothing is written and nothing is charged; this is a read against an id that
- * cannot exist.
+ * The transaction id is deliberately not a real one, so the interesting part
+ * is not the answer but which failure comes back, and from where. Nothing is
+ * written and nothing is charged.
  */
 export async function selfTest(env: Env): Promise<AppleCheck> {
   const present = {
@@ -376,46 +403,69 @@ export async function selfTest(env: Env): Promise<AppleCheck> {
     APPLE_PRIVATE_KEY: !!env.APPLE_PRIVATE_KEY,
     APPLE_BUNDLE_ID: !!env.APPLE_BUNDLE_ID,
   };
+  const keyId = env.APPLE_KEY_ID ?? null;
+  const bundleId = env.APPLE_BUNDLE_ID ?? null;
+  const issuerLooksRight = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    .test(env.APPLE_ISSUER_ID ?? "");
+
+  const base = {
+    present, keyId, bundleId, issuerLooksRight,
+    keyReadable: false, production: "not tried", sandbox: "not tried",
+    appleAccepts: null as boolean | null,
+  };
+
   const missing = Object.entries(present).filter(([, v]) => !v).map(([k]) => k);
   if (missing.length) {
-    return {
-      present, keyReadable: false, appleAccepts: null,
-      says: `Not set yet: ${missing.join(", ")}. All four are needed together.`,
-    };
+    return { ...base, says: `Not set yet: ${missing.join(", ")}. All four are needed together.` };
+  }
+  if (!issuerLooksRight) {
+    return { ...base, says:
+      "APPLE_ISSUER_ID is not a UUID. It should look like " +
+      "69a6de70-....-....-....-............ and is shown above the key list " +
+      "on Users and Access, Integrations, In-App Purchase." };
   }
 
-  try { await signingKey(env); }
-  catch (err) {
-    return {
-      present, keyReadable: false, appleAccepts: null,
-      says: err instanceof AppleError ? err.message
-          : "The Apple private key could not be read.",
-    };
-  }
-
+  let token: string;
   try {
-    await subscriptionStatus(env, "1");
-    return {
-      present, keyReadable: true, appleAccepts: true,
-      says: "Apple accepted the key. Everything here is set up correctly.",
-    };
+    await signingKey(env);
+    token = await bearer(env);
   } catch (err) {
-    const message = err instanceof AppleError ? err.message : String(err);
-    const rejected = message.includes("rejected our credentials");
-    return {
-      present, keyReadable: true, appleAccepts: rejected ? false : null,
-      says: rejected
-        ? "Apple rejected the key. The key itself is well-formed, so this is " +
-          "a mismatch between the three, or an account that cannot use the " +
-          "API yet. In order of likelihood: (1) APPLE_KEY_ID is not the ten " +
-          "characters in the .p8's own filename, SubscriptionKey_XXXXXXXXXX" +
-          ".p8; (2) APPLE_ISSUER_ID was copied from the App Store Connect API " +
-          "section rather than the In-App Purchase one, which shows its own; " +
-          "(3) the secret was edited but not redeployed, so the Worker still " +
-          "holds the old value; (4) the Paid Applications Agreement is not " +
-          "Active yet, which is worth ruling the others out before assuming. " +
-          `Apple said: ${message}`
-        : `Could not finish the check: ${message}`,
-    };
+    return { ...base, says: err instanceof AppleError ? err.message
+      : "The Apple private key could not be read." };
   }
+
+  const [production, sandbox] = await Promise.all([
+    probe(HOSTS[0], token), probe(HOSTS[1], token),
+  ]);
+  const result = { ...base, keyReadable: true, production, sandbox };
+  const good = production === "accepted" || sandbox === "accepted";
+
+  if (production === "accepted" && sandbox === "accepted") {
+    return { ...result, appleAccepts: true,
+      says: "Apple accepted the key in both environments. This is set up correctly." };
+  }
+  if (good) {
+    /* One world and not the other. The credentials are therefore right --
+       they are the same credentials -- and what differs is what the account
+       is allowed to do, which is the agreement. */
+    return { ...result, appleAccepts: true, says:
+      `Apple accepted the key in ${production === "accepted" ? "production" : "sandbox"} ` +
+      `and not the other, which means the key itself is right. That is an ` +
+      `account-level difference, not a configuration one -- most likely the ` +
+      `Paid Applications Agreement is not Active yet. Nothing here to fix.` };
+  }
+  if (production === "rejected" && sandbox === "rejected") {
+    return { ...result, appleAccepts: false, says:
+      `Apple rejected the key in both environments, so this is the three ` +
+      `values not matching each other. Check, in this order: (1) APPLE_KEY_ID ` +
+      `is "${keyId}" here -- it must be the ten characters in the .p8's own ` +
+      `filename, SubscriptionKey_XXXXXXXXXX.p8; (2) APPLE_ISSUER_ID was taken ` +
+      `from the In-App Purchase section, which shows its own, not the App ` +
+      `Store Connect API one; (3) the secret was edited but not redeployed, ` +
+      `so the Worker still holds the old value. A key generated in the last ` +
+      `few minutes can also need time to propagate.` };
+  }
+  return { ...result, appleAccepts: null, says:
+    `Could not finish the check. Production said "${production}", sandbox ` +
+    `said "${sandbox}".` };
 }
