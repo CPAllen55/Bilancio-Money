@@ -159,6 +159,48 @@ const DINERS  = ["Torchy's Tacos", "Olive Garden", "Thai Kitchen", "Shake Shack"
 const FUEL    = ["Shell", "Chevron", "Buc-ee's"];
 const SHOPS   = ["Amazon", "Target", "Costco"];
 
+/* ── A household with children ──────────────────────────────────────────────
+ *
+ * Kids is where the new taxonomy earns its keep, and it is the part of the
+ * ledger a parent recognises fastest: the same figure every month for care,
+ * a lump in August, and a fortnight in July when everything stops.
+ *
+ * The shapes are the point, not the amounts. After-school care is the steady
+ * one -- the same 520 on the same day for ten months and nothing at all in
+ * June and July -- which is what the engine should find as a commitment and
+ * what a reader should recognise without being told. School supplies and
+ * clothing spike once in August and go quiet. Activities run in terms.
+ * Babysitting is genuinely irregular. The doctor and the birthday presents
+ * turn up a few times a year.
+ *
+ * Total is about 830 a month against 7,200 of income, on top of roughly 3,580
+ * of everything else -- so the household still keeps something, which is the
+ * figure the product is for. A demo where the money runs out teaches nothing.
+ *
+ * ── Why these need merchant rules ──────────────────────────────────────────
+ *
+ * Plaid has one code that reaches any of this: GENERAL_SERVICES_CHILDCARE,
+ * which files to Daycare. There is no code for kid clothing as against
+ * clothing, or a child's dance class as against an evening out. So each of
+ * these merchants gets a rule, which is exactly what a parent would do on
+ * their first month with the app -- file the dance studio once and never
+ * think about it again.
+ *
+ * It also means the demo exercises the rule path rather than only the
+ * classifier, which is worth having in the data somebody is shown. */
+const KID_RULES = {
+  "Bright Beginnings Academy": "daycare",
+  "Sitters Now":               "babysitting",
+  "Carter's":                  "kid-clothing",
+  "The Children's Place":      "kid-clothing",
+  "Lakeshore Learning":        "kid-supplies",
+  "Pediatric Partners":        "kid-health",
+  "Kumon Learning Center":     "kid-education",
+  "Center Stage Dance":        "kid-activities",
+  "Riverbend Soccer Club":     "kid-activities",
+  "The Toy Chest":             "kid-gifts",
+};
+
 /* The pool a row was drawn from, recoverable afterwards from its Plaid
    category. Used to swap a merchant for a sibling without changing what kind
    of spending the row is — see the logo pass. */
@@ -224,6 +266,63 @@ for (const [idx, mo] of MONTHS.entries()) {
   if (chance(0.6)) {
     tx(CARD, dayIn(mo, 5 + Math.floor(rnd() * 20)), jitter(2300, 0.5), "Uber",
        "TRANSPORTATION", "TRANSPORTATION_TAXIS_AND_RIDE_SHARES");
+  }
+
+  /* ── Children ─────────────────────────────────────────────────────────
+     The school year runs August to May. Everything that follows the calendar
+     stops for June and July, which is the shape a parent will look for. */
+  const inSchool = monthNo >= 8 || monthNo <= 5;
+
+  if (inSchool) {
+    /* The steadiest line in the ledger after the rent. Same day, same
+       amount, ten months of the year -- a commitment with two months off,
+       which is a shape nothing else in this file has. */
+    tx(CHECKING, dayIn(mo, 3), 52000, "Bright Beginnings Academy",
+       "GENERAL_SERVICES", "GENERAL_SERVICES_CHILDCARE");
+  }
+  if (monthNo >= 9 || monthNo <= 5) {
+    tx(CARD, dayIn(mo, 11), 16000, "Kumon Learning Center",
+       "GENERAL_SERVICES", "GENERAL_SERVICES_EDUCATION");
+    tx(CARD, dayIn(mo, 14), 7500, "Center Stage Dance",
+       "ENTERTAINMENT", "ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS");
+  }
+  /* Registration, twice a year, in the month the season opens. */
+  if (monthNo === 3 || monthNo === 8) {
+    tx(CARD, dayIn(mo, 6), jitter(11500, 0.12), "Riverbend Soccer Club",
+       "ENTERTAINMENT", "ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS");
+  }
+
+  /* Back to school: one August, visible from across the room. */
+  if (monthNo === 8) {
+    tx(CARD, dayIn(mo, 9),  jitter(18500, 0.15), "Lakeshore Learning",
+       "GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_SUPERSTORES");
+    tx(CARD, dayIn(mo, 11), jitter(16500, 0.2), "Carter's",
+       "GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES");
+  }
+  if (monthNo === 1) {
+    tx(CARD, dayIn(mo, 14), jitter(4500, 0.3), "Lakeshore Learning",
+       "GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_SUPERSTORES");
+  }
+  /* Children grow out of things at no particular time of year. */
+  if (chance(0.45)) {
+    tx(CARD, dayIn(mo, 4 + Math.floor(rnd() * 22)), jitter(6200, 0.4),
+       chance(0.5) ? "Carter's" : "The Children's Place",
+       "GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES");
+  }
+
+  /* Irregular by nature: some months twice, some not at all. */
+  for (let i = 0; i < Math.floor(rnd() * 3); i++) {
+    tx(CHECKING, dayIn(mo, 5 + Math.floor(rnd() * 21)), jitter(7500, 0.25),
+       "Sitters Now", "GENERAL_SERVICES", "GENERAL_SERVICES_CHILDCARE");
+  }
+  if (chance(0.3)) {
+    tx(CARD, dayIn(mo, 8 + Math.floor(rnd() * 16)), jitter(4200, 0.5),
+       "Pediatric Partners", "MEDICAL", "MEDICAL_PRIMARY_CARE");
+  }
+  /* A birthday in April, and December. */
+  if (monthNo === 4 || monthNo === 12) {
+    tx(CARD, dayIn(mo, 16), jitter(monthNo === 12 ? 19500 : 12000, 0.2),
+       "The Toy Chest", "GENERAL_MERCHANDISE", "GENERAL_MERCHANDISE_SUPERSTORES");
   }
 
   /* Odds and ends. */
@@ -338,6 +437,14 @@ try {
 
   if (mode === "clear") {
     await confirmProduction(`Remove the demo bank from ${email}.`);
+    /* The rules go too. Left behind, they would sit waiting to re-file a real
+       bank's transactions into categories chosen for invented children. */
+    const ruled = await client.query(
+      `delete from merchant_rules where user_id = $1 and match_key = any($2::text[])`,
+      [user.id, Object.keys(KID_RULES).map((n) => n.toLowerCase()
+        .replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim())],
+    );
+    if (ruled.rowCount) console.log(`Removed ${ruled.rowCount} demo merchant rule(s).`);
     const res = await client.query(
       `delete from items where user_id = $1 and plaid_item_id = $2`,
       [user.id, itemPlaidId],
@@ -538,6 +645,56 @@ try {
        on conflict (plaid_transaction_id) do nothing`,
       params,
     );
+  }
+
+  /* ── The rules that put the children's spending where it belongs ────────
+
+     Plaid has exactly one code that reaches any of this -- CHILDCARE, which
+     files to Daycare. Without a rule, the dance class lands in Events, the
+     school supplies in General Stores and the clothes in Clothing: all
+     defensible readings of a bank feed, and none of them what a parent means.
+
+     So the demo files them, the way a parent would in their first week. The
+     key is normalised on the way in exactly as merchantKey would, so a rule
+     written here matches by the same test that matches a real one.
+
+     Category ids are looked up rather than assumed: these subcategories only
+     exist after the taxonomy has been seeded, and a missing one should say so
+     rather than write a rule pointing at nothing. */
+  const flat = (s) => String(s || "").toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\b\d{3,}\b/g, " ")
+    .replace(/(?:\s+\d{1,2})+\s*$/, " ")
+    .replace(/\s+/g, " ").trim();
+
+  const wanted = [...new Set(Object.values(KID_RULES))];
+  const { rows: cats } = await client.query(
+    `select id, slug from categories
+      where user_id is null and archived_at is null and slug = any($1::text[])`,
+    [wanted],
+  );
+  const idBySlug = new Map(cats.map((r) => [r.slug, r.id]));
+  const absent = wanted.filter((s) => !idBySlug.has(s));
+
+  if (absent.length) {
+    console.log(
+      `\nSkipped the children's merchant rules: ${absent.join(", ")} ` +
+      "do not exist yet.\nRun `npm run db:migrate" +
+      (target === "prod" ? ":prod" : "") + "` to seed the taxonomy, then seed again.",
+    );
+  } else {
+    for (const [name, slug] of Object.entries(KID_RULES)) {
+      await client.query(
+        `insert into merchant_rules (user_id, match_key, display_name, category_id)
+         values ($1, $2, $3, $4)
+         on conflict (user_id, match_key)
+         do update set category_id = excluded.category_id,
+                       display_name = excluded.display_name`,
+        [user.id, flat(name), name, idBySlug.get(slug)],
+      );
+    }
+    console.log(`Filed ${Object.keys(KID_RULES).length} children's merchants ` +
+                `into ${wanted.length} subcategories.`);
   }
 
   const months = new Set(rows.map((r) => r.date.slice(0, 7)));
