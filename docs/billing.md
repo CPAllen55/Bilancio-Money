@@ -81,9 +81,13 @@ STRIPE_PRICE_MONTHLY     price_…   — not prod_…
 STRIPE_PRICE_YEARLY      price_…
 ```
 
-## The iOS half — not built
+## The iOS half — built, except the endpoint it calls
 
-This is the brief. Nothing here exists yet, and it needs the Mac.
+The app is written. `POST /api/billing/apple` is not, so a purchase completes
+at Apple, is handed over, and the request fails — which leaves the transaction
+unfinished and therefore redelivered, so nothing is lost while that endpoint is
+missing. Writing it is the remaining half, and it wants a real sandbox
+transaction to verify against.
 
 ### What the app builds
 
@@ -107,6 +111,25 @@ user can move between monthly and yearly without holding both.
 - No "manage subscription" button that calls the Stripe portal. An Apple
   subscription is cancelled through Apple; `/api/billing/portal` already
   answers 409 for an Apple subscriber, and the app should not ask.
+
+### What was built
+
+`API/Subscriptions.swift` — StoreKit 2. Products fetched by id, prices read
+from StoreKit, `Transaction.updates` listened to from birth so renewals and
+purchases made on another device arrive, and Restore.
+
+`API/Billing.swift` — `GET /api/billing/status`, and the call to the endpoint
+below.
+
+`Views/SubscriptionView.swift` — More → Subscription. Shows the plan and when
+it runs out; offers the products only when the server says billing is
+configured and this device may sell; shows an Apple subscriber where to cancel
+and gives them no button; says nothing about price or checkout anywhere else.
+
+The signed transaction is handed over whether or not StoreKit says it
+verified, and the local transaction is finished only after the server has
+accepted it. The phone's opinion is not evidence, and a transaction dropped
+because a request failed is a person who paid and cannot prove it.
 
 ### The server endpoint to add
 
