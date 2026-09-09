@@ -16,9 +16,18 @@ enum Bilancio {
     /* The two documents an auto-renewable subscription has to link to from
        inside the app, not merely from the App Store listing. Guideline 3.1.2
        is explicit about it and it is one of the more common rejections.
-       Served as static pages by the assets binding, so they are up whenever
-       the site is. */
-    static let termsURL = URL(string: "https://bilanciomoney.com/terms")!
+
+       The EULA is Apple's own, because App Store Connect is set to Apple's
+       Standard EULA and the two have to be the same document -- linking our
+       terms while the listing offers Apple's is the mismatch the rule exists
+       to catch. Nothing to draft and nothing to keep in step.
+
+       This is not bilanciomoney.com/terms, which still governs the service
+       and is still linked from the site and the web app. It is not the
+       licence for the software, which is what this link is asked for. */
+    static let eulaURL =
+        URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+    /* Ours, and it has to be: nobody else can describe what this app collects. */
     static let privacyURL = URL(string: "https://bilanciomoney.com/privacy")!
 }
 

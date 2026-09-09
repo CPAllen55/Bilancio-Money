@@ -86,7 +86,7 @@ automatically unless turned off at least 24 hours before the period ends, and
 your account is charged for renewal within 24 hours of the end of the period.
 Manage or cancel in Settings, under your Apple Account, then Subscriptions.
 
-Terms of Use: https://bilanciomoney.com/terms
+Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 Privacy Policy: https://bilanciomoney.com/privacy
 ```
 
@@ -155,9 +155,16 @@ from this repo.
 Two fields in App Store Connect have to agree with that:
 
 - **App Privacy Policy URL** → `https://bilanciomoney.com/privacy`
-- **License Agreement** → either Apple's standard EULA, or
-  `https://bilanciomoney.com/terms` as a custom one. Whichever is chosen, it
-  must be the same document the app links to.
+- **License Agreement** → **Apple's Standard EULA**, which is the default, so
+  there is nothing to change. The app links to Apple's own copy of it at
+  `https://www.apple.com/legal/internet-services/itunes/dev/stdeula/`, so the
+  listing and the binary name the same document. A custom EULA would mean
+  drafting one that carries Apple's minimum terms and keeping it in step with
+  the link, for no gain.
+
+`bilanciomoney.com/terms` is unaffected. It governs the service, and is linked
+from the site and the web app; it is not the software licence, which is what
+3.1.2 asks the app for.
 
 Each subscription product also needs its own display name, description, and a
 **review screenshot** before it can be submitted. A subscription that has never

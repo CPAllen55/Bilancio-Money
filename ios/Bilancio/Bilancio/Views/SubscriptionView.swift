@@ -202,7 +202,7 @@ struct SubscriptionView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Billed through your Apple Account. It renews automatically at the end of each period until you cancel, which you can do at any time in Settings, under your Apple Account, then Subscriptions.")
                 HStack(spacing: 14) {
-                    Link("Terms of Use", destination: Bilancio.termsURL)
+                    Link("Terms of Use (EULA)", destination: Bilancio.eulaURL)
                     Link("Privacy Policy", destination: Bilancio.privacyURL)
                 }
                 .font(Theme.note)
