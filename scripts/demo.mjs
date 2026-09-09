@@ -159,6 +159,17 @@ const DINERS  = ["Torchy's Tacos", "Olive Garden", "Thai Kitchen", "Shake Shack"
 const FUEL    = ["Shell", "Chevron", "Buc-ee's"];
 const SHOPS   = ["Amazon", "Target", "Costco"];
 
+/* The pool a row was drawn from, recoverable afterwards from its Plaid
+   category. Used to swap a merchant for a sibling without changing what kind
+   of spending the row is — see the logo pass. */
+const POOL_OF = {
+  FOOD_AND_DRINK_GROCERIES: GROCERS,
+  FOOD_AND_DRINK_COFFEE: CAFES,
+  FOOD_AND_DRINK_RESTAURANT: DINERS,
+  TRANSPORTATION_GAS: FUEL,
+  GENERAL_MERCHANDISE_ONLINE_MARKETPLACES: SHOPS,
+};
+
 for (const [idx, mo] of MONTHS.entries()) {
   const monthNo = mo.m + 1;
 
@@ -413,9 +424,48 @@ try {
     return null;
   };
 
+  /* ── The top of the list gets logos wherever a sibling has one ──────────
+
+     The Transactions tab is newest-first, so the most recent couple of dozen
+     rows are the ones a person sees first and the ones that end up in an App
+     Store screenshot. A screen of coloured letters is honest and dull; a
+     screen of recognisable marks is what the product looks like once a real
+     bank has been connected for a month.
+
+     Only the merchant NAME changes, and only to another merchant from the
+     same pool -- a grocery row becomes a different grocer, never a streaming
+     service. Category, amount, date and account are untouched, so every
+     total, budget and chart downstream is exactly what it was. Swapping
+     across categories would have made a prettier screenshot of a dataset that
+     no longer added up.
+
+     Deterministic: the choice is derived from the row's own id, so reseeding
+     produces the same ledger rather than a new one each time.
+
+     Rows outside a pool -- rent, salary, the subscriptions -- are left alone.
+     They are single named merchants with nothing to swap them for, and two of
+     them (Netflix, Spotify) usually have logos of their own anyway. */
+  const RECENT = 30;
+  const recent = [...rows].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, RECENT);
+  let dressed = 0;
+  for (const r of recent) {
+    if (logoFor(r.name)) continue;
+    const pool = POOL_OF[r.detailed];
+    if (!pool) continue;
+    const withLogo = pool.filter((n) => logoFor(n));
+    if (!withLogo.length) continue;
+    let h = 0;
+    for (let i = 0; i < r.id.length; i++) h = (h * 31 + r.id.charCodeAt(i)) | 0;
+    r.name = withLogo[Math.abs(h) % withLogo.length];
+    dressed++;
+  }
+
   const matched = new Set(rows.map((r) => r.name).filter((n) => logoFor(n)));
+  const top = recent.filter((r) => logoFor(r.name)).length;
   console.log(known.length
-    ? `Logos: ${matched.size} of the demo's merchants matched one Plaid has already sent.`
+    ? `Logos: ${matched.size} of the demo's merchants matched one Plaid has already sent.\n` +
+      `       ${top} of the newest ${recent.length} rows carry one` +
+      (dressed ? ` (${dressed} swapped to a sibling that had one).` : ".")
     : "Logos: none in this database yet, so the demo uses monograms.");
 
   /* Batched, rather than a few thousand round trips. */
