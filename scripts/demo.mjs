@@ -358,6 +358,66 @@ try {
     );
   }
 
+  /* ── Logos, borrowed from whatever Plaid has already sent ──────────────
+
+     The demo merchants are real brands — Netflix, H-E-B, Costco — and the
+     app draws a logo for a merchant when Plaid has supplied one. Seeded rows
+     have no Plaid behind them, so they fall back to the coloured monogram,
+     which is fine but is not what the product looks like in use.
+
+     The filenames cannot be invented. Plaid's CDN serves walmart_1100.png
+     and nothing else that resembles it: the suffix is an internal merchant
+     id, not a pattern, so every guess is a 404. The only way to know what a
+     logo is called is to find one that has already arrived on a real
+     transaction — and this database has some.
+
+     So the lookup is built from the ledger rather than hard-coded. Nothing
+     personal crosses over: the result is a map from a brand name to the name
+     of a public image file, which is a fact about Plaid's CDN rather than
+     about anybody's spending. It also cannot go stale, because it is rebuilt
+     from current data every time this runs.
+
+     A demo merchant Plaid has never sent a logo for keeps its monogram, which
+     is the same thing a real user sees for a corner shop. */
+  const { rows: known } = await client.query(`
+    select distinct on (1)
+           coalesce(merchant_name, name) as merchant,
+           raw->>'logo_url'              as logo_url
+    from transactions
+    where raw->>'logo_url' is not null
+    order by 1, 2
+  `);
+
+  /* Matched on letters and digits alone, so "H-E-B" finds "H E B" and
+     "NETFLIX" finds "Netflix". */
+  const flatten = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const logos = new Map();
+  for (const r of known) {
+    const k = flatten(r.merchant);
+    if (k && !logos.has(k)) logos.set(k, r.logo_url);
+  }
+
+  /* Exact first, then one contained in the other — "Whole Foods Market" and
+     "Whole Foods" are the same shop, and a bank spells it whichever way it
+     likes. Five characters minimum, so short names cannot swallow each
+     other: "H E B" flattens to three and would otherwise match half the
+     ledger. */
+  const logoFor = (name) => {
+    const k = flatten(name);
+    if (!k) return null;
+    if (logos.has(k)) return logos.get(k);
+    if (k.length < 5) return null;
+    for (const [other, url] of logos) {
+      if (other.length >= 5 && (other.includes(k) || k.includes(other))) return url;
+    }
+    return null;
+  };
+
+  const matched = new Set(rows.map((r) => r.name).filter((n) => logoFor(n)));
+  console.log(known.length
+    ? `Logos: ${matched.size} of the demo's merchants matched one Plaid has already sent.`
+    : "Logos: none in this database yet, so the demo uses monograms.");
+
   /* Batched, rather than a few thousand round trips. */
   const CHUNK = 500;
   for (let i = 0; i < rows.length; i += CHUNK) {
@@ -367,7 +427,14 @@ try {
       const b = j * 9;
       values.push(`($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9})`);
       params.push(accountIds[r.account], r.id, String(r.amount), r.date, r.name,
-                  r.name, r.primary, r.detailed, JSON.stringify({ demo: true, name: r.name }));
+                  r.name, r.primary, r.detailed,
+                  JSON.stringify({
+                    demo: true, name: r.name,
+                    /* Only when there is one. An absent key and a null read
+                       the same to the server, but writing null would make
+                       every row claim to have been asked about. */
+                    ...(logoFor(r.name) ? { logo_url: logoFor(r.name) } : {}),
+                  }));
     });
     await client.query(
       `insert into transactions
