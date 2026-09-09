@@ -5,6 +5,98 @@ answers are not a matter of taste: they have to agree with
 `ios/Bilancio/Bilancio/PrivacyInfo.xcprivacy`, which ships inside the binary,
 and Apple compares the two.
 
+## The listing
+
+Fill in the price before pasting the description — it is the one thing here
+that cannot be written from the repo, and Apple requires it on the listing for
+an auto-renewable subscription.
+
+**Name** `Bilancio Money`
+
+**Subtitle** (30 characters) `Know where the money went`
+
+**Promotional text** (170, editable without a new build)
+
+```
+Every account in one place, categorised the way you actually think about
+money — and a plan you can see yourself keeping.
+```
+
+**Keywords** (100 characters, commas, no spaces, no competitor names — Apple
+rejects trademarked terms). Nothing here repeats the name or subtitle, which
+are indexed separately and would be a wasted character each.
+
+```
+budget,spending,expenses,tracker,finance,bank,transactions,networth,categories,savings,cashflow
+```
+
+**Description**
+
+```
+Bilancio Money shows you your own money. It connects to your accounts, sorts
+what comes in and goes out, and gives you one place to see whether the month
+is going the way you meant it to.
+
+It cannot move your money, spend it, or touch it. It reads.
+
+WHAT IT DOES
+
+Overview — the month so far against your plan, and what is left.
+
+Trend — spending by category over months or years. Touch any bar for the
+figure. Pinch to zoom, drag to scroll, and turn on Last Year to run a line
+through the bars showing where you stood at the same point twelve months ago.
+
+Budgeting — a plan per subcategory, built from what you actually spend rather
+than a number you guessed. Open the chart on its own and drag a month up or
+down to set it by hand.
+
+Transactions — search, filter, and split a single purchase across categories.
+Re-file a merchant once and every past and future transaction from it follows.
+
+Calendar — the month as a grid, heaviest days darkest, with recurring charges
+marked. Tilt the phone to see what each day cost.
+
+Net Worth — accounts, assets and what they add up to.
+
+The year ahead — what the next twelve months look like if nothing changes.
+
+CATEGORIES THAT FIT YOU
+
+Add your own subcategories, remove the ones you will never use, and file
+anything anywhere. A subcategory with transactions in it cannot be deleted by
+accident.
+
+YOUR DATA
+
+Bank connections are read-only and handled by Plaid. Credentials are never
+seen by Bilancio. Nothing is sold, and nothing is shared with advertisers or
+data brokers.
+
+SUBSCRIPTION
+
+Bilancio Money is free for one month, starting when you connect your first
+account. After that it needs a subscription:
+
+  Monthly — [PRICE] per month
+  Yearly — [PRICE] per year
+
+Payment is charged to your Apple Account at confirmation. It renews
+automatically unless turned off at least 24 hours before the period ends, and
+your account is charged for renewal within 24 hours of the end of the period.
+Manage or cancel in Settings, under your Apple Account, then Subscriptions.
+
+Terms of Use: https://bilanciomoney.com/terms
+Privacy Policy: https://bilanciomoney.com/privacy
+```
+
+**Support URL** `https://bilanciomoney.com` — the footer carries a Contact
+link to support@bilanciomoney.com, which is what this field is checked for.
+
+**Marketing URL** `https://bilanciomoney.com` (optional; same page is fine).
+
+**Copyright** `2026 Guardiano del Faro LLC`
+
 ## App Review Information → Sign-In Required
 
 Tick it, and give the demo account. Then, in **Notes**:
