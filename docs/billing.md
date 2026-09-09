@@ -189,11 +189,19 @@ Two guards on the way out, both about not making things worse:
 
 ### Environment
 
-Production is tried first and sandbox second, on a 404. There is no field that
+Production is tried first and sandbox second, on a 404 **or a 401**. There is no field that
 can be trusted to say which one a transaction came from — `environment` lives
 inside the payload we have decided not to trust — and an id is unknown in the
 other world, so the answer is unambiguous. A TestFlight build buys in sandbox
 and works without being told.
+
+A 401 counts as "try the other one" rather than as an error because it often
+is not one. An account whose Paid Applications Agreement has not gone Active
+is refused by production and served by sandbox on the very same credentials,
+so treating the first 401 as fatal made every sandbox purchase fail for a
+reason that had nothing to do with it. Only a refusal from *every* host means
+the key is wrong, and `GET /api/admin/apple-check` — admin-only, prints the
+key id and bundle id but never the key — says which of the two it is.
 
 ### Bindings
 

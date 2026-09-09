@@ -261,6 +261,9 @@ export async function subscriptionStatus(
   if (!/^[0-9]{1,32}$/.test(transactionId)) return null;
 
   const token = await bearer(env);
+  /* Hosts that would not talk to us at all, as opposed to hosts that talked
+     and had never heard of the id. See the note where this is read. */
+  let rejected = 0;
 
   for (const host of HOSTS) {
     const url = `${host}/inApps/v1/subscriptions/${transactionId}`;
@@ -275,20 +278,19 @@ export async function subscriptionStatus(
     if (res.status === 404) continue;
 
     if (res.status === 401) {
-      /* The key, the key id and the issuer id have to belong to each other,
-         and to an In-App Purchase key rather than an App Store Connect API
-         key. Every one of those reads as 401 and none will fix itself.
-
-         The body is usually empty, and occasionally carries an errorCode that
-         says which. Worth the read either way: guessing between four causes
-         is expensive and this sometimes removes three of them. */
-      const detail = await res.text().catch(() => "");
-      throw new AppleError(
-        "Apple rejected our credentials" +
-        (detail ? `: ${detail.slice(0, 300)}` : "") +
-        ` (${host === HOSTS[0] ? "production" : "sandbox"})`,
-        502,
-      );
+      /* Counted and carried on, not thrown.
+       *
+       * A 401 from one host is not necessarily anything to do with the key.
+       * An account whose Paid Applications Agreement has not gone Active is
+       * refused by production and served by sandbox, using the very same
+       * credentials -- so throwing here made every sandbox purchase fail with
+       * a 502 for a reason that had nothing to do with it. Which is exactly
+       * the state this app is in while its agreement clears.
+       *
+       * The signal is not lost, only deferred: if every host refuses, the
+       * credentials really are wrong, and that is raised below. */
+      rejected++;
+      continue;
     }
     if (!res.ok) {
       const body = await res.text().catch(() => "");
@@ -333,6 +335,13 @@ export async function subscriptionStatus(
     if (best) return best;
     // Apple knows the id but told us nothing usable about it.
     return null;
+  }
+
+  /* Nobody would talk to us. Now it is the key -- one host refusing can be an
+     account restriction, but both refusing is the three values not matching
+     each other. /api/admin/apple-check says which. */
+  if (rejected === HOSTS.length) {
+    throw new AppleError("Apple rejected our credentials.", 502);
   }
 
   return null;
