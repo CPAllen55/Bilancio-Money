@@ -18,9 +18,21 @@ an auto-renewable subscription.
 **Promotional text** (170, editable without a new build)
 
 ```
-Every account in one place, categorised the way you actually think about
-money — and a plan you can see yourself keeping.
+Simple, intuitive, effective. Every account in one place, sorted the way you
+actually think about money — and a plan you can see yourself keeping.
 ```
+
+*Effective rather than powerful.* Powerful is the most overused word on the
+App Store and it is a claim about the software; effective is a claim about the
+outcome, which is what somebody buying a budgeting app is actually after. It
+also pairs better — simple and intuitive are both about using the thing, so
+the third word doing something different gives the trio somewhere to go.
+
+*Not in the subtitle,* though it would fit at 28 characters. The subtitle is
+the one line that tells a stranger what the app is, and it is indexed for
+search: spending it on three adjectives that describe every app ever shipped
+would cost the description and rank for nothing. Same reason none of the three
+is in the keyword field.
 
 **Keywords** (100 characters, commas, no spaces, no competitor names — Apple
 rejects trademarked terms). Nothing here repeats the name or subtitle, which
@@ -33,9 +45,10 @@ budget,spending,expenses,tracker,finance,bank,transactions,networth,categories,s
 **Description**
 
 ```
-Bilancio Money shows you your own money. It connects to your accounts, sorts
-what comes in and goes out, and gives you one place to see whether the month
-is going the way you meant it to.
+Simple, intuitive, effective — one place to see your own money clearly.
+
+Bilancio Money connects to your accounts, sorts what comes in and goes out,
+and shows you whether the month is going the way you meant it to.
 
 It cannot move your money, spend it, or touch it. It reads.
 
