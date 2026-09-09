@@ -69,12 +69,52 @@ app.get("/api/me", async (c) => {
   }
 });
 
-// The landing page waitlist. Unauthenticated by necessity - these people have
-// no account, that is the whole point.
+/**
+ * Clerk's waitlist, joined on somebody's behalf.
+ *
+ * Clerk is in waitlist mode, so the queue that actually matters is Clerk's:
+ * it sends the confirmation, it sends the invitation when somebody is
+ * approved, and approving is done from its dashboard. A landing page writing
+ * only to the table below would be collecting addresses into a list nobody
+ * reads -- which is worse than collecting nothing, because it looks to the
+ * person filling it in exactly like joining a queue.
+ *
+ * Idempotent at Clerk's end: an address already on the list returns the entry
+ * that is already there rather than failing, so somebody who signs up twice
+ * keeps their original place.
+ *
+ * Best effort, and deliberately so. The row below is the durable record; this
+ * is the notification. If Clerk is unreachable the address is still captured
+ * and can be added by hand, which is a better failure than telling somebody
+ * their sign-up did not work when it did.
+ */
+async function joinClerkWaitlist(env: Env, email: string): Promise<void> {
+  if (!env.CLERK_SECRET_KEY) return;
+  const res = await fetch("https://api.clerk.com/v1/waitlist_entries", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.CLERK_SECRET_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email_address: email }),
+  });
+  if (!res.ok) {
+    console.warn("clerk waitlist rejected", res.status, (await res.text()).slice(0, 200));
+  }
+}
+
+/**
+ * The waitlist. Unauthenticated by necessity - these people have no account,
+ * that is the whole point.
+ *
+ * Two places write here: the landing page, and the iOS app's signed-out
+ * screen. `source` is what tells them apart afterwards, which is the only way
+ * to answer whether the App Store listing is bringing anybody in.
+ */
 app.post("/api/waitlist", async (c) => {
-  let email: unknown;
+  let email: unknown, source: unknown;
   try {
-    ({ email } = await c.req.json());
+    ({ email, source } = await c.req.json());
   } catch {
     return c.json({ error: "bad_request", reason: "body must be JSON" }, 400);
   }
@@ -91,12 +131,27 @@ app.post("/api/waitlist", async (c) => {
   const { db, ready, close } = getDb(c.env);
   try {
     await ready;
+    /* Where it came from, if the caller said and said something sensible. An
+       arbitrary string from an unauthenticated endpoint is not going into a
+       column, so it is matched against the two places that write here. */
+    const from = source === "ios" || source === "landing" ? source : "landing";
+
     await db
       .insert(waitlist)
-      .values({ email: normalised })
+      .values({ email: normalised, source: from })
       // Signing up twice is not an error, and the second attempt must not
       // overwrite the original createdAt - their place in the queue is earned.
       .onConflictDoNothing({ target: waitlist.email });
+
+    /* Then Clerk, which is the queue somebody is actually admitted from. It
+       cannot be allowed to fail the request: the address is already saved, and
+       an error here would tell a person their sign-up failed when it did not. */
+    try {
+      await joinClerkWaitlist(c.env, normalised);
+    } catch (err) {
+      console.warn("clerk waitlist unreachable:",
+        err instanceof Error ? err.message : err);
+    }
 
     // Identical response whether the address was new or already present. The
     // alternative lets anyone test whether a given person is on the list.
