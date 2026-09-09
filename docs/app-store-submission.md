@@ -118,8 +118,31 @@ Where to look:
   Budgeting     the plan per subcategory; the chart can be opened on its own
                 and a month dragged up or down to plan it
   Transactions  search, filter, split a transaction, re-file a merchant
-  More          Calendar, Categories, Subscription, Banks, appearance
+  More          Calendar, The year ahead, Net Worth, Categories,
+                Subscription, Banks, and light/dark appearance
+
+Deleting the account: More, then Banks, then Delete account at the bottom.
+It removes the account itself and not only its data — the local record, every
+bank connection, and the sign-in identity.
 ```
+
+## Two guidelines to confirm rather than assume
+
+**5.1.1(v), account deletion.** Built: More → Banks → Delete account, which
+deletes the Clerk identity as well as the local rows. Rejections here are
+usually not "it is missing" but "we could not find it", which is why the
+review notes above name the path.
+
+**4.8, Sign in with Apple.** Only required if the app offers a *third-party or
+social* sign-in — Google, Facebook and so on. Email and password alone does
+not trigger it. The sign-in screen is Clerk's own `AuthView`, so what it
+offers is whatever is switched on in the Clerk dashboard, not something this
+repo decides. Before submitting, look at Clerk → User & Authentication →
+Social Connections: if anything is enabled there, Sign in with Apple has to be
+enabled too. If the list is empty, there is nothing to do.
+
+**3.1.1, anti-steering.** Nothing in the app links to the website's checkout
+or mentions a price available elsewhere. Checked; keep it that way.
 
 ## App Privacy — what to answer
 
