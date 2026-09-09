@@ -73,8 +73,9 @@ app.get("/api/me", async (c) => {
 // no account, that is the whole point.
 app.post("/api/waitlist", async (c) => {
   let email: unknown;
+  let source: unknown;
   try {
-    ({ email } = await c.req.json());
+    ({ email, source } = await c.req.json());
   } catch {
     return c.json({ error: "bad_request", reason: "body must be JSON" }, 400);
   }
@@ -88,12 +89,20 @@ app.post("/api/waitlist", async (c) => {
     return c.json({ error: "bad_request", reason: "that does not look like an email" }, 400);
   }
 
+  /* Where the address came from. An allowlist rather than the string as sent:
+     this is an unauthenticated endpoint, the column is read by a human
+     deciding who to invite, and free text from strangers has no business in
+     it. Anything unrecognised is recorded as having come from the landing
+     page, which is where all of them came from before there was a second
+     place to ask. */
+  const from = source === "ios" ? "ios" : "landing";
+
   const { db, ready, close } = getDb(c.env);
   try {
     await ready;
     await db
       .insert(waitlist)
-      .values({ email: normalised })
+      .values({ email: normalised, source: from })
       // Signing up twice is not an error, and the second attempt must not
       // overwrite the original createdAt - their place in the queue is earned.
       .onConflictDoNothing({ target: waitlist.email });
