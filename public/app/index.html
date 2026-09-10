@@ -1665,6 +1665,41 @@
   .bg-mon input.pin{ border-color:var(--mint-dim); color:var(--mint); }
   .bg-reset{ font-size:11px; padding:4px 8px; }
 
+  /* ── Saying what the three columns are ─────────────────────────────────
+     Three numbers in a row with no headings is a puzzle, and the reader was
+     solving it every time: a box, a figure and a button, none of them named.
+     One line of small caps above the leaves costs nothing and answers it. */
+  .bg-cols{ display:grid; grid-template-columns:minmax(0,1fr) 128px 104px 30px;
+            gap:12px; padding:0 0 7px; font-family:var(--font-num); font-size:10px;
+            letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+            border-bottom:1px solid var(--hair); }
+  .bg-cols span:nth-child(2), .bg-cols span:nth-child(3){ text-align:right; }
+
+  /* The way back. It carries the figure it would restore, so it is a
+     statement rather than a dare -- nobody should have to press a Reset to
+     find out what it resets to. */
+  .bg-revert{ margin-top:4px; font-family:var(--font-num); font-size:11px;
+              padding:2px 7px; border-radius:5px; border:1px solid var(--hair-strong);
+              background:transparent; color:var(--ink-soft); cursor:pointer; }
+  .bg-revert:hover{ color:var(--mint); border-color:var(--mint-dim); }
+  .bg-revert[hidden]{ display:none; }
+  .bg-revert:focus-visible{ outline:2px solid var(--mint-dim); outline-offset:2px; }
+
+  /* The opened panel: the working, then the months. */
+  .bg-panel{ grid-column:1 / -1; margin:9px 0 3px; padding:11px 13px 10px;
+             border-radius:8px; background:var(--row-alt); border:1px solid var(--hair); }
+  .bg-how h4{ margin:0; font-family:var(--font-num); font-size:10px; letter-spacing:.06em;
+              text-transform:uppercase; color:var(--muted); font-weight:400; }
+  .bg-how ul{ margin:5px 0 0; padding-left:15px; }
+  .bg-how li{ font-size:12px; color:var(--ink-soft); margin:2px 0; }
+  .bg-panel .bg-months{ margin:11px 0 0; }
+  /* The baseline, under the month that is overriding it. Always in the
+     layout even when empty, or the row of boxes would jog up and down as
+     months are pinned and cleared. */
+  .bg-was{ font-family:var(--font-num); font-size:9.5px; font-style:normal;
+           color:var(--muted); text-align:center; min-height:12px; line-height:12px; }
+  .bg-foot{ margin-top:9px; font-size:11.5px; color:var(--muted); }
+
   /* The stacked year, and the handles on it. touch-action:none is what lets a
      finger drag a segment instead of scrolling the page. */
   .bg-svg{ display:block; margin-top:10px; touch-action:none; }
@@ -7818,7 +7853,7 @@ function drawBudgeting() {
           ' Months left of' +
           ' the dashed line have already happened and are fixed. Spending is the' +
           ' sum of the plans below and moves when they do.</div>' +
-          '<div class="bg-kids">' + bgLeaf(inc) + '</div>'
+          '<div class="bg-kids">' + bgCols() + bgLeaf(inc) + '</div>'
         : '') +
     '</div>';
   }
@@ -7858,7 +7893,7 @@ function drawBudgeting() {
               ' — hold Alt for dollar-by-dollar. Arrow keys work too. Months left' +
               ' of the dashed line have already happened and are fixed.</div>'
             : '') +
-          '<div class="bg-kids">' + kids.map(bgLeaf).join('') + '</div>'
+          '<div class="bg-kids">' + bgCols() + kids.map(bgLeaf).join('') + '</div>'
         : '') +
     '</div>';
   }).join('') || '<p class="empty">Nothing to plan yet — link a bank and sync some history.</p>';
@@ -7877,6 +7912,37 @@ function drawBudgeting() {
     'This is the plan the Overview, the Tracker and the Trend forecast all read.';
 }
 
+/* The heading over a list of leaves.
+
+   Three unlabelled numbers is a puzzle the reader solves once a visit and
+   then forgets again -- a box, a figure and a button, none of them named.
+   One line of small caps answers it for good. */
+function bgCols() {
+  return '<div class="bg-cols">' +
+    '<span>Subcategory</span><span>A month</span><span>A year</span><span></span></div>';
+}
+
+/* What reverting would give back, in words, or '' when there is nothing to
+   give back.
+
+   The label carries the FIGURE rather than reading "Reset", because a button
+   whose effect cannot be seen is a button nobody dares press. That the
+   baseline is $739 is most of the reason to want it back. */
+function bgRevertLabel(row) {
+  /* Only the months still to come. A pin on a month that has already happened
+     is fixed -- the plan for a past month is what the Tracker reported
+     against, so clearing it would rewrite the yardstick rather than correct a
+     forecast. Counting them here would put a number on the button that
+     pressing it could not deliver. */
+  const pins = Object.keys(row.pinned).filter(m => !bgPast(m)).length;
+  const over = row.baselineOverride > 0;
+  const base = Math.max(0, Math.round(row.baseline || 0));
+  if (over && pins) return '↺ Back to the baseline, ' + money0(base) + ' a month';
+  if (over) return '↺ Back to ' + money0(base) + ' a month';
+  if (pins) return '↺ Clear ' + pins + ' pinned month' + (pins === 1 ? '' : 's');
+  return '';
+}
+
 /** One leaf: what it costs a month, and the twelve months behind that. */
 function bgLeaf(row) {
   const plan = bgPlanOf(row);
@@ -7890,23 +7956,86 @@ function bgLeaf(row) {
   const note = work.short.slice();
   if (pins) note.push(pins + ' month' + (pins === 1 ? '' : 's') + ' pinned');
 
+  /* Rendered whether or not there is anything to revert, and hidden when
+     there is not, so bgLive can show it the moment somebody types. Creating
+     it on demand would mean a redraw mid-keystroke, and a redraw takes the
+     caret out of the box being typed in. */
+  const revert = bgRevertLabel(row);
+
   return '<div class="bg-leaf" data-slug="' + escapeHtml(row.slug) + '">' +
       '<div><div class="bg-name">' + escapeHtml(row.label) + '</div>' +
         (note.length
-          ? '<div class="bg-note"' +
-            (work.full.length ? ' title="' + escapeHtml(work.full.join('\n')) + '"' : '') +
-            '>' + escapeHtml(note.join(' · ')) + '</div>'
-          : '') + '</div>' +
+          ? '<div class="bg-note">' + escapeHtml(note.join(' · ')) + '</div>'
+          : '') +
+        '<button class="bg-revert" type="button" data-bg-revert="' +
+          escapeHtml(row.slug) + '"' + (revert ? '' : ' hidden') +
+          ' title="Undo what you have set here and go back to the figure worked' +
+          ' out from your own history">' + escapeHtml(revert) + '</button>' +
+      '</div>' +
       '<input class="bg-in' + (row.baselineOverride ? ' moved' : '') + '" type="number" min="0" step="1" ' +
         'inputmode="decimal" data-baseline="' + escapeHtml(row.slug) + '" ' +
         'aria-label="Monthly budget for ' + escapeHtml(row.label) + '" ' +
         'value="' + (shown / 100).toFixed(0) + '">' +
       '<span class="bg-year">' + money(year) + '</span>' +
       '<button class="ctog" type="button" data-bg-open="' + escapeHtml(row.slug) + '" ' +
-        'aria-expanded="' + open + '" aria-label="Set individual months for ' +
-        escapeHtml(row.label) + '">' + (open ? '−' : '+') + '</button>' +
-      (open ? bgMonths(row, plan) : '') +
+        'aria-expanded="' + open + '" title="' + (open ? 'Hide' : 'Show') +
+        ' how this was worked out, month by month" ' +
+        'aria-label="' + (open ? 'Hide' : 'Show') + ' the working and the months for ' +
+        escapeHtml(row.label) + '">' + (open ? '▾' : '▸') + '</button>' +
+      (open ? bgPanel(row, plan, work) : '') +
     '</div>';
+}
+
+/* What a month would fall back to if its own figure were cleared.
+
+   Not the engine's number, necessarily. Emptying a box hands the month back
+   to the row's baseline, and if the reader has typed one of those then THAT
+   is what it falls back to -- so quoting the engine's figure under a pinned
+   month would name a number the box will never take.
+
+   Mirrors bgPlanOf minus the pin, which is the definition of the thing. */
+function bgUnder(row, m) {
+  return row.baselineOverride > 0
+    ? Math.max(0, Math.round(row.baselineOverride))
+    : Math.max(0, Math.round(row.computed[m] || 0));
+}
+
+/* The line under a month box, or '' where there is nothing worth saying.
+
+   Only a month the reader has pinned gets one. The first cut showed it
+   wherever the plan differed from the engine, which meant a single typed
+   baseline printed "was $61" under all twelve boxes -- twelve copies of one
+   fact, burying the one or two months that had actually been touched. What a
+   typed baseline replaced is the row's business, and the revert button beside
+   the name already says it. */
+function bgWasText(row, m) {
+  if (row.pinned[m] === undefined) return '';
+  const under = bgUnder(row, m);
+  return Math.max(0, Math.round(row.pinned[m])) === under ? '' : 'was ' + money0(under);
+}
+
+/* An opened leaf: how the baseline was reached, then the twelve months.
+
+   The working used to live in a title attribute on the note -- invisible on a
+   touch screen, and on a desktop findable only by hovering something that did
+   not look hoverable. It is the answer to the question the whole engine
+   exists to answer, so it is on the page now and the disclosure asks for it.
+
+   Order matters. Reading WHY the figure is $739 before being invited to
+   change it is the difference between an informed edit and a guess. */
+function bgPanel(row, plan, work) {
+  const lines = work.full.length ? work.full
+    : ['Nothing has been spent here yet, so there is no history to work from' +
+       ' — whatever you type is the plan.'];
+
+  return '<div class="bg-panel">' +
+    '<div class="bg-how"><h4>How this baseline was worked out</h4><ul>' +
+      lines.map(l => '<li>' + escapeHtml(l) + '</li>').join('') +
+    '</ul></div>' +
+    bgMonths(row, plan) +
+    '<div class="bg-foot">Type over any month to set it on its own. Empty the box' +
+      ' to hand that month back to the baseline.</div>' +
+  '</div>';
 }
 
 /* The twelve months, for the trip that is already booked. The engine finds a
@@ -7916,8 +8045,8 @@ function bgMonths(row, plan) {
      in the same place as the band above it and a vertical rule through it
      would point at the wrong boundary. The months that have gone are marked
      and disabled instead, which says the same thing at any width. */
-  return '<div class="bg-months">' + bgData.months.map((m, i) =>
-    '<label class="bg-mon' + (bgPast(m) ? ' past' : '') + '">' +
+  return '<div class="bg-months">' + bgData.months.map((m, i) => {
+    return '<label class="bg-mon' + (bgPast(m) ? ' past' : '') + '">' +
       '<span>' + bgData.labels[i].slice(0, 3) + '</span>' +
       '<input type="number" min="0" step="1" inputmode="decimal" ' +
         'class="' + (row.pinned[m] !== undefined ? 'pin' : '') + '" ' +
@@ -7925,7 +8054,11 @@ function bgMonths(row, plan) {
           ' has already happened — its plan is what the Tracker measured" ' : '') +
         'data-pin="' + escapeHtml(row.slug) + '" data-month="' + m + '" ' +
         'aria-label="' + bgData.labels[i] + ' for ' + escapeHtml(row.label) + '" ' +
-        'value="' + (plan[m] / 100).toFixed(0) + '"></label>').join('') +
+        'value="' + (plan[m] / 100).toFixed(0) + '">' +
+      '<em class="bg-was" data-was="' + escapeHtml(row.slug) + '" data-month="' + m + '">' +
+        escapeHtml(bgWasText(row, m)) + '</em>' +
+      '</label>';
+  }).join('') +
     '</div>';
 }
 
@@ -9027,8 +9160,28 @@ function bgLive() {
   for (const row of bgData.categories.concat(bgData.income ? [bgData.income] : [])) {
     const plan = bgPlanOf(row);
     const year = bgData.months.reduce((s, m) => s + plan[m], 0);
-    const el = $('bg-list').querySelector('.bg-leaf[data-slug="' + CSS.escape(row.slug) + '"] .bg-year');
+    const leaf = $('bg-list').querySelector('.bg-leaf[data-slug="' + CSS.escape(row.slug) + '"]');
+    if (!leaf) continue;
+    const el = leaf.querySelector('.bg-year');
     if (el) el.textContent = money(year);
+
+    /* The way back appears the moment there is something to go back from,
+       and says what it would restore. Text and all, because the label
+       changes shape as pins are added to an override. */
+    const rev = leaf.querySelector('.bg-revert');
+    if (rev) {
+      const label = bgRevertLabel(row);
+      rev.hidden = !label;
+      if (label && rev.textContent !== label) rev.textContent = label;
+    }
+
+    /* And the line under each opened month, which is the reader's only sight
+       of what a pin is overriding. Left alone it would still claim "was $739"
+       after the box had been put back to 739. */
+    for (const was of leaf.querySelectorAll('.bg-was')) {
+      const text = bgWasText(row, was.dataset.month);
+      if (was.textContent !== text) was.textContent = text;
+    }
   }
 
   /* The charts. Mid-gesture only the one being dragged is touched: the others
@@ -9089,6 +9242,33 @@ $('bg-list').addEventListener('click', (e) => {
     drawBudgeting();
     return;
   }
+  /* Undo everything the reader has set on one subcategory: the typed
+     baseline and every pinned month, in one press.
+
+     Sent as one save per thing undone rather than a single "reset" call,
+     because the queue in bgSave is keyed by what an edit touches and already
+     knows how to collapse a run of them. A new verb on the wire would need a
+     new route, a new migration path and a second way for the same state to
+     get out of step. */
+  const rev = e.target.closest('[data-bg-revert]');
+  if (rev) {
+    const row = bgRow(rev.dataset.bgRevert);
+    if (!row) return;
+    if (row.baselineOverride) {
+      row.baselineOverride = null;
+      bgSave({ slug: row.slug, baseline: null });
+    }
+    for (const m of Object.keys(row.pinned)) {
+      /* A month that has already happened is fixed everywhere else on this
+         page, and reverting is not the one exception. */
+      if (bgPast(m)) continue;
+      delete row.pinned[m];
+      bgSave({ slug: row.slug, month: m, amount: null });
+    }
+    drawBudgeting();
+    return;
+  }
+
   const tog = e.target.closest('[data-bg-open]');
   if (!tog) return;
   const slug = tog.dataset.bgOpen;
