@@ -23,6 +23,14 @@
  * silently cancelling somebody who pays through Apple — is invisible until
  * they complain.
  *
+ * ── Apple is asked, not believed ────────────────────────────────────────────
+ *
+ * Nothing here checks a StoreKit signature. A payload from a phone is read
+ * exactly far enough to get a transaction id out of it, and that id is then put
+ * to Apple over TLS with our own key; what Apple answers is what gets written.
+ * The full reasoning, and why it also makes the notifications endpoint safe
+ * without a signature, is at the top of apple.ts.
+ *
  * ── The unpaid-invoice question ─────────────────────────────────────────────
  *
  * A failed payment does NOT lapse anybody. Stripe retries for days and most
@@ -43,6 +51,10 @@ import {
   createCustomer, createCheckoutSession, createPortalSession, getSubscription,
   verifyWebhook, StripeError,
 } from "./stripe";
+import {
+  configured as appleConfigured, isPaid as applePaid, peek, subscriptionStatus,
+  AppleError, type AppleNotification, type AppleSubscription,
+} from "./apple";
 
 const billing = new Hono<{ Bindings: Env }>();
 
@@ -301,18 +313,307 @@ billing.get("/billing/status", async (c) => {
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
 
+    /* Which processor this caller would be buying through.
+     *
+     * Not a preference: a purchase made inside the iOS app has to go through
+     * Apple (guideline 3.1.1) and one made in a browser goes through Stripe,
+     * so "is billing switched on" has two different answers depending on who
+     * is asking. Answered here rather than in each client, so the rule lives
+     * in one place -- which is what the field below has always promised and
+     * did not previously do.
+     *
+     * The header is a hint from the caller and is treated as one. Nothing is
+     * granted by it; the worst a lie achieves is being shown the wrong thing
+     * to buy, and the purchase itself is verified either way. */
+    const onApple = c.req.header("x-bilancio-client") === "ios";
+    const sellable = onApple ? appleConfigured(c.env) : !!c.env.STRIPE_SECRET_KEY;
+
     return c.json({
       ok: true,
       plan: auth.user.plan,
       planUntil: auth.user.planUntil,
       source: auth.user.billingSource ?? null,
-      /* Whether this device can sell. The web can; the iOS app must not, and
-         reads this rather than deciding for itself, so the rule lives in one
-         place if it ever changes. */
-      canSubscribeHere: true,
+      /* Whether this device can sell, to this caller. False on iOS until the
+         Apple bindings are set, which is what lets the app ship with the
+         subscription screen showing a plan and offering nothing -- rather
+         than offering products that App Store Connect does not yet have. */
+      canSubscribeHere: sellable,
       manageAt: auth.user.billingSource === "apple" ? "apple" : "stripe",
-      configured: !!c.env.STRIPE_SECRET_KEY,
+      configured: sellable,
+      /* Handed to StoreKit as the purchase's appAccountToken, so that Apple
+         itself will later tell us which account bought it. It is the user id
+         and nothing more secret than that -- the caller is already
+         authenticated as this user -- and it is what stops one person's
+         original transaction id from being usable to claim their subscription
+         somewhere else. See the note in apple.ts. */
+      accountToken: auth.user.id,
     });
+  } finally {
+    c.executionCtx.waitUntil(close());
+  }
+});
+
+/* ------------------------------------------------------------------ apple -- */
+
+/**
+ * Turning what Apple says into the two columns, in one place.
+ *
+ * Shared by the route the app calls and the notifications Apple sends, because
+ * a renewal that arrives by one path and by the other must mean the same thing.
+ * `user` is the row as it stands; the caller has already decided this
+ * subscription is theirs to write.
+ */
+function applyApple(
+  user: { id: string; plan: string; billingSource: string | null;
+          appleOriginalTransactionId: string | null },
+  sub: AppleSubscription,
+  originalTransactionId: string,
+) {
+  /* A refund is not a lapse that will sort itself out -- Apple has taken the
+     money back -- so it ends access whatever the status field says. */
+  const paid = applePaid(sub.status) && !sub.transaction.revocationDate;
+  const until = sub.transaction.expiresDate
+    ? new Date(Number(sub.transaction.expiresDate))
+    : null;
+
+  return {
+    paid,
+    set: {
+      plan: paid ? "active" as const : "lapsed" as const,
+      /* Not null when unpaid: an account with no end date reads as comped
+         everywhere else. The moment it stopped is the honest answer. */
+      planUntil: paid ? until : new Date(),
+      billingSource: paid ? "apple" : user.billingSource,
+      appleOriginalTransactionId: originalTransactionId,
+      planNote: paid ? "apple" : "apple:ended",
+    },
+  };
+}
+
+/**
+ * POST /api/billing/apple      { signedTransaction: "<JWS from StoreKit>" }
+ *
+ * The app finishes a purchase, hands the signed transaction over, and this
+ * decides what it means.
+ *
+ * ── What is done with the phone's payload ───────────────────────────────────
+ *
+ * One thing: an id is taken out of it. The signature is not checked, the
+ * expiry is not read, and nothing in it is believed. That id is then put to
+ * Apple over TLS with our own credentials, and what comes back is what is
+ * written. A phone that lies about its payload has managed to ask a question.
+ *
+ * ── Whose subscription it is ────────────────────────────────────────────────
+ *
+ * An original transaction id is not a secret, so "I know this id" cannot be
+ * allowed to mean "this is mine". Two checks stand between the two:
+ *
+ *   1. `appAccountToken`, which the app attaches at purchase and Apple hands
+ *      back in its own reply. When it is there it settles the question, because
+ *      Apple is the one saying it.
+ *   2. First claim wins, for purchases made before the app started sending one.
+ *      A subscription already recorded against another account is refused.
+ */
+billing.post("/billing/apple", async (c) => {
+  const { db, ready, close } = getDb(c.env);
+  try {
+    await ready;
+    const auth = await requireUser(c, db);
+    if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+
+    if (!appleConfigured(c.env)) {
+      return c.json({ error: "unavailable", message: "Apple billing is not configured yet." }, 503);
+    }
+
+    let body: { signedTransaction?: unknown };
+    try { body = await c.req.json(); }
+    catch { return c.json({ error: "bad_request", message: "Body must be JSON." }, 400); }
+
+    const jws = body.signedTransaction;
+    if (typeof jws !== "string" || !jws) {
+      return c.json({ error: "bad_request", message: "signedTransaction is required." }, 400);
+    }
+
+    // Pointer, not evidence. See the note above and the one in apple.ts.
+    const claimed = peek(jws);
+    const askAbout = claimed?.originalTransactionId ?? claimed?.transactionId;
+    if (!askAbout) {
+      return c.json({ error: "bad_request", message: "That is not a StoreKit transaction." }, 400);
+    }
+
+    let sub: AppleSubscription | null;
+    try { sub = await subscriptionStatus(c.env, String(askAbout)); }
+    catch (err) {
+      if (err instanceof AppleError) {
+        console.warn("apple:", err.message);
+        return c.json({ error: "apple", message: err.message }, err.status as 502);
+      }
+      throw err;
+    }
+
+    if (!sub) {
+      /* Apple has never heard of it, in either environment. A made-up id, or a
+         transaction from a different App Store account than the key we hold. */
+      return c.json({
+        error: "not_found",
+        message: "Apple has no record of that purchase.",
+      }, 404);
+    }
+
+    // A transaction signed for another app is not evidence about this one.
+    if (sub.transaction.bundleId && sub.transaction.bundleId !== c.env.APPLE_BUNDLE_ID) {
+      console.warn("apple transaction for another bundle:", sub.transaction.bundleId);
+      return c.json({ error: "bad_request", message: "That purchase belongs to another app." }, 400);
+    }
+
+    const originalTransactionId =
+      sub.transaction.originalTransactionId ?? String(askAbout);
+
+    /* Apple's own word on who bought it, where there is one. Compared
+       case-insensitively because a UUID's hex is written either way and Apple
+       does not promise which. */
+    const token = sub.transaction.appAccountToken;
+    if (token && token.toLowerCase() !== auth.user.id.toLowerCase()) {
+      console.warn("apple purchase claimed by the wrong account", auth.user.id);
+      return c.json({
+        error: "conflict",
+        message: "That subscription belongs to a different Bilancio account. " +
+                 "Sign in with the account it was bought on.",
+      }, 409);
+    }
+
+    if (!token) {
+      // First claim wins, for anything bought before the app sent a token.
+      const [held] = await db.select().from(users)
+        .where(eq(users.appleOriginalTransactionId, originalTransactionId)).limit(1);
+      if (held && held.id !== auth.user.id) {
+        return c.json({
+          error: "conflict",
+          message: "That subscription is already on another Bilancio account.",
+        }, 409);
+      }
+    }
+
+    const { paid, set } = applyApple(auth.user, sub, originalTransactionId);
+
+    /* A comped account is a promise made by a person and is not Apple's to
+       revoke. The id is still recorded, so that when the comp ends the
+       subscription behind it is already known. */
+    if (auth.user.plan === "free") {
+      await db.update(users)
+        .set({ appleOriginalTransactionId: originalTransactionId })
+        .where(eq(users.id, auth.user.id));
+      return c.json({ ok: true, plan: "free", planUntil: auth.user.planUntil });
+    }
+
+    /* An expired or refunded transaction may only end the subscription it
+       belongs to. Restoring on a new phone replays old transactions, and an
+       expired one from two years ago must not knock somebody out of a trial
+       -- or out of a subscription they are currently paying Stripe for. */
+    if (!paid &&
+        auth.user.appleOriginalTransactionId !== originalTransactionId &&
+        auth.user.billingSource !== "apple") {
+      return c.json({ ok: true, plan: auth.user.plan, planUntil: auth.user.planUntil });
+    }
+
+    if (paid && auth.user.billingSource === "stripe" && auth.user.plan === "active") {
+      /* They are about to be paying twice. Apple's is honoured, because they
+         have just paid it and only they can cancel it; the Stripe ids are left
+         in place so the web side can still find and cancel that one. */
+      console.warn("apple purchase by an active Stripe subscriber", auth.user.id);
+    }
+
+    await db.update(users).set(set).where(eq(users.id, auth.user.id));
+
+    console.log(`apple ${sub.environment} ${paid ? "active" : "ended"}`,
+                sub.transaction.productId ?? "?");
+    return c.json({ ok: true, plan: set.plan, planUntil: set.planUntil });
+  } finally {
+    c.executionCtx.waitUntil(close());
+  }
+});
+
+/**
+ * POST /api/billing/apple-notifications
+ *
+ * Renewals, cancellations, refunds and billing failures, sent by Apple.
+ * Unauthenticated by necessity: Apple has no session here.
+ *
+ * ── Why it is not signature-verified ────────────────────────────────────────
+ *
+ * Because it does not need to be. Nothing in the notification is believed.
+ * It is read for a transaction id, and that id is put to Apple in a fresh
+ * request over TLS; what Apple answers is what gets written. A forged
+ * notification therefore achieves one of two things: an id Apple does not
+ * know, which does nothing, or an id it does, in which case we write the truth
+ * about a subscription — which is what we would have written anyway.
+ *
+ * That is a stronger position than a verified webhook whose contents are then
+ * trusted, and it is the same trade made on the route above.
+ *
+ * Answers 200 to everything it has understood, including what it ignores.
+ * A non-2xx tells Apple to retry, and retrying something that will never be
+ * interesting only fills the log.
+ */
+billing.post("/billing/apple-notifications", async (c) => {
+  let body: { signedPayload?: unknown };
+  try { body = await c.req.json(); }
+  catch { return c.json({ error: "bad_request" }, 400); }
+
+  if (typeof body.signedPayload !== "string") {
+    return c.json({ error: "bad_request" }, 400);
+  }
+
+  const note = peek<AppleNotification>(body.signedPayload);
+  const kind = note?.notificationType ?? "";
+
+  /* Apple sends around twenty types. These are the ones that change whether
+     somebody may use the app; TEST is here so that App Store Connect's "send
+     a test notification" button gets a clean 200 rather than an ignore. */
+  const INTERESTING = new Set([
+    "DID_RENEW", "EXPIRED", "DID_CHANGE_RENEWAL_STATUS", "REFUND",
+    "SUBSCRIBED", "DID_FAIL_TO_RENEW", "GRACE_PERIOD_EXPIRED", "REVOKE",
+  ]);
+  if (kind === "TEST") return c.json({ ok: true, test: true });
+  if (!INTERESTING.has(kind)) return c.json({ ok: true, ignored: kind || "unreadable" });
+
+  const inner = note?.data?.signedTransactionInfo
+    ? peek(note.data.signedTransactionInfo)
+    : null;
+  const askAbout = inner?.originalTransactionId ?? inner?.transactionId;
+  if (!askAbout) return c.json({ ok: true, ignored: "no transaction" });
+
+  const { db, ready, close } = getDb(c.env);
+  try {
+    await ready;
+
+    const [user] = await db.select().from(users)
+      .where(eq(users.appleOriginalTransactionId, String(askAbout))).limit(1);
+    if (!user) {
+      /* A subscription belonging to no account here: bought and then never
+         handed over, or an account since deleted. Nothing to write. */
+      return c.json({ ok: true, ignored: "unknown subscription" });
+    }
+    if (user.plan === "free") return c.json({ ok: true, ignored: "comped account" });
+
+    let sub: AppleSubscription | null;
+    try { sub = await subscriptionStatus(c.env, String(askAbout)); }
+    catch (err) {
+      if (err instanceof AppleError) {
+        /* 500, deliberately, so Apple retries. Unlike a bad payload, "we could
+           not reach Apple" is a condition that goes away on its own. */
+        console.warn("apple notification:", err.message);
+        return c.json({ error: "apple", message: err.message }, 500);
+      }
+      throw err;
+    }
+    if (!sub) return c.json({ ok: true, ignored: "unknown to Apple" });
+
+    const { paid, set } = applyApple(user, sub, String(askAbout));
+    await db.update(users).set(set).where(eq(users.id, user.id));
+
+    console.log(`apple notification ${kind} -> ${paid ? "active" : "lapsed"}`);
+    return c.json({ ok: true, plan: set.plan });
   } finally {
     c.executionCtx.waitUntil(close());
   }

@@ -115,9 +115,11 @@ private struct SignedIn: View {
 
 private struct SignedOutView: View {
     let signIn: () -> Void
+    @State private var joining = false
 
     var body: some View {
         VStack(spacing: 16) {
+            OwlMark(height: 64)
             Text("Bilancio")
                 .font(.largeTitle.weight(.semibold))
             Text("Sign in to see this month.")
@@ -125,8 +127,107 @@ private struct SignedOutView: View {
             Button("Sign in", action: signIn)
                 .buttonStyle(.borderedProminent)
                 .padding(.top, 8)
+
+            /* Accounts are not open, and this screen did not say so.
+             *
+             * Somebody arriving without one had a Sign in button, no way to
+             * make an account, and nothing explaining which of those two facts
+             * they were looking at — so the app read as broken to exactly the
+             * people who had just decided to try it.
+             */
+            VStack(spacing: 4) {
+                Text("Bilancio is opening gradually. Join the waitlist and we'll be in touch.")
+                    .font(Theme.note)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button("Join the waitlist") { joining = true }
+                    .font(Theme.note)
+            }
+            .padding(.top, 20)
         }
         .padding()
+        .sheet(isPresented: $joining) { WaitlistView() }
+    }
+}
+
+/// Asking to be let in.
+///
+/// The address goes on the same list the website's has always fed, so somebody
+/// who asked from a phone and somebody who asked from a browser are in one
+/// queue in one order rather than two lists to reconcile later.
+private struct WaitlistView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var email = ""
+    @State private var sending = false
+    @State private var done = false
+    @State private var problem: String?
+
+    private var looksLikeEmail: Bool {
+        let trimmed = email.trimmingCharacters(in: .whitespaces)
+        return trimmed.contains("@") && trimmed.contains(".") && trimmed.count > 4
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if done {
+                    Section {
+                        Label("You are on the list.", systemImage: "checkmark.circle")
+                            .foregroundStyle(Theme.positive)
+                    } footer: {
+                        // No claim about when. A waitlist that promises a date
+                        // it cannot keep is worse than one that promises
+                        // nothing, and the honest answer is that it depends on
+                        // how many people are ahead.
+                        Text("We will email you when there is room.")
+                    }
+                } else {
+                    Section {
+                        TextField("you@example.com", text: $email)
+                            .keyboardType(.emailAddress)
+                            .textContentType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    } footer: {
+                        Text("Your address, and nothing else. It is used to tell you when a place opens up.")
+                    }
+
+                    if let problem {
+                        Section {
+                            Label(problem, systemImage: "exclamationmark.triangle")
+                                .font(Theme.note)
+                                .foregroundStyle(Theme.negative)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Join the waitlist")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(done ? "Close" : "Cancel") { dismiss() }
+                }
+                if !done {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Join") { Task { await join() } }
+                            .disabled(!looksLikeEmail || sending)
+                    }
+                }
+            }
+        }
+        .tint(Theme.accent)
+    }
+
+    private func join() async {
+        sending = true
+        problem = nil
+        defer { sending = false }
+        do {
+            try await APIClient.joinWaitlist(email: email.trimmingCharacters(in: .whitespaces))
+            done = true
+        } catch {
+            problem = error.localizedDescription
+        }
     }
 }
 

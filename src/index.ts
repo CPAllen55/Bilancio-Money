@@ -128,14 +128,17 @@ app.post("/api/waitlist", async (c) => {
     return c.json({ error: "bad_request", reason: "that does not look like an email" }, 400);
   }
 
+  /* Where the address came from. An allowlist rather than the string as sent:
+     this is an unauthenticated endpoint, the column is read by a human
+     deciding who to invite, and free text from strangers has no business in
+     it. Anything unrecognised is recorded as having come from the landing
+     page, which is where all of them came from before there was a second
+     place to ask. */
+  const from = source === "ios" ? "ios" : "landing";
+
   const { db, ready, close } = getDb(c.env);
   try {
     await ready;
-    /* Where it came from, if the caller said and said something sensible. An
-       arbitrary string from an unauthenticated endpoint is not going into a
-       column, so it is matched against the two places that write here. */
-    const from = source === "ios" || source === "landing" ? source : "landing";
-
     await db
       .insert(waitlist)
       .values({ email: normalised, source: from })

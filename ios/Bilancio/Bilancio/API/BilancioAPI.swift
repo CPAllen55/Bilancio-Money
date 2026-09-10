@@ -12,6 +12,23 @@ import Foundation
 enum Bilancio {
     /// The apex and www both serve the Worker. The apex is canonical.
     static let apiBaseURL = URL(string: "https://bilanciomoney.com")!
+
+    /* The two documents an auto-renewable subscription has to link to from
+       inside the app, not merely from the App Store listing. Guideline 3.1.2
+       is explicit about it and it is one of the more common rejections.
+
+       The EULA is Apple's own, because App Store Connect is set to Apple's
+       Standard EULA and the two have to be the same document -- linking our
+       terms while the listing offers Apple's is the mismatch the rule exists
+       to catch. Nothing to draft and nothing to keep in step.
+
+       This is not bilanciomoney.com/terms, which still governs the service
+       and is still linked from the site and the web app. It is not the
+       licence for the software, which is what this link is asked for. */
+    static let eulaURL =
+        URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+    /* Ours, and it has to be: nobody else can describe what this app collects. */
+    static let privacyURL = URL(string: "https://bilanciomoney.com/privacy")!
 }
 
 /// Why a call did not produce a body.
@@ -91,6 +108,11 @@ struct APIClient {
         request.httpMethod = method
         request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        /* Which half of the app this is. The server needs it to answer
+           "is billing switched on" -- a purchase made here goes through Apple
+           and one made in a browser goes through Stripe, so the answer differs
+           by caller. A hint, not a credential: nothing is granted by it. */
+        request.setValue("ios", forHTTPHeaderField: "X-Bilancio-Client")
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -116,6 +138,11 @@ struct APIClient {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        /* Which half of the app this is. The server needs it to answer
+           "is billing switched on" -- a purchase made here goes through Apple
+           and one made in a browser goes through Stripe, so the answer differs
+           by caller. A hint, not a credential: nothing is granted by it. */
+        request.setValue("ios", forHTTPHeaderField: "X-Bilancio-Client")
 
         return try await run(request)
     }

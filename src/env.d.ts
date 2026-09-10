@@ -58,6 +58,26 @@ declare global {
     /* Price ids from the Stripe dashboard -- price_..., not product_... */
     STRIPE_PRICE_MONTHLY?: string;
     STRIPE_PRICE_YEARLY?: string;
+
+    /* ── Apple, for subscriptions bought in the iOS app ──────────────────
+     *
+     * Also all optional, and all four needed together -- with any of them
+     * missing, /api/billing/apple answers 503 and the app shows nothing to
+     * buy. Used to sign requests to the App Store Server API, which is asked
+     * who has paid rather than trusting a payload from a phone. See apple.ts.
+     *
+     * The key is an **In-App Purchase** key, from Users and Access →
+     * Integrations → In-App Purchase, NOT an App Store Connect API key. They
+     * look identical, they both download as a .p8, and the wrong one answers
+     * 401 to everything. The issuer id is the one shown on that same page.
+     */
+    APPLE_ISSUER_ID?: string;
+    /** The 10-character Key ID, shown next to the key it belongs to. */
+    APPLE_KEY_ID?: string;
+    /** The .p8 file's contents, whole, BEGIN and END lines included. */
+    APPLE_PRIVATE_KEY?: string;
+    /** com.bilanciomoney.Bilancio. Not a secret; it scopes the token. */
+    APPLE_BUNDLE_ID?: string;
   }
 }
 
