@@ -317,6 +317,10 @@
   .foot nav{ margin-left:auto; display:flex; gap:22px; flex-wrap:wrap; }
   .foot nav a{ font-size:14px; color:var(--body); }
   .foot nav a:hover{ color:var(--gold-deep); }
+  /* Instagram and YouTube. Plain links, nothing embedded, so neither service
+     hears from a visitor unless the visitor clicks. */
+  .foot nav a.soc{ display:inline-flex; align-items:center; }
+  .foot nav a.soc svg{ display:block; }
   .foot .copy{ font-size:13px; color:var(--body-soft); width:100%; }
 
   /* --------------------------------------------------------------- landing */
@@ -720,6 +724,8 @@
       <a href="/terms/">Terms</a>
       <a href="mailto:security@bilanciomoney.com">Security</a>
       <a href="mailto:support@bilanciomoney.com">Contact</a>
+      <a class="soc" href="https://www.instagram.com/bilancio_money/" target="_blank" rel="me noopener noreferrer" aria-label="Bilancio Money on Instagram" title="Instagram · @bilancio_money"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.1" fill="currentColor" stroke="none"/></svg></a>
+      <a class="soc" href="https://www.youtube.com/@BilancioMoney" target="_blank" rel="me noopener noreferrer" aria-label="Bilancio Money on YouTube" title="YouTube · @BilancioMoney"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor"/></svg></a>
     </nav>
     <span class="copy">© 2026 Bilancio Money · Guardiano del Faro LLC</span>
   </div>
