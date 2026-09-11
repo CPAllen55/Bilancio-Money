@@ -99,6 +99,13 @@
       "when": 1789129190296,
       "tag": "0013_budget_alerts",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789140889416,
+      "tag": "0014_alert_subscriptions",
+      "breakpoints": true
     }
   ]
 }

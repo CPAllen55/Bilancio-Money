@@ -1,39 +1,42 @@
 /**
- * Budget alerts: a notification when a category is nearly spent, and another
- * if it goes over.
+ * Budget alerts: a notification when a chosen subcategory is nearly spent, and
+ * another if it goes over.
+ *
+ * ── Chosen, one subcategory at a time ──────────────────────────────────────
+ *
+ * Nothing alerts unless somebody picked it on the Budget alerts dashboard. The
+ * choice is per subcategory because that is where the plan lives: Groceries has
+ * a budget of its own, while "Food and Dining" is only the sum of what is under
+ * it -- and somebody watching their groceries has no reason to hear about
+ * coffee.
  *
  * ── The same line the Overview draws ────────────────────────────────────────
  *
- * Nearly spent is 95% and over is past 100%, which are exactly the two states
- * the Overview already colours -- TrackerCard turns a category amber at
- * `nearBudget = 0.95` and red on `actual > budget`. The figures come from
- * `monthStanding`, which is the /summary this-month path itself. So an alert
- * can never say a category is at 96% while the screen it opens says 91%.
- *
- * Parent categories only: the cards on the Overview, and what the app calls a
- * category. The plan lives on subcategories, but an alert per subcategory would
- * be six notifications for one expensive week of groceries.
+ * Nearly spent is 95% and over is past 100%, the two states a subcategory row
+ * inside an Overview card is already coloured by. The figures come from
+ * `monthStanding`, which is the /summary this-month path itself, so an alert
+ * can never say a subcategory is at 96% while the screen it opens says 91%.
  *
  * ── Said once ───────────────────────────────────────────────────────────────
  *
- * Each category announces each threshold once a month -- nearly spent, then
- * over if it gets that far. Nothing repeats on the next sync, and a muted
- * category says nothing more until the month turns. The month is the plan's
- * own UTC key, so "this month" means the month the budget means.
+ * Each subcategory announces each threshold once a month -- nearly spent, then
+ * over if it gets that far. Nothing repeats on the next sync, and a muted one
+ * says nothing more until the month turns. The month is the plan's own UTC
+ * key, so "this month" means the month the budget means.
  *
  * ── When it runs ────────────────────────────────────────────────────────────
  *
  * After a sync that changed something, whether Plaid's webhook or the app
- * started it, and when somebody switches alerts on. Spending only moves when
- * transactions do, so there is nothing to look at in between. It is not cheap
- * -- the plan is fitted from up to three years of history -- which is why it
- * returns before any of that for somebody who has not opted in, or has no
- * phone to send to.
+ * started it, and when somebody chooses a subcategory. Spending only moves
+ * when transactions do, so there is nothing to look at in between. It is not
+ * cheap -- the plan is fitted from up to three years of history -- which is
+ * why it returns before any of that for somebody who has chosen nothing, or
+ * has no phone to send to.
  */
 
 import { and, eq } from "drizzle-orm";
 import { getDb } from "./db/client";
-import { budgetAlertStates, notificationSettings, pushDevices } from "./db/schema";
+import { budgetAlertStates, budgetAlertSubscriptions, pushDevices } from "./db/schema";
 import { monthStanding } from "./summary-routes";
 import { learnWindow } from "./plan";
 import { pushConfigured, sendPush } from "./push";
@@ -94,9 +97,13 @@ export async function checkBudgetAlerts(env: Env, userId: string): Promise<void>
   try {
     await ready;
 
-    const [settings] = await db.select().from(notificationSettings)
-      .where(eq(notificationSettings.userId, userId)).limit(1);
-    if (!settings?.budgetAlerts) return;
+    const chosen = new Set(
+      (await db.select({ categoryId: budgetAlertSubscriptions.categoryId })
+        .from(budgetAlertSubscriptions)
+        .where(eq(budgetAlertSubscriptions.userId, userId)))
+        .map((row) => row.categoryId),
+    );
+    if (!chosen.size) return;
 
     const devices = await db.select().from(pushDevices).where(eq(pushDevices.userId, userId));
     if (!devices.length) return;
@@ -114,10 +121,11 @@ export async function checkBudgetAlerts(env: Env, userId: string): Promise<void>
 
     let phones = devices;
     for (const cat of standing.ctx.list) {
-      if (cat.parentSlug || cat.kind !== "spend") continue;
+      // Chosen, and a spending subcategory -- anything else was never alertable.
+      if (!chosen.has(cat.id) || !cat.parentSlug || cat.kind !== "spend") continue;
 
-      const planned = standing.budget.byParent[cat.slug] ?? 0;
-      const spent = standing.spentByParent[cat.slug] ?? 0;
+      const planned = standing.budget.byCategory[cat.slug] ?? 0;
+      const spent = standing.spentByCategory[cat.slug] ?? 0;
       const level = levelFor(spent, planned);
       if (!level) continue;
 

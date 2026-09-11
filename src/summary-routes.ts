@@ -854,7 +854,12 @@ export async function monthStanding(
   ]);
   const now = tally(rows as AmountRow[], ctx, splits);
 
-  return { ctx, spentByParent: rollUp(now.byCategory, ctx), budget };
+  return {
+    ctx,
+    spentByCategory: now.byCategory,
+    spentByParent: rollUp(now.byCategory, ctx),
+    budget,
+  };
 }
 
 /* ----------------------------------------------------------------- summary -- */

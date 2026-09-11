@@ -142,8 +142,8 @@ Where to look:
   More          Calendar, The year ahead, Net Worth, Categories,
                 Subscription, Banks, and light/dark appearance
 
-Budget alerts: More, then Notifications. They are off until switched on,
-and switching on checks the current month straight away.
+Budget alerts: More, then Budget alerts. Nothing alerts until a subcategory
+is chosen there, and choosing one checks the current month straight away.
 
 Deleting the account: More, then Banks, then Delete account at the bottom.
 It removes the account itself and not only its data — the local record, every
