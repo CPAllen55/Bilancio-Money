@@ -17,6 +17,8 @@ import UserNotifications
 final class NotificationsModel {
     enum State {
         case loading
+        /// The server is answering and alerts are not set up behind it yet.
+        case unavailable
         case failed(String)
         case loaded(NotificationSettingsResponse)
     }
@@ -36,6 +38,11 @@ final class NotificationsModel {
         permission = await BudgetAlerts.shared.permission()
         do {
             state = .loaded(try await client.notificationSettings())
+        } catch APIError.http(let status, _) where status == 503 {
+            /* Not a failure, and not worth painting red: the Worker is up and
+               the tables behind alerts do not exist yet. Somebody seeing this
+               has nothing to retry and nothing to fix. */
+            state = .unavailable
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -84,6 +91,14 @@ struct NotificationsView: View {
             switch model.state {
             case .loading:
                 ProgressView().frame(maxWidth: .infinity)
+
+            case .unavailable:
+                Section {
+                    Toggle("Budget alerts", isOn: .constant(false))
+                        .disabled(true)
+                } footer: {
+                    Text("Budget alerts aren't available yet.")
+                }
 
             case .failed(let message):
                 Section {
