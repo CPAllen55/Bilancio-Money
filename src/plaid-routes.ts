@@ -12,6 +12,7 @@ import { getDb } from "./db/client";
 import { accounts, items, transactions, users } from "./db/schema";
 import { requireUser } from "./auth";
 import { trialEnd } from "./entitlement";
+import { checkBudgetAlerts } from "./budget-alerts";
 import { openToken, sealToken } from "./crypto";
 import {
   updateItemWebhook,
@@ -410,6 +411,15 @@ plaid.post("/sync", async (c) => {
       }
     }
 
+    /* After the answer, never in its way. Only when something moved: spending
+       cannot cross a budget line on a sync that brought nothing new. */
+    if (added + modified + removed > 0) {
+      c.executionCtx.waitUntil(
+        checkBudgetAlerts(c.env, auth.user.id)
+          .catch((err) => console.error("budget alerts after sync:", err)),
+      );
+    }
+
     return c.json({ ok: true, items: mine.length, added, modified, removed, more, pending, failed });
   } catch (err) {
     return c.json(plaidFailure(err), 502);
@@ -473,20 +483,37 @@ plaid.post("/webhook", async (c) => {
         // Drained in the background across as many rounds as it takes, so a
         // completed backfill lands without anybody pressing anything.
         c.executionCtx.waitUntil((async () => {
+          /* Its own connection. This used the handler's, which the `finally`
+             below closes the moment the handler answers Plaid -- and that is
+             well before the first round has finished talking to Plaid, so every
+             database write this drain made was going to a client already told
+             to shut. */
+          const bg = getDb(c.env);
+          let changed = 0;
           try {
+            await bg.ready;
             let round = 0;
             let current = item;
             for (;;) {
-              const r = await syncOneItem(c.env, db, current);
+              const r = await syncOneItem(c.env, bg.db, current);
+              changed += r.added + r.modified + r.removed;
               console.log(`webhook sync ${code} item ${item.id}: +${r.added} ~${r.modified} -${r.removed}`);
               if (!r.more || ++round >= 40) break;
-              const [fresh] = await db
+              const [fresh] = await bg.db
                 .select().from(items).where(eq(items.id, item.id)).limit(1);
               if (!fresh) break;   // disconnected mid-backfill
               current = fresh;     // pick up the cursor the last round saved
             }
           } catch (err) {
             console.error(`webhook sync failed for item ${item.id}:`, err);
+          } finally {
+            await bg.close().catch(() => {});
+          }
+
+          // Spending that arrived while the app was closed is the case alerts exist for.
+          if (changed > 0) {
+            await checkBudgetAlerts(c.env, item.userId)
+              .catch((err) => console.error("budget alerts after webhook:", err));
           }
         })());
       }

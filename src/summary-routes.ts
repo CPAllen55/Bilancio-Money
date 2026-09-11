@@ -825,6 +825,38 @@ async function budgetFor(
   };
 }
 
+/**
+ * Where this month stands, per parent category: what was spent, and what the
+ * plan said it would cost. For callers outside a request -- the budget alert
+ * check -- that need the exact figures the Overview's "Against the plan" draws.
+ *
+ * Not a second calculation. It is the /summary this-month path assembled from
+ * the same helpers: the same rows, the same splits, the same tally, the same
+ * planner. If the Overview says a category is at 96%, this says 96%.
+ */
+export async function monthStanding(
+  db: ReturnType<typeof getDb>["db"],
+  userId: string,
+  today: Date = new Date(),
+) {
+  const { current } = resolveRange("this-month", today);
+  const [ctx, ids] = await Promise.all([
+    loadCategories(db, userId),
+    ownedAccountIds(db, userId, "all", true),
+  ]);
+  if (!ids.length) return null;
+
+  const where = ledgerRows(ids, current.start, current.end);
+  const [rows, splits, budget] = await Promise.all([
+    withOverrides(db, userId).where(where),
+    loadSplits(db, userId, where),
+    budgetFor(db, userId, ids, ctx, current, today),
+  ]);
+  const now = tally(rows as AmountRow[], ctx, splits);
+
+  return { ctx, spentByParent: rollUp(now.byCategory, ctx), budget };
+}
+
 /* ----------------------------------------------------------------- summary -- */
 
 summary.get("/summary", async (c) => {

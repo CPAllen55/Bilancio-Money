@@ -334,6 +334,56 @@ export const budgetPlansV2 = pgTable("budget_plans_v2", {
   uniqueIndex("budget_plans_v2_user_category_idx").on(t.userId, t.categoryId),
 ]);
 
+// 12c. Budget alerts — telling somebody a category is nearly spent.
+//
+// Three new tables rather than a column on `users`, deliberately. requireUser
+// reads the whole users row on every request, so a column added there would
+// fail every request in the gap between this code deploying and its migration
+// running. New tables are read only by the code that knows they exist.
+
+/* The opt-in. No row reads as off, so nobody is notified who did not ask. */
+export const notificationSettings = pgTable("notification_settings", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  budgetAlerts: boolean("budget_alerts").notNull().default(false),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/* Where to send them. A token is one install of the app on one phone, and a
+   person can have several. Unique on the token alone rather than on the pair:
+   a phone that signs into a different account is still the same phone, and
+   must stop receiving the first account's alerts. */
+export const pushDevices = pgTable("push_devices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull(),
+  /* "production" or "sandbox". A build run from Xcode is handed a sandbox
+     token and TestFlight and the App Store production ones, and each works
+     only against its own APNs host. */
+  environment: text("environment").notNull().default("production"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("push_devices_token_idx").on(t.token),
+]);
+
+/* What has already been said, per category per month, so nothing is said
+   twice. `level` is the highest threshold announced -- "near" or "over" -- and
+   only ever moves up. `acknowledgedAt` is the person saying "enough for this
+   month": once it is set, that category is quiet until the month turns. */
+export const budgetAlertStates = pgTable("budget_alert_states", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  categoryId: uuid("category_id").notNull()
+    .references(() => categories.id, { onDelete: "cascade" }),
+  /* YYYY-MM, the plan's own month key. */
+  month: text("month").notNull(),
+  level: text("level"),
+  notifiedAt: timestamp("notified_at", { withTimezone: true }),
+  acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+}, (t) => [
+  uniqueIndex("budget_alert_states_user_cat_month_idx").on(t.userId, t.categoryId, t.month),
+]);
+
 /* ------------------------------------------------------------- 12. metals -- */
 
 /**

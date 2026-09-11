@@ -78,6 +78,19 @@ declare global {
     APPLE_PRIVATE_KEY?: string;
     /** com.bilanciomoney.Bilancio. Not a secret; it scopes the token. */
     APPLE_BUNDLE_ID?: string;
+
+    /* ── APNs, for budget alerts ─────────────────────────────────────────
+     *
+     * An APNs key: Certificates, Identifiers & Profiles → Keys → Apple Push
+     * Notifications service. Neither the In-App Purchase key above nor an App
+     * Store Connect API key -- a third kind, which downloads as
+     * AuthKey_XXXXXXXXXX.p8. Both optional; unset, nothing is sent and the app
+     * shows alerts as not yet available. The team id is a plain var in
+     * wrangler.jsonc, because it is not a secret.
+     */
+    APNS_KEY_ID?: string;
+    /** The .p8 contents, whole, BEGIN and END lines included. */
+    APNS_PRIVATE_KEY?: string;
   }
 }
 

@@ -177,7 +177,11 @@ struct BanksView: View {
 
                     Section {
                         Button("Sign out") {
-                            Task { try? await clerk.auth.signOut() }
+                            // The phone first, while there is still a session to ask with.
+                            Task {
+                                await BudgetAlerts.shared.forgetDevice()
+                                try? await clerk.auth.signOut()
+                            }
                         }
                     }
 

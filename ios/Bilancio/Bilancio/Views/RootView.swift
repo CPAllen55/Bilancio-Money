@@ -84,32 +84,44 @@ private struct SessionGate: View {
 /// across a phone, and the ones that are built are the ones that appear —
 /// an empty tab is a worse answer than an absent one.
 private struct SignedIn: View {
+    enum Screen: Hashable { case overview, trend, budgeting, transactions, more }
+
+    @State private var screen: Screen = .overview
+    /// Watched so that opening a budget alert lands on the Overview, which is
+    /// where the category it is about is drawn.
+    private let alerts = BudgetAlerts.shared
+
     var body: some View {
-        TabView {
+        TabView(selection: $screen) {
             // In the order the questions get asked: where things stand, how
             // that compares with before, what it was supposed to be, and then
             // the rows behind all three. Transactions sits last because it is
             // the one you arrive at from the others as often as you open it.
-            Tab("Overview", systemImage: "chart.pie") {
+            Tab("Overview", systemImage: "chart.pie", value: Screen.overview) {
                 OverviewView()
             }
-            Tab("Trend", systemImage: "chart.bar") {
+            Tab("Trend", systemImage: "chart.bar", value: Screen.trend) {
                 TrendView()
             }
-            Tab("Budgeting", systemImage: "slider.horizontal.3") {
+            Tab("Budgeting", systemImage: "slider.horizontal.3", value: Screen.budgeting) {
                 BudgetingView()
             }
-            Tab("Transactions", systemImage: "list.bullet") {
+            Tab("Transactions", systemImage: "list.bullet", value: Screen.transactions) {
                 TransactionsView()
             }
             // A tab bar holds five. There are seven dashboards, so the fifth
             // slot is the way to the rest rather than one more of them — which
             // is better than letting iOS build its own overflow list, and
             // better than leaving Budgeting reachable only from inside Tracker.
-            Tab("More", systemImage: "ellipsis.circle") {
+            Tab("More", systemImage: "ellipsis.circle", value: Screen.more) {
                 MoreView()
             }
         }
+        .onChange(of: alerts.opened) { screen = .overview }
+        /* iOS can hand out a new token at any launch, so an app with
+           permission re-registers each time. Never asks for permission here --
+           that only happens when somebody switches alerts on. */
+        .task { await alerts.refreshIfAllowed() }
     }
 }
 
