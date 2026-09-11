@@ -146,6 +146,8 @@ struct OverviewView: View {
         }
         .tint(Theme.accent)
         .task { await model.load() }
+        // An alert opened: the figures it was about may be newer than these.
+        .onChange(of: BudgetAlerts.shared.opened) { Task { await model.load() } }
     }
 
     private func content(_ s: SummaryResponse) -> some View {

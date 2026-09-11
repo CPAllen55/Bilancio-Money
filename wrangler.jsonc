@@ -123,7 +123,11 @@
     // history has finished loading. Must be publicly reachable and HTTPS;
     // Plaid will not deliver to localhost, so this stays empty in .dev.vars
     // and webhooks simply are not registered during local development.
-    "PLAID_WEBHOOK_URL": "https://bilanciomoney.com/api/plaid/webhook"
+    "PLAID_WEBHOOK_URL": "https://bilanciomoney.com/api/plaid/webhook",
+
+    // Apple's id for the team that owns the app, and the issuer of every APNs
+    // provider token. Not a secret: it is in the Xcode project.
+    "APNS_TEAM_ID": "Z9C3CA95C7"
   },
 
   // No named environments on purpose. The Cloudflare build runs

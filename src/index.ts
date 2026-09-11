@@ -19,6 +19,7 @@ import metalRoutes from "./metal-routes";
 import budgetRoutes from "./budget-routes";
 import billingRoutes from "./billing-routes";
 import logoRoutes from "./logo-routes";
+import notificationRoutes from "./notification-routes";
 import adminRoutes from "./admin-routes";
 
 // Deliberately loose. The only thing worth rejecting here is input that cannot
@@ -193,6 +194,7 @@ app.route("/api", assetRoutes);
 app.route("/api", metalRoutes);
 app.route("/api", budgetRoutes);
 app.route("/api", logoRoutes);
+app.route("/api", notificationRoutes);
 /* Mounted last and on its own prefix. Every route under it answers 404 unless
    the caller is the one Clerk id in ADMIN_CLERK_USER_ID — 404 rather than 403,
    because "forbidden" tells an unauthenticated caller that the thing exists. */

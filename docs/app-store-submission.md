@@ -142,6 +142,9 @@ Where to look:
   More          Calendar, The year ahead, Net Worth, Categories,
                 Subscription, Banks, and light/dark appearance
 
+Budget alerts: More, then Notifications. They are off until switched on,
+and switching on checks the current month straight away.
+
 Deleting the account: More, then Banks, then Delete account at the bottom.
 It removes the account itself and not only its data — the local record, every
 bank connection, and the sign-in identity.
@@ -175,6 +178,11 @@ Three data types, and no others. Each is **linked to the user's identity** and
 | Contact Info | Email Address | The Clerk identity an account belongs to |
 | Identifiers | User ID | The Clerk user id everything is stored against |
 | Financial Info | Other Financial Info | Transactions and balances, which are the app |
+
+Push notification tokens are not added as a data type. A token addresses one
+install of the app for delivery, is deleted on sign-out, and identifies nobody
+— which is a different thing from the Device ID category, which exists for
+identifiers that follow a person across apps.
 
 Answer **No** to tracking, and do not add a tracking domain: nothing is shared
 with a data broker or joined to anything outside the app.
