@@ -203,6 +203,17 @@ reason that had nothing to do with it. Only a refusal from *every* host means
 the key is wrong, and `GET /api/admin/apple-check` — admin-only, prints the
 key id and bundle id but never the key — says which of the two it is.
 
+Production also refuses **every** app that has no release on the App Store
+yet. Apple keeps the production API closed until then — "Until you have a
+release in production, access to the production APIs is not allowed. Once you
+have a release in production this will be unlocked" (App Store Commerce
+Engineer, Apple Developer Forums thread 806452). So production cannot be
+proven before launch. App Review buys in sandbox and is served by the fallback
+above; after release, production answers 404 for a sandbox transaction, which
+the same fallback handles. **Run `/api/admin/apple-check` on launch day**: it
+must read `production: accepted`, or real customers' purchases will not be
+credited.
+
 ### Bindings
 
 All four together, all optional; with any missing, `/api/billing/apple` answers

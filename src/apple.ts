@@ -455,13 +455,24 @@ export async function selfTest(env: Env): Promise<AppleCheck> {
   }
   if (good) {
     /* One world and not the other. The credentials are therefore right --
-       they are the same credentials -- and what differs is what the account
-       is allowed to do, which is the agreement. */
+       they are the same credentials -- and what differs is what the app is
+       allowed to do.
+
+       The usual reason is that the app is not on the App Store yet. Apple does
+       not open the production API to an app until it has a release there
+       ("Until you have a release in production, access to the production APIs
+       is not allowed" -- App Store Commerce Engineer, Apple Developer Forums
+       thread 806452). A Paid Applications Agreement that has not gone Active
+       looks exactly the same, which is why this used to name that instead:
+       it was the cause the first time and was not the second. */
     return { ...result, appleAccepts: true, says:
       `Apple accepted the key in ${production === "accepted" ? "production" : "sandbox"} ` +
-      `and not the other, which means the key itself is right. That is an ` +
-      `account-level difference, not a configuration one -- most likely the ` +
-      `Paid Applications Agreement is not Active yet. Nothing here to fix.` };
+      `and not the other, so the key itself is right. Before the app has a ` +
+      `release on the App Store this is expected: Apple keeps the production ` +
+      `API closed until then, and purchases are checked against sandbox, ` +
+      `which is what App Review uses. Run this again once the app is live -- ` +
+      `production should then say accepted. If it still does not, check that ` +
+      `the Paid Applications Agreement is Active.` };
   }
   if (production === "rejected" && sandbox === "rejected") {
     return { ...result, appleAccepts: false, says:
