@@ -61,6 +61,10 @@ struct MoreView: View {
                         "What is owned, what is owed") {
                         NetWorthView(embedded: true)
                     }
+                    row("Budget alerts", "bell.badge",
+                        "Which subcategories warn you when nearly spent") {
+                        BudgetAlertsView()
+                    }
                 } header: {
                     Text("Dashboards")
                 }
@@ -69,10 +73,6 @@ struct MoreView: View {
                     row("Subscription", "creditcard.circle",
                         "Your plan, and what happens next") {
                         SubscriptionView()
-                    }
-                    row("Notifications", "bell.badge",
-                        "Budget alerts, and muting them") {
-                        NotificationsView()
                     }
                     row("Categories", "square.grid.2x2",
                         "The tree everything is filed into") {

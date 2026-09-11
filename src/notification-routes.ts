@@ -1,5 +1,5 @@
 /**
- * The opt-in for budget alerts, the phones they go to, and muting one.
+ * Which subcategories alert, the phones alerts go to, and muting one.
  *
  * What decides whether an alert is sent lives in budget-alerts.ts; this is only
  * the switchboard. Every route answers 503 rather than 500 while the tables do
@@ -8,9 +8,11 @@
  */
 
 import { Hono } from "hono";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { getDb } from "./db/client";
-import { budgetAlertStates, categories, notificationSettings, pushDevices } from "./db/schema";
+import {
+  budgetAlertStates, budgetAlertSubscriptions, categories, pushDevices,
+} from "./db/schema";
 import { requireUser } from "./auth";
 import { learnWindow } from "./plan";
 import { pushConfigured } from "./push";
@@ -35,8 +37,13 @@ const kick = (env: Env, userId: string) =>
 /**
  * GET /api/notifications
  *
- * The switch, whether anything can be sent at all, and this month's categories
- * that have alerted or been muted -- the ones there is something to say about.
+ * Whether anything can be sent at all, the subcategories chosen, and this
+ * month's subcategories that have alerted or been muted.
+ *
+ * Deliberately light. The dashboard's figures -- spent and planned per
+ * subcategory -- come from /api/summary, which already computes exactly them
+ * and can be served from cache; working the plan out twice per screen would
+ * double the most expensive query in the app for nothing.
  */
 notifications.get("/notifications", async (c) => {
   const { db, ready, close } = getDb(c.env);
@@ -46,8 +53,9 @@ notifications.get("/notifications", async (c) => {
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
 
     const month = learnWindow(new Date()).currentKey;
-    const [settings] = await db.select().from(notificationSettings)
-      .where(eq(notificationSettings.userId, auth.user.id)).limit(1);
+    const chosen = await db.select({ categoryId: budgetAlertSubscriptions.categoryId })
+      .from(budgetAlertSubscriptions)
+      .where(eq(budgetAlertSubscriptions.userId, auth.user.id));
     const devices = await db.select({ id: pushDevices.id }).from(pushDevices)
       .where(eq(pushDevices.userId, auth.user.id));
     const rows = await db
@@ -69,9 +77,9 @@ notifications.get("/notifications", async (c) => {
     return c.json({
       ok: true,
       configured: pushConfigured(c.env),
-      enabled: !!settings?.budgetAlerts,
       month,
       devices: devices.length,
+      selected: chosen.map((r) => r.categoryId),
       alerts: rows.map((r) => ({
         categoryId: r.categoryId,
         label: r.label,
@@ -90,34 +98,64 @@ notifications.get("/notifications", async (c) => {
 });
 
 /**
- * PUT /api/notifications   { enabled: boolean }
+ * PUT /api/notifications/subscriptions   { categoryIds: string[], enabled: boolean }
  *
- * Switching on looks at the month straight away, rather than leaving somebody
- * who is already over budget to find out on the next sync.
+ * Choose or unchoose subcategories -- one, or a whole category's worth at once
+ * for the dashboard's All and None. Choosing looks at the month straight away,
+ * rather than leaving somebody already over to find out on the next sync.
  */
-notifications.put("/notifications", async (c) => {
+notifications.put("/notifications/subscriptions", async (c) => {
   const { db, ready, close } = getDb(c.env);
   try {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
 
-    let body: { enabled?: unknown };
+    let body: { categoryIds?: unknown; enabled?: unknown };
     try { body = await c.req.json(); }
     catch { return c.json({ error: "bad_request", message: "Body must be JSON." }, 400); }
+
     if (typeof body.enabled !== "boolean") {
       return c.json({ error: "bad_request", message: "enabled must be true or false." }, 400);
     }
+    const raw = Array.isArray(body.categoryIds) ? body.categoryIds : [];
+    const ids = [...new Set(raw.filter(
+      (x): x is string => typeof x === "string" && /^[0-9a-f-]{36}$/i.test(x),
+    ))];
+    if (!ids.length || ids.length !== new Set(raw).size || ids.length > 300) {
+      return c.json({ error: "bad_request", message: "categoryIds must be category ids." }, 400);
+    }
 
-    await db.insert(notificationSettings)
-      .values({ userId: auth.user.id, budgetAlerts: body.enabled, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: notificationSettings.userId,
-        set: { budgetAlerts: body.enabled, updatedAt: new Date() },
-      });
+    /* Spending subcategories this person can see, and nothing else. A parent
+       has no plan of its own to be near, and income has no limit to pass. */
+    const allowed = await db.select({ id: categories.id }).from(categories).where(and(
+      inArray(categories.id, ids),
+      or(isNull(categories.userId), eq(categories.userId, auth.user.id)),
+      isNotNull(categories.parentId),
+      eq(categories.kind, "spend"),
+    ));
+    if (allowed.length !== ids.length) {
+      return c.json({
+        error: "bad_request",
+        message: "Only spending subcategories can have alerts.",
+      }, 400);
+    }
 
-    if (body.enabled) c.executionCtx.waitUntil(kick(c.env, auth.user.id));
-    return c.json({ ok: true, enabled: body.enabled });
+    if (body.enabled) {
+      await db.insert(budgetAlertSubscriptions)
+        .values(ids.map((categoryId) => ({ userId: auth.user.id, categoryId })))
+        .onConflictDoNothing({
+          target: [budgetAlertSubscriptions.userId, budgetAlertSubscriptions.categoryId],
+        });
+      c.executionCtx.waitUntil(kick(c.env, auth.user.id));
+    } else {
+      await db.delete(budgetAlertSubscriptions).where(and(
+        eq(budgetAlertSubscriptions.userId, auth.user.id),
+        inArray(budgetAlertSubscriptions.categoryId, ids),
+      ));
+    }
+
+    return c.json({ ok: true, enabled: body.enabled, categoryIds: ids });
   } catch (err) {
     if (missingTable(err)) return c.json(notReady, 503);
     throw err;
@@ -160,13 +198,14 @@ notifications.post("/notifications/devices", async (c) => {
         set: { userId: auth.user.id, environment, updatedAt: new Date() },
       });
 
-    /* A phone this account had not seen. If alerts were switched on before
-       the token arrived -- the switch and the registration race each other on
-       first use -- this is the moment there is finally somewhere to send. */
+    /* A phone this account had not seen. If a subcategory was chosen before
+       the token arrived -- choosing and registering race each other on first
+       use -- this is the moment there is finally somewhere to send. */
     if (!existing || existing.userId !== auth.user.id) {
-      const [settings] = await db.select().from(notificationSettings)
-        .where(eq(notificationSettings.userId, auth.user.id)).limit(1);
-      if (settings?.budgetAlerts) c.executionCtx.waitUntil(kick(c.env, auth.user.id));
+      const [anyChosen] = await db.select({ id: budgetAlertSubscriptions.id })
+        .from(budgetAlertSubscriptions)
+        .where(eq(budgetAlertSubscriptions.userId, auth.user.id)).limit(1);
+      if (anyChosen) c.executionCtx.waitUntil(kick(c.env, auth.user.id));
     }
 
     return c.json({ ok: true });

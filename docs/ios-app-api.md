@@ -184,16 +184,16 @@ Query: `range`, `bucket` (a category slug — the drill-down), `merchant`,
 | `DELETE /api/rules/:id` | drop one |
 | `PUT /api/budget` | `[{ slug, baseline?, month?, amount? }]` — `baseline` scales the year, `month`+`amount` pins one month, `amount: null` unpins it |
 | `PUT /api/metals` | ounces held |
-| `GET /api/notifications` | returns `{ configured, enabled, month, devices, alerts[] }` — whether alerts can be sent at all, the opt-in, and this month's categories that have alerted or been muted |
-| `PUT /api/notifications` | `{ enabled }` — the opt-in. Nothing is sent without it; switching on checks the month straight away |
+| `GET /api/notifications` | returns `{ configured, month, devices, selected[], alerts[] }` — whether alerts can be sent at all, the subcategory ids chosen, and this month's subcategories that have alerted or been muted |
+| `PUT /api/notifications/subscriptions` | `{ categoryIds, enabled }` — choose or unchoose spending subcategories, one at a time or a whole category's worth. Nothing alerts unless chosen; choosing checks the month straight away |
 | `POST /api/notifications/devices` | `{ token, environment }` — the APNs device token as hex, and `"sandbox"` for a build run from Xcode. Send it on every launch |
 | `DELETE /api/notifications/devices/:token` | on sign-out, so that phone stops getting this account's alerts |
 | `POST /api/notifications/acknowledge` | `{ categoryId, month }` — that category is quiet until the month turns |
 | `DELETE /api/account` | deletes everything |
 
-Budget alerts fire on the two states the Overview already colours: a parent
-category at 95% of its plan, and one past 100%. Each is said once a month per
-category, the figures come from the same path as `/summary`, and a sync that
+Budget alerts fire for the subcategories somebody has chosen, on the two
+states the Overview already colours a subcategory by: 95% of its plan, and past
+100%. Each is said once a month per subcategory, the figures come from the same path as `/summary`, and a sync that
 changed nothing never checks. See `src/budget-alerts.ts`.
 
 A budget `baseline` **scales** rather than replaces: someone moving groceries

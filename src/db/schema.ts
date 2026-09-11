@@ -341,12 +341,19 @@ export const budgetPlansV2 = pgTable("budget_plans_v2", {
 // fail every request in the gap between this code deploying and its migration
 // running. New tables are read only by the code that knows they exist.
 
-/* The opt-in. No row reads as off, so nobody is notified who did not ask. */
-export const notificationSettings = pgTable("notification_settings", {
-  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
-  budgetAlerts: boolean("budget_alerts").notNull().default(false),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+/* The opt-in, one subcategory at a time: a row means "tell me about this one",
+   and no rows means nothing is ever sent. Per subcategory because that is where
+   the plan lives -- a parent's budget is only the sum of what is under it, and
+   somebody watching their groceries has no reason to hear about coffee. */
+export const budgetAlertSubscriptions = pgTable("budget_alert_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  categoryId: uuid("category_id").notNull()
+    .references(() => categories.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("budget_alert_subscriptions_user_cat_idx").on(t.userId, t.categoryId),
+]);
 
 /* Where to send them. A token is one install of the app on one phone, and a
    person can have several. Unique on the token alone rather than on the pair:

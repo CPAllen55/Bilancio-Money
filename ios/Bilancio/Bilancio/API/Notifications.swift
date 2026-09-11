@@ -14,18 +14,17 @@ import UserNotifications
 
 struct NotificationSettingsResponse: Decodable {
     /// Whether the server can send anything at all. False until the APNs key
-    /// is installed, and the switch is shown as unavailable until it is true.
+    /// is installed, and the switches are shown disabled until it is true.
     let configured: Bool
-    let enabled: Bool
     /// `YYYY-MM`, the month the alerts below belong to.
     let month: String
+    /// Subcategory ids that alert. Nothing else ever does.
+    let selected: [String]
     let alerts: [Alert]
 
     struct Alert: Decodable, Identifiable {
         let categoryId: String
-        let label: String
-        let colour: String
-        /// "near", "over", or nothing for a category muted before it alerted.
+        /// "near", "over", or nothing for one muted before it alerted.
         let level: String?
         let acknowledged: Bool
 
@@ -40,8 +39,12 @@ extension APIClient {
         try await get("/api/notifications")
     }
 
-    func setBudgetAlerts(_ enabled: Bool) async throws {
-        let _: Accepted = try await send("PUT", "/api/notifications", body: ["enabled": enabled])
+    /// Choose or unchoose subcategories — one, or a whole category's worth.
+    func setAlerts(categoryIds: [String], enabled: Bool) async throws {
+        let _: Accepted = try await send(
+            "PUT", "/api/notifications/subscriptions",
+            body: ["categoryIds": categoryIds, "enabled": enabled]
+        )
     }
 
     func registerDevice(token: String, environment: String) async throws {
@@ -110,8 +113,9 @@ final class BudgetAlerts {
         UNUserNotificationCenter.current().setNotificationCategories([category])
     }
 
-    /// Ask once, when somebody switches alerts on — never at launch, where a
-    /// permission prompt with no context is a prompt people say no to.
+    /// Ask when somebody chooses a subcategory — never at launch, where a
+    /// permission prompt with no context is a prompt people say no to. Once
+    /// iOS has an answer this returns it without asking again.
     func requestPermission() async -> Bool {
         let granted = (try? await UNUserNotificationCenter.current()
             .requestAuthorization(options: [.alert, .sound, .badge])) ?? false
