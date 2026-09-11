@@ -104,14 +104,6 @@
     "kind": "spend"
   },
   {
-    "slug": "utilities",
-    "label": "Utilities",
-    "colour": "#5c6fd0",
-    "sortOrder": 32,
-    "parent": "home",
-    "kind": "spend"
-  },
-  {
     "slug": "maintenance",
     "label": "Maintenance and Improvement",
     "colour": "#81A121",
@@ -131,6 +123,38 @@
     "colour": "#214EA1",
     "sortOrder": 35,
     "parent": "home"
+  },
+  {
+    "slug": "bills",
+    "label": "Bills & Utilities",
+    "colour": "#B6CD1D",
+    "sortOrder": 36,
+    "parent": null,
+    "kind": "spend"
+  },
+  {
+    "slug": "utilities",
+    "label": "Utilities",
+    "colour": "#5c6fd0",
+    "sortOrder": 361,
+    "parent": "bills",
+    "kind": "spend"
+  },
+  {
+    "slug": "internet",
+    "label": "Internet",
+    "colour": "#21CBDE",
+    "sortOrder": 362,
+    "parent": "bills",
+    "kind": "spend"
+  },
+  {
+    "slug": "cell-phone",
+    "label": "Cell Phone",
+    "colour": "#1CBA6B",
+    "sortOrder": 363,
+    "parent": "bills",
+    "kind": "spend"
   },
   {
     "slug": "transportation",

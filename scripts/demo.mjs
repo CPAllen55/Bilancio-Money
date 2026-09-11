@@ -232,6 +232,11 @@ for (const [idx, mo] of MONTHS.entries()) {
      "RENT_AND_UTILITIES", "RENT_AND_UTILITIES_GAS_AND_ELECTRICITY");
   tx(CHECKING, dayIn(mo, 6), 8900, "SPECTRUM INTERNET",
      "RENT_AND_UTILITIES", "RENT_AND_UTILITIES_INTERNET_AND_CABLE");
+  /* The phone, so Bills & Utilities shows all three of its leaves. Same day,
+     same figure, every month: the shape the engine should take as a
+     commitment rather than estimate. */
+  tx(CARD, dayIn(mo, 14), 8500, "T-MOBILE",
+     "RENT_AND_UTILITIES", "RENT_AND_UTILITIES_TELEPHONE");
   tx(CHECKING, dayIn(mo, 10), 18400, "STATE FARM INSURANCE",
      "GENERAL_SERVICES", "GENERAL_SERVICES_INSURANCE");
   tx(CARD, dayIn(mo, 12), 4900, "PLANET FITNESS",

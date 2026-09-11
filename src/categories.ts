@@ -67,7 +67,23 @@ const BY_DETAILED: Record<string, string> = {
   GENERAL_MERCHANDISE_PET_SUPPLIES: "pet-food",
   MEDICAL_VETERINARY_SERVICES: "vet",
   RENT_AND_UTILITIES_RENT: "housing",
-  RENT_AND_UTILITIES_INTERNET_AND_CABLE: "utilities",
+  /* Bills & Utilities is a category of its own, out from under Home. Rent
+     stays behind in Housing above: it is the cost of having the home, where
+     these are the running costs of living in it, and a budget reader wants
+     the two apart.
+
+     Internet and the phone are the two bills Plaid names precisely, so each
+     gets its own leaf. Power, water, gas and waste have no code finer than
+     "a utility" worth splitting on, and fall through to Utilities by the
+     primary in BY_PRIMARY -- which is also where the seasonal budget rule
+     lives, so it keeps applying to exactly the bills that follow the
+     weather and to neither of these, which do not.
+
+     No migration moves history. Codes resolve at read time, so every
+     internet bill already synced lands in Internet the next time it is read;
+     an override somebody set by hand still wins, as it always does. */
+  RENT_AND_UTILITIES_INTERNET_AND_CABLE: "internet",
+  RENT_AND_UTILITIES_TELEPHONE: "cell-phone",
   GENERAL_SERVICES_INSURANCE: "insurance",
   GENERAL_SERVICES_EDUCATION: "tuition-fees",
   GENERAL_SERVICES_CHILDCARE: "daycare",
