@@ -651,7 +651,12 @@ private struct MoneyOverTime: View {
         let income: Int
         let expense: Int
         /// No record yet — these are the plan's expectations rather than what
-        /// happened, and are drawn faintly to say so.
+        /// happened.
+        ///
+        /// Drawn at full strength, and the months already spent faintly behind
+        /// them. This screen is the plan; the history is what the plan was built
+        /// from. The Trend and Overview dashboards are where actuals lead, and
+        /// they have already had that attention by the time anyone arrives here.
         let projected: Bool
         var id: String { month }
     }
@@ -733,7 +738,7 @@ private struct MoneyOverTime: View {
                             width: .ratio(0.94),
                             stacking: .unstacked
                         )
-                        .foregroundStyle(Theme.incomeTint.opacity(p.projected ? 0.16 : 0.3))
+                        .foregroundStyle(Theme.incomeTint.opacity(p.projected ? 0.3 : 0.16))
                         .cornerRadius(2)
 
                         BarMark(
@@ -742,7 +747,7 @@ private struct MoneyOverTime: View {
                             width: .ratio(0.44),
                             stacking: .unstacked
                         )
-                        .foregroundStyle(Theme.expenseTint.opacity(p.projected ? 0.4 : 0.95))
+                        .foregroundStyle(Theme.expenseTint.opacity(p.projected ? 0.95 : 0.4))
                         .cornerRadius(2)
                     }
 
@@ -816,8 +821,8 @@ private struct MoneyOverTime: View {
                 }
 
                 Text(showLastYear
-                     ? "Faded months are the plan; solid months already happened. Where the narrow bar rises above the wide one, the month spent more than it earned. Dashed lines are the same months a year ago."
-                     : "Faded months are the plan; solid months already happened. Where the narrow bar rises above the wide one, the month spent more than it earned.")
+                     ? "Solid months are the plan; faded months already happened. Where the narrow bar rises above the wide one, the month spent more than it earned. Dashed lines are the same months a year ago."
+                     : "Solid months are the plan; faded months already happened. Where the narrow bar rises above the wide one, the month spent more than it earned.")
                     .font(.caption2)
                     .foregroundStyle(Theme.quietText)
             }

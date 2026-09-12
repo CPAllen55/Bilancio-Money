@@ -207,7 +207,7 @@ struct BudgetEditorView: View {
                 } header: {
                     Text("Against the year")
                 } footer: {
-                    Text("Solid is what was spent. Faded is what the plan expects, and it moves as you type. Touch a month to plan that one instead.")
+                    Text("Solid is what the plan expects, and it moves as you type. Faded is what was actually spent. Touch a month to plan that one instead.")
                 }
 
                 Section {
@@ -464,10 +464,11 @@ private struct PlanHistoryChart: View {
                     x: .value("Month", bar.month),
                     y: .value("Amount", Double(bar.amount) / 100)
                 )
-                // Weight means spent, and only spent. Giving the edited month
-                // full weight too drew a projection as history in the one place
-                // the whole chart exists to keep them apart.
-                .foregroundStyle(colour.opacity(bar.isSpent ? 1 : 0.35))
+                // Weight means planned, and only planned. This screen exists to
+                // set a figure, so the months carrying one are the subject and
+                // the months already spent are the evidence sitting behind them
+                // — the reverse of every screen that reads history forwards.
+                .foregroundStyle(colour.opacity(bar.isSpent ? 0.35 : 1))
                 .opacity(picked == nil || picked == bar.month ? 1 : 0.35)
                 .annotation(position: .top, spacing: 2) {
                     if picked == bar.month || (bar.isEdited && picked == nil) {
