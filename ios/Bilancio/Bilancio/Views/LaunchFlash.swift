@@ -2,38 +2,43 @@
 //  LaunchFlash.swift
 //  Bilancio
 //
-//  The owl, and chips stacking up in front of him, on the way to the dashboards.
+//  The owl, still, with the light moving across his chart.
 //
 //  It covers the moment the app is doing its least interesting work — fetching
 //  the publishable key, configuring Clerk, restoring a session — so the wait
 //  becomes the mark rather than a spinner. That it is also the brand arriving
 //  is the point of it.
 //
+//  ── Why nothing moves but the light ────────────────────────────────────────
+//
+//  Chips used to fall onto the stacks, three to each. The idea was that the
+//  brand assembled itself; what it looked like was a picture being built out of
+//  parts, and every landing was one more chance to notice the join between a
+//  chip and the drawing beneath it. A drawing that arrives whole has no joins
+//  to notice.
+//
+//  So the drawing simply appears, and one band of lighter gold crosses the five
+//  stacks from left to right. Each stack takes the light and hands it on, which
+//  reads as the chart catching the light rather than as anything being built.
+//  The band is masked to the stacks alone: sweeping the whole picture would
+//  wash across the owl, and it is the money that should glint.
+//
 //  ── What `OwlLaunch` is ────────────────────────────────────────────────────
 //
 //  Not the app icon. The icon is a badge, and a badge shown large is a picture
-//  of an icon rather than the owl himself — which is what this screen was, and
-//  what it is not any more. `OwlLaunch` is generated from the same drawing with
-//  the plate taken off: cropped inside its bevel, its corners rounded at the
-//  bevel's own radius so no part of the rim survives, and its base faded out
-//  because the stacks run to the bottom of the drawing and a hard edge there
-//  reads as the chart being cut off rather than standing on the ground.
-//
-//  ── Why the chips are photographs ──────────────────────────────────────────
-//
-//  `OwlChip1…5` are real chips lifted out of the drawing, one per stack at that
-//  stack's own width, cut to a rounded rect so they carry no ground with them.
-//  A chip that lands is the same object as the ones it lands on, down to the
-//  highlight along its top edge — which nothing drawn in code could match
-//  against artwork this shaded. Three land on every stack.
+//  of an icon rather than the owl himself. `OwlLaunch` is generated from the
+//  same drawing with the plate taken off: cropped inside its bevel, its corners
+//  rounded at the bevel's own radius so no part of the rim survives, and its
+//  base faded out because the stacks run to the bottom of the drawing and a
+//  hard edge there reads as the chart being cut off rather than standing on
+//  the ground.
 //
 //  ── What `OwlField` is ─────────────────────────────────────────────────────
 //
 //  The gold around it, and the reason it cannot be seen to end. The drawing's
 //  ground varies across it as well as down it, so a flat colour is wrong at the
 //  sides and a vertical gradient is wrong in the middle — both leave the owl
-//  sitting in a visible rectangle of slightly different gold, which is exactly
-//  what the first version did.
+//  sitting in a visible rectangle of slightly different gold.
 //
 //  `OwlField` is the drawing itself blurred until nothing but its ground is
 //  left, then carried out to a canvas tall enough for any phone. A blurred copy
@@ -51,10 +56,17 @@ struct LaunchFlash: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var scheme
 
+    /// The drawing fades in; the gold behind it never does. Fading the whole
+    /// screen let the "Starting…" label underneath show through it.
     @State private var settled = false
-    /// How many chips have been let go, in `Chip.all` order. A chip falls when
-    /// the count passes its index, so the whole sequence is one integer.
-    @State private var dropped = 0
+    /// How lit each stack is, left to right.
+    ///
+    /// One plain rectangle per stack, and its opacity animated: three earlier
+    /// attempts drew the light as a travelling band -- masked, then clipped
+    /// inside a Canvas -- and none of them put a single pixel on screen. A
+    /// rectangle at a position with an animated opacity is the least SwiftUI
+    /// can be asked to do, and it is what the drawing's own fade already uses.
+    @State private var glow = [Double](repeating: 0, count: Art.stacks.count)
     @State private var fading = false
 
     var body: some View {
@@ -74,19 +86,7 @@ struct LaunchFlash: View {
                     .position(x: geo.size.width / 2, y: geo.size.height / 2)
                     .opacity(settled ? 1 : 0)
 
-                ForEach(Chip.all) { chip in
-                    let frame = art.frame(of: chip)
-                    Image("OwlChip\(chip.stack + 1)")
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: frame.width, height: frame.height)
-                        .position(x: frame.midX, y: frame.midY)
-                        // Off the top of the screen until its turn, so every
-                        // chip enters from outside rather than materialising
-                        // over the owl.
-                        .offset(y: dropped > chip.order ? 0 : -(frame.maxY + 60))
-                        .opacity(settled ? 1 : 0)
-                }
+                glint(in: art, across: geo.size)
             }
             .frame(width: geo.size.width, height: geo.size.height)
             // A full screen of gold is a lot of gold at night.
@@ -98,33 +98,60 @@ struct LaunchFlash: View {
         .accessibilityHidden(true)
     }
 
+    /// The stacks, each taking the light and handing it on.
+    @ViewBuilder
+    private func glint(in art: Art, across screen: CGSize) -> some View {
+        ForEach(Array(Art.stacks.indices), id: \.self) { index in
+            let rect = art.stackRect(index)
+            Rectangle()
+                .fill(Self.sheen)
+                .opacity(glow[index] * Self.peak)
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
+                .allowsHitTesting(false)
+        }
+    }
+
+    /// How pale a stack goes at the top of its turn.
+    private static let peak = 0.45
+
+    /// Gold with the light on it, not white: white would grey the chart on its
+    /// way past.
+    private static let sheen = Color(red: 1.0, green: 0.94, blue: 0.74)
+
     private func play() async {
-        // Reduce Motion is a request not to be moved at, not a request to see
-        // nothing: the stacks still end up taller, the chips simply arrive
-        // rather than falling.
+        // Reduce Motion is a request not to be moved at. The drawing still
+        // arrives; the light simply does not travel across it.
         guard !reduceMotion else {
             settled = true
-            dropped = Chip.all.count
-            try? await Task.sleep(for: .milliseconds(650))
+            try? await Task.sleep(for: .milliseconds(900))
             withAnimation(.easeOut(duration: 0.28)) { fading = true }
             try? await Task.sleep(for: .milliseconds(280))
             showing = false
             return
         }
 
-        withAnimation(.easeOut(duration: 0.3)) { settled = true }
-        try? await Task.sleep(for: .milliseconds(260))
+        withAnimation(.easeOut(duration: 0.34)) { settled = true }
 
-        // `Chip.all` is ordered by level and then left to right, so the five
-        // stacks rise together a course at a time. Bar by bar instead would
-        // read as five separate events, and a chip cannot land on one that has
-        // not arrived yet.
-        for i in 1...Chip.all.count {
-            withAnimation(.spring(duration: 0.38, bounce: 0.34)) { dropped = i }
-            try? await Task.sleep(for: .milliseconds(36))
+        /* Long enough for the drawing to actually be on screen.
+         *
+         * `task` runs when the view appears, which is before the launch screen
+         * has finished handing over -- so a sweep started here played out while
+         * the screen was still washing in from white, and was over by the time
+         * there was anything to see it on. */
+        try? await Task.sleep(for: .milliseconds(750))
+
+        /* Left to right, each stack a breath behind the one before it. Up and
+           down are scheduled together: the whole wave is set going in one pass
+           and then simply waited out. */
+        for index in Art.stacks.indices {
+            let delay = Double(index) * 0.14
+            withAnimation(.easeInOut(duration: 0.40).delay(delay)) { glow[index] = 1 }
+            withAnimation(.easeInOut(duration: 0.45).delay(delay + 0.40)) { glow[index] = 0 }
         }
+        try? await Task.sleep(for: .milliseconds(1_450))
 
-        try? await Task.sleep(for: .milliseconds(400))
+        try? await Task.sleep(for: .milliseconds(260))
         withAnimation(.easeOut(duration: 0.3)) { fading = true }
         try? await Task.sleep(for: .milliseconds(300))
         showing = false
@@ -132,29 +159,6 @@ struct LaunchFlash: View {
 }
 
 // MARK: - Where the drawing sits
-
-/// A chip's slot: which stack, and how far above that stack's painted top.
-private struct Chip: Identifiable, Equatable {
-    /// Index into `Art.stacks`.
-    let stack: Int
-    /// 0 is the chip that lands directly on the painted stack.
-    let level: Int
-    /// Position in the drop order.
-    let order: Int
-
-    var id: Int { order }
-
-    /// Three courses across all five stacks, bottom course first.
-    static let all: [Chip] = {
-        var chips: [Chip] = []
-        for level in 0..<3 {
-            for stack in 0..<Art.stacks.count {
-                chips.append(Chip(stack: stack, level: level, order: chips.count))
-            }
-        }
-        return chips
-    }()
-}
 
 /// How the drawing meets the screen, and the gold behind it.
 ///
@@ -170,16 +174,14 @@ private struct Art {
     /// x range of each stack, left to right — its dark edges included, its
     /// drop shadow not. Measured against the outlines: the shadow beside each
     /// stack is close enough in tone to be taken for part of it, and taking it
-    /// swells every stack and lands the chips visibly wide.
+    /// swells every stack and lights the ground beside it.
     static let stacks: [ClosedRange<CGFloat>] = [
         120...202, 219...315, 333...429, 450...549, 571...673,
     ]
 
-    /// The top edge of each stack — where the next chip lands.
+    /// The painted top of each stack. The light starts there rather than at the
+    /// top of the picture, so it crosses the chart and not the air above it.
     static let tops: [CGFloat] = [743, 681, 613, 562, 515]
-
-    /// One chip, divider to divider.
-    static let pitch: CGFloat = 23.93
 
     let size: CGSize
 
@@ -198,17 +200,13 @@ private struct Art {
     /// Where the drawing starts on screen.
     var originY: CGFloat { (size.height - height) / 2 }
 
-    /// Where a chip lands, in screen points.
-    ///
-    /// A chip's bottom edge sits on the edge it lands against, so the two
-    /// outlines fall on the same line — which is how the painted chips meet
-    /// each other, and the only way the join does not show.
-    func frame(of chip: Chip) -> CGRect {
-        let stack = Art.stacks[chip.stack]
-        let top = Art.tops[chip.stack] - CGFloat(chip.level + 1) * Art.pitch
+    /// One stack, in screen points.
+    func stackRect(_ index: Int) -> CGRect {
+        let stack = Art.stacks[index]
+        let top = originY + Art.tops[index] * scale
         return CGRect(x: stack.lowerBound * scale,
-                      y: originY + top * scale,
+                      y: top,
                       width: (stack.upperBound - stack.lowerBound) * scale,
-                      height: Art.pitch * scale)
+                      height: originY + height - top)
     }
 }
