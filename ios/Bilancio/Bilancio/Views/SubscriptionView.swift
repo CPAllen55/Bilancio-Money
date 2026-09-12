@@ -178,12 +178,31 @@ struct SubscriptionView: View {
                             if store.purchasing == product.id {
                                 ProgressView()
                             } else {
-                                // From StoreKit, never from us: Apple localises
-                                // and converts these, and a price written here
-                                // would be wrong in most of the world.
-                                Text(product.displayPrice)
-                                    .font(Theme.body)
-                                    .monospacedDigit()
+                                /* The comparison sits under the price rather
+                                   than under the period. The period line is the
+                                   one 3.1.2 requires and the one that has to be
+                                   easy to find; stacking marketing on top of it
+                                   is what that rule is guarding against. */
+                                VStack(alignment: .trailing, spacing: 1) {
+                                    // From StoreKit, never from us: Apple
+                                    // localises and converts these, and a price
+                                    // written here would be wrong in most of
+                                    // the world.
+                                    Text(product.displayPrice)
+                                        .font(Theme.body)
+                                        .monospacedDigit()
+                                    if let value = value(of: product) {
+                                        Text(value.rate)
+                                            .font(.caption2)
+                                            .foregroundStyle(Theme.quietText)
+                                            .monospacedDigit()
+                                        if let saving = value.saving {
+                                            Text(saving)
+                                                .font(.caption2.weight(.medium))
+                                                .foregroundStyle(Theme.accent)
+                                        }
+                                    }
+                                }
                             }
                         }
                         .contentShape(Rectangle())
@@ -227,6 +246,48 @@ struct SubscriptionView: View {
         @unknown default: return nil
         }
         return n == 1 ? "Renews every \(unit)" : "Renews every \(n) \(unit)"
+    }
+
+    /// One month's worth of a product's price, whatever length its period is.
+    ///
+    /// Yearly against monthly is the comparison somebody is actually making,
+    /// and it cannot be made out of two figures quoted over different lengths
+    /// of time. Nil for a period this cannot sensibly be said about.
+    private func perMonth(_ product: Product) -> Decimal? {
+        guard let p = product.subscription?.subscriptionPeriod, p.value > 0 else { return nil }
+        switch p.unit {
+        case .month:      return product.price / Decimal(p.value)
+        case .year:       return product.price / Decimal(p.value * 12)
+        case .day, .week: return nil
+        @unknown default: return nil
+        }
+    }
+
+    /// What a longer plan works out at each month, and what it saves.
+    ///
+    /// The saving is quoted only when the monthly product is actually loaded
+    /// alongside it. A percentage off a price the reader cannot see — and, while
+    /// App Store Connect is only serving one of the two, cannot buy — is a claim
+    /// rather than a comparison, and it is the sort of claim 3.1.1 exists for.
+    ///
+    /// Truncated rather than rounded, so the number is never larger than the
+    /// saving actually is.
+    private func value(of product: Product) -> (rate: String, saving: String?)? {
+        guard let period = product.subscription?.subscriptionPeriod,
+              period.unit == .year || (period.unit == .month && period.value > 1),
+              let each = perMonth(product)
+        else { return nil }
+
+        let rate = "\(each.formatted(product.priceFormatStyle)) a month"
+
+        let monthly = store.products.first {
+            $0.subscription?.subscriptionPeriod.unit == .month
+                && $0.subscription?.subscriptionPeriod.value == 1
+        }
+        guard let monthly, let base = perMonth(monthly), base > 0 else { return (rate, nil) }
+
+        let off = Int(((1 - each / base) as NSDecimalNumber).doubleValue * 100)
+        return (rate, off >= 1 ? "Save \(off)%" : nil)
     }
 
     private func plan(_ status: BillingStatus) -> String {
