@@ -7,9 +7,10 @@ and Apple compares the two.
 
 ## The listing
 
-Fill in the price before pasting the description — it is the one thing here
-that cannot be written from the repo, and Apple requires it on the listing for
-an auto-renewable subscription.
+Prices are in: **$4.99 a month, $47.90 a year.** The annual figure ends in 90
+rather than 88 because Apple sells only at its own price points and $47.88 is
+not one of them. The website, the Terms and the web app were moved to $47.90
+to match, so the two stores quote the same number.
 
 **Name** `Bilancio Money`
 
@@ -18,9 +19,12 @@ an auto-renewable subscription.
 **Promotional text** (170, editable without a new build)
 
 ```
-Simple, intuitive, effective. See where the money actually goes, then set a
-plan that keeps you on track to what you are saving for.
+Simple, intuitive, effective. See where your money actually goes, get a budget
+built from your own spending, and hear about a category before it runs out.
 ```
+
+154 of 170. The third clause is budget alerts, which shipped after the first
+draft of this file and is the one thing here no competitor's listing says.
 
 *Effective rather than powerful.* Powerful is the most overused word on the
 App Store and it is a claim about the software; effective is a claim about the
@@ -39,7 +43,7 @@ rejects trademarked terms). Nothing here repeats the name or subtitle, which
 are indexed separately and would be a wasted character each.
 
 ```
-budget,spending,expenses,tracker,finance,bank,transactions,networth,categories,savings,cashflow
+budget,spending,expenses,tracker,planner,finance,money,bank,transactions,networth,savings,bills
 ```
 
 **Description**
@@ -59,6 +63,23 @@ keeping it is what gets you where you are going.
 
 It cannot move your money, spend it, or touch it. It reads.
 
+A BUDGET THAT BUILDS ITSELF
+
+Most budgets fail at the first screen, where you are asked what you intend to
+spend on groceries. Bilancio already knows. It reads two years of your own
+history, separates the bills that arrive every month from the spending that
+moves, and proposes a figure for each subcategory.
+
+Every figure shows its working — the merchants counted, what they charge, and
+what was left out as a one-off. Change any of it and your number wins, with
+the original kept so you can go back to it in one tap.
+
+BEFORE YOU OVERSPEND, NOT AFTER
+
+Choose the subcategories that matter to you and Bilancio tells you when one is
+nearly spent, while there is still a month left to do something about it.
+Nothing else notifies you, ever.
+
 WHAT IT DOES
 
 Overview — the month so far against your plan, and what is left.
@@ -67,9 +88,8 @@ Trend — spending by category over months or years. Touch any bar for the
 figure. Pinch to zoom, drag to scroll, and turn on Last Year to run a line
 through the bars showing where you stood at the same point twelve months ago.
 
-Budgeting — a plan per subcategory, built from what you actually spend rather
-than a number you guessed, so it is a plan you can keep. Watch each month
-against it as it happens. Open the chart on its own and drag a month up or
+Budgeting — a plan per subcategory, with the arithmetic behind every figure in
+plain words. Watch each month against it as it happens, or drag a month up or
 down to set it by hand.
 
 Transactions — search, filter, and split a single purchase across categories.
@@ -91,41 +111,61 @@ accident.
 YOUR DATA
 
 Bank connections are read-only and handled by Plaid. Credentials are never
-seen by Bilancio. Nothing is sold, and nothing is shared with advertisers or
-data brokers.
+seen by Bilancio. There are no ads, no trackers and no analytics anywhere in
+the app. Nothing is sold, and nothing is shared with advertisers or data
+brokers.
+
+Delete your account whenever you like, from inside the app. It removes your
+data, your bank connections and your sign-in.
 
 SUBSCRIPTION
 
 Bilancio Money is free for one month, starting when you connect your first
 account. After that it needs a subscription:
 
-  Monthly — [PRICE] per month
-  Yearly — [PRICE] per year
+  Monthly — $4.99 per month
+  Yearly — $47.90 per year
 
 Payment is charged to your Apple Account at confirmation. It renews
 automatically unless turned off at least 24 hours before the period ends, and
 your account is charged for renewal within 24 hours of the end of the period.
 Manage or cancel in Settings, under your Apple Account, then Subscriptions.
 
+Bilancio Money shows you your own money. It is not financial, investment or
+tax advice.
+
 Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 Privacy Policy: https://bilanciomoney.com/privacy
 ```
 
-**Support URL** `https://bilanciomoney.com` — the footer carries a Contact
-link to support@bilanciomoney.com, which is what this field is checked for.
+**Support URL** `https://bilanciomoney.com/support/` — contact addresses, how
+to cancel on each platform, how to delete an account, and what to do when a
+bank connection breaks. A homepage with a mailto in the footer passes review;
+a page that answers the question a reviewer is checking for passes it without
+them having to look.
 
 **Marketing URL** `https://bilanciomoney.com` (optional; same page is fine).
 
-**Copyright** `2026 Guardiano del Faro LLC`
+**Copyright** `2026 Guardiano del Faro LLC` — no © symbol; Apple adds it.
+
+**App Clip** none, and the field is left empty. A clip is a separate target,
+capped at 15MB, launched from a link or a QR code without installing the app.
+Every screen here needs a signed-in account with the reader's own bank behind
+it, so there is nothing a clip could usefully show.
 
 ## App Review Information → Sign-In Required
 
 Tick it, and give the demo account. Then, in **Notes**:
 
 ```
-Accounts are invitation only, so the Sign up flow is deliberately closed —
-please sign in with the account above rather than registering. It signs in
-with an email address and a password, and needs no emailed code.
+Access is by waitlist while we open the app to a first group, so signing up
+creates a place in a queue rather than an account — please sign in with the
+account above rather than registering. It signs in with the email address and
+password given, and needs no emailed code.
+
+Continue with Apple and Continue with Google are on the sign-in screen and
+both work, but a fresh account signed in that way joins the waitlist rather
+than reaching the app. The account above is the way in.
 
 The account is pre-populated with about two years of transactions, so every
 screen has data in it. There is no need to connect a bank, and we would ask

@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support — Bilancio Money</title>
+<meta name="description" content="Help with Bilancio Money: how to get in touch, manage a subscription, delete your account, and what to do when a bank connection breaks.">
+<link rel="icon" href="/brand/icon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/brand/apple-touch-icon.png">
+<meta name="theme-color" content="#05080B">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#05080B; --hair:rgba(231,238,243,0.10); --hair-strong:rgba(231,238,243,0.18);
+    --ink:#E7EEF3; --ink-soft:#8A9BAC; --muted:#7E90A2;
+    --mint:#00F0A8; --mint-dim:#00A876; --surface:#0F171F;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink);
+        font-family:'IBM Plex Sans', sans-serif; font-size:15.5px; line-height:1.62; }
+  .wrap{ max-width:760px; margin:0 auto; padding:0 24px; }
+  header.top{ border-bottom:1px solid var(--hair); }
+  .top-inner{ display:flex; align-items:center; justify-content:space-between;
+              padding:16px 0; gap:16px; }
+  .wordmark{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:20px;
+             letter-spacing:-.01em; text-decoration:none; color:var(--ink); }
+  .wordmark span{ color:var(--mint); }
+  .top-inner a.back{ font-family:'IBM Plex Mono', monospace; font-size:12px;
+                     color:var(--ink-soft); text-decoration:none; }
+  .top-inner a.back:hover{ color:var(--mint); }
+  main{ padding:44px 0 80px; }
+  h1{ font-family:'Space Grotesk', sans-serif; font-size:34px; letter-spacing:-.02em; margin:0 0 8px; }
+  .stamp{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--muted);
+          margin:0 0 34px; }
+  h2{ font-family:'Space Grotesk', sans-serif; font-size:20px; letter-spacing:-.01em;
+      margin:40px 0 10px; padding-top:20px; border-top:1px solid var(--hair); }
+  h3{ font-size:15.5px; margin:24px 0 6px; color:var(--ink); }
+  p, li{ color:var(--ink-soft); }
+  li{ margin-bottom:6px; }
+  strong{ color:var(--ink); font-weight:600; }
+  a{ color:var(--mint-dim); }
+  a:hover{ color:var(--mint); }
+  ul{ padding-left:20px; }
+  .lede{ font-size:17px; color:var(--ink); }
+  .box{ background:var(--surface); border:1px solid var(--hair); border-radius:6px;
+        padding:16px 20px; margin:20px 0; }
+  .box p:first-child{ margin-top:0; } .box p:last-child{ margin-bottom:0; }
+  /* The one thing most people arrive wanting: an address that answers. */
+  .contact{ display:flex; flex-wrap:wrap; gap:10px 26px; align-items:baseline;
+            background:var(--surface); border:1px solid var(--hair-strong);
+            border-radius:8px; padding:18px 20px; margin:22px 0 8px; }
+  .contact div{ min-width:180px; }
+  .contact .who{ font-family:'IBM Plex Mono', monospace; font-size:11px;
+                 letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+  .contact a{ font-size:16px; font-weight:600; }
+  .path{ font-family:'IBM Plex Mono', monospace; font-size:13.5px; color:var(--ink);
+         background:rgba(231,238,243,.06); border-radius:4px; padding:1px 7px; }
+  footer{ border-top:1px solid var(--hair); padding:24px 0 48px;
+          font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--muted); }
+  footer a{ color:var(--ink-soft); text-decoration:none; margin-right:16px; }
+  footer a:hover{ color:var(--mint); }
+  /* Instagram and YouTube as cards under the page links, not icons at the end
+     of them -- see the landing page's footer for why. */
+  footer .social{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:18px; }
+  footer .social-label{ font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.12em;
+                        text-transform:uppercase; color:var(--muted); margin-right:4px; }
+  footer .social a{ display:inline-flex; align-items:center; gap:11px; margin:0;
+                    padding:8px 18px 8px 9px; background:var(--surface);
+                    border:1px solid var(--hair-strong); border-radius:14px;
+                    transition:border-color .15s, transform .15s; }
+  footer .social a:hover{ border-color:var(--mint-dim); transform:translateY(-1px); }
+  footer .social a:focus-visible{ outline:2px solid var(--mint-dim); outline-offset:3px; }
+  footer .social svg{ display:block; flex:none; }
+  footer .social b{ display:block; font-family:'IBM Plex Sans', sans-serif; font-size:14.5px;
+                    font-weight:600; color:var(--ink); line-height:1.2; letter-spacing:0; }
+  footer .social small{ display:block; font-size:12.5px; color:var(--ink-soft); line-height:1.3; }
+  @media (max-width:560px){ footer .social-label{ width:100%; } }
+  @media (prefers-reduced-motion: reduce){ footer .social a{ transition:none; } footer .social a:hover{ transform:none; } }
+  @media (max-width:560px){ h1{ font-size:27px; } body{ font-size:15px; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap top-inner">
+    <a class="wordmark" href="/">bilancio<span>.</span></a>
+    <a class="back" href="/">← back to bilanciomoney.com</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <h1>Support</h1>
+  <p class="stamp">Updated September 11, 2026</p>
+
+  <p class="lede">A real person reads every message, usually the same day and
+  always within two business days.</p>
+
+  <div class="contact">
+    <div>
+      <div class="who">Help with the app</div>
+      <a href="mailto:support@bilanciomoney.com">support@bilanciomoney.com</a>
+    </div>
+    <div>
+      <div class="who">Privacy and your data</div>
+      <a href="mailto:privacy@bilanciomoney.com">privacy@bilanciomoney.com</a>
+    </div>
+    <div>
+      <div class="who">Security reports</div>
+      <a href="mailto:security@bilanciomoney.com">security@bilanciomoney.com</a>
+    </div>
+  </div>
+
+  <p>Writing from the address on your account, and saying which device you were
+  using, gets you a useful answer faster than anything else.</p>
+
+  <h2>Your subscription</h2>
+
+  <p>Where you subscribed decides who takes the payment and where you cancel.
+  We cannot cancel an Apple subscription for you — Apple does not allow it.</p>
+
+  <h3>Subscribed in the iPhone app</h3>
+  <p>Open <span class="path">Settings</span> on your iPhone, tap your name, then
+  <span class="path">Subscriptions</span>, then Bilancio Money. Cancel, change
+  plan or ask Apple for a refund from there.</p>
+
+  <h3>Subscribed on the website</h3>
+  <p>Sign in, open <span class="path">Banks</span>, and use the subscription
+  panel to change your card, switch between monthly and yearly, or cancel.</p>
+
+  <h3>What it costs</h3>
+  <p>One month free, starting when you connect your first account — not when
+  you sign up. After that, $4.99 a month, or $47.90 for a year. Cancelling
+  keeps your access until the end of the period you have already paid for.</p>
+
+  <h2>Deleting your account</h2>
+
+  <p>In the app, open <span class="path">Banks</span> and choose
+  <strong>Delete account</strong> at the bottom. On iPhone that is under
+  <span class="path">More</span>, then <span class="path">Banks</span>.</p>
+
+  <div class="box">
+    <p>Deleting is immediate and cannot be undone. It disconnects every bank at
+    Plaid, erases your transactions, categories, rules and budgets, and removes
+    your sign-in. Nothing is kept.</p>
+  </div>
+
+  <p>If you subscribed through Apple, cancel in Settings as well. Deleting your
+  account here does not cancel a subscription Apple is billing.</p>
+
+  <p>To disconnect one bank but keep your account, use Banks and remove that
+  connection. Its accounts and transactions go with it; your categories and
+  rules stay.</p>
+
+  <h2>Common problems</h2>
+
+  <h3>A bank connection stopped updating</h3>
+  <p>Banks expire connections periodically, and some ask you to re-authorise
+  every few months. Open <span class="path">Banks</span>; a connection needing
+  attention says so, and reconnecting takes a minute. Your history stays where
+  it is.</p>
+
+  <h3>A transaction is in the wrong category</h3>
+  <p>Open the transaction and change it. If it is a merchant you see often,
+  choose to apply it to that merchant and every past and future transaction
+  from them follows. One purchase can also be split across categories.</p>
+
+  <h3>Balances or transactions look out of date</h3>
+  <p>Figures are as of the last sync with your bank, not this instant, and
+  pending transactions change amount or disappear entirely. Your bank's own
+  records are always the authoritative ones.</p>
+
+  <h3>A budget figure looks wrong</h3>
+  <p>Open the subcategory in <span class="path">Budgeting</span> and it shows
+  its working: the merchants counted, what they charge, and what was set aside
+  as a one-off. Type over any figure to set your own, and the original stays
+  there so you can go back to it.</p>
+
+  <h3>Budget alerts are not arriving</h3>
+  <p>Alerts are opt-in per subcategory. On iPhone, open
+  <span class="path">More</span>, then <span class="path">Budget alerts</span>,
+  and choose the ones you want. Notifications also have to be allowed for
+  Bilancio in iPhone Settings.</p>
+
+  <h3>Sign-in trouble</h3>
+  <p>Use the same method you signed up with. If you cannot get in, write to
+  support from the address on the account and we will sort it out.</p>
+
+  <h2>What Bilancio can and cannot do</h2>
+
+  <ul>
+    <li>It is <strong>read-only</strong>. It cannot move money, make payments,
+      or change anything at your bank.</li>
+    <li>Bank connections are handled by <a href="https://plaid.com/legal/"
+      rel="noopener">Plaid</a>. Your bank credentials go to Plaid and are never
+      seen or stored by us.</li>
+    <li>It is not financial, investment or tax advice. Budgets and forecasts
+      are arithmetic on your own past transactions.</li>
+    <li>There are no ads, no trackers and no analytics. Nothing is sold.</li>
+  </ul>
+
+  <p>You can review and revoke every connection you have ever made through
+  Plaid, to anyone, at <a href="https://my.plaid.com" rel="noopener">Plaid
+  Portal</a>.</p>
+
+  <h2>Requesting your data, or a correction</h2>
+
+  <p>Email <a href="mailto:privacy@bilanciomoney.com">privacy@bilanciomoney.com</a>
+  from the address on your account to ask for a copy of your data, a
+  correction, or removal from the waitlist. We action requests within 30 days.
+  The <a href="/privacy/">Privacy Policy</a> sets out the rest.</p>
+
+  <h2>Still stuck</h2>
+
+  <p>Write to <a href="mailto:support@bilanciomoney.com">support@bilanciomoney.com</a>.
+  Bilancio is early software and being actively built — if something is broken
+  or confusing, telling us is genuinely useful, and it gets fixed.</p>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <a href="/">Home</a><a href="/terms/">Terms of Service</a><a href="/privacy/">Privacy Policy</a>
+    <div class="social">
+      <span class="social-label">Follow Bilancio</span>
+      <a href="https://www.instagram.com/bilancio_money/" target="_blank" rel="me noopener noreferrer"><svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><defs><radialGradient id="ig-grad" cx="0.3" cy="1.07" r="1.35"><stop offset="0" stop-color="#FDD074"/><stop offset=".25" stop-color="#F77F34"/><stop offset=".5" stop-color="#DD326E"/><stop offset=".75" stop-color="#D82B7E"/><stop offset="1" stop-color="#4F5BD5"/></radialGradient></defs><rect width="32" height="32" rx="8" fill="url(#ig-grad)"/><rect x="7.5" y="7.5" width="17" height="17" rx="5" fill="none" stroke="#fff" stroke-width="2.2"/><circle cx="16" cy="16" r="4.1" fill="none" stroke="#fff" stroke-width="2.2"/><circle cx="21.3" cy="10.7" r="1.3" fill="#fff"/></svg><span><b>Instagram</b><small>@bilancio_money</small></span></a>
+      <a href="https://www.youtube.com/@BilancioMoney" target="_blank" rel="me noopener noreferrer"><svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><rect x="1" y="6" width="30" height="20" rx="6" fill="#FF0033"/><path d="M13 11.5v9l8-4.5z" fill="#fff"/></svg><span><b>YouTube</b><small>@BilancioMoney</small></span></a>
+    </div>
+    <p style="margin-top:14px">© 2026 Bilancio Money · Guardiano del Faro LLC</p>
+  </div>
+</footer>
+
+</body>
+</html>
