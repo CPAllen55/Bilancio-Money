@@ -301,3 +301,33 @@ permanent, and your own finances would be in them. 6.9" is required.
 Take them with the app in Light appearance unless you deliberately want the
 dark set, and take the same five screens in the same order so the set reads as
 one product rather than five features.
+
+## Uploading the build — the one that costs a day
+
+In Xcode's Distribute App sheet, choose **App Store Connect**. Not **TestFlight
+Internal Only**.
+
+Xcode remembers the last method used and pre-selects it, so one absent-minded
+choice repeats itself on every upload afterwards. An internal-only build is not
+rejected and does not announce itself: it uploads by the same path, processes
+normally, and sits in TestFlight marked **Complete**, testable, looking in every
+respect like a build that is ready. It simply cannot be attached to an App Store
+version, and cannot be added to an external testing group. Apple's own
+description of the option is the whole story — *"same as 'TestFlight & App
+Store' for the upload process, however the app could only be set to be tested on
+internal/registered groups."*
+
+What that looks like from App Store Connect is a build picker that lists every
+build and refuses every click. No error, no badge, no explanation, and the
+version page cheerfully reports "You must choose a build" beside four unrelated
+metadata items.
+
+**The thing that misleads you.** The archive's own `Info.plist` carries a
+`Distributions` entry, and for an internal-only upload it still records
+`uploadDestination = App Store`. It describes the upload leg, which is identical
+for both options, so it cannot tell the two apart — while looking exactly like
+the authoritative answer. Five builds' worth of that record was read as proof
+the distribution method was fine. It was not proof of anything.
+
+There is no way to promote a build that went up internal-only. Bump the build
+number and upload again, and read that sheet before clicking through it.
