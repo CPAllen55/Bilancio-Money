@@ -240,15 +240,75 @@ private struct StandingCard: View {
                         .font(Theme.body)
                         .foregroundStyle(Theme.quietText)
 
-                    // The sign is kept and the colour follows it, rather than
-                    // the figure being made absolute and the meaning moved into
-                    // a word beside it.
-                    Text(net.asMoney)
-                        .font(Theme.figure(40))
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.tint(forNet: net))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
+                    /* The net against its plan, set above the figure it
+                       measures rather than below the two bars it is made of.
+                       This is the number to be looked at daily, so it leads.
+
+                       No heading on it. The caption inside the bar already
+                       names the figure, and "NET BALANCE" sitting between the
+                       month and the number would say the same thing three
+                       times in four lines.
+
+                       The limitation is unchanged and worth keeping in view: a
+                       fill bar starts at zero and runs one way, so a month in
+                       deficit collapses to a stub. `noPlanScale` cannot be
+                       reused here — it is declared further down the body — so
+                       the fallback is spelled out.
+                    */
+                    ProportionBar(label: "", amount: summary.totals.net,
+                                  planned: plannedNet ?? 0,
+                                  fallbackScale: max(summary.totals.income,
+                                                     summary.totals.expense),
+                                  tint: Theme.tint(forNet: summary.totals.net),
+                                  verb: "kept",
+                                  deficitAgainstPlan: true)
+                        .padding(.vertical, 4)
+
+                    /* The figure, and what it was meant to be.
+                     *
+                     * Every other number on this card is already read against a
+                     * plan — both bars carry theirs, and the status line below
+                     * carries the expense budget. The headline was the one
+                     * figure standing on its own, which left the card saying
+                     * "actuals against plan" everywhere except the place the eye
+                     * lands first.
+                     *
+                     * Beside it rather than beneath it, and quiet: the answer
+                     * has to stay the thing you see, and a second figure of the
+                     * same weight would make you read both before knowing
+                     * either.
+                     */
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        // The sign is kept and the colour follows it, rather
+                        // than the figure being made absolute and the meaning
+                        // moved into a word beside it.
+                        Text(net.asMoney)
+                            .font(Theme.figure(40))
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.tint(forNet: net))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+
+                        if let planned = plannedNet {
+                            Spacer(minLength: 4)
+                            VStack(alignment: .trailing, spacing: 0) {
+                                Text("Budget")
+                                    .font(Theme.tileLabel)
+                                    .foregroundStyle(Theme.quietText)
+                                // Coloured by its own sign, the same way the
+                                // figure beside it is. A plan that expects to
+                                // lose money should look like one, and reading
+                                // the two together only works if a colour means
+                                // the same thing in both.
+                                Text(planned.asMoney)
+                                    .font(Theme.note)
+                                    .monospacedDigit()
+                                    .foregroundStyle(Theme.tint(forNet: planned))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                            }
+                        }
+                    }
 
                     Text(subline)
                         .font(Theme.body)
@@ -287,6 +347,18 @@ private struct StandingCard: View {
     /// or spend nothing.
     private var plannedIncome: Int { max(0, budget?.income ?? 0) }
     private var plannedExpense: Int { max(0, budget?.expense ?? 0) }
+
+    /// What the period was expected to come to, or nil when there is no plan to
+    /// compare against.
+    ///
+    /// Guarded on the two figures it is made of rather than on `net` itself: a
+    /// budget that expects to break even nets zero, and zero is exactly what an
+    /// absent budget also reports. Asking whether anything was planned at all
+    /// tells the two apart.
+    private var plannedNet: Int? {
+        guard let b = budget, b.income > 0 || b.expense > 0 else { return nil }
+        return b.net
+    }
 
     /// Whether the window has actually finished, from its own end date rather
     /// than from a day count.
@@ -338,6 +410,6 @@ private struct StandingCard: View {
         let over = summary.totals.expense - b.expense
         return over > 0
             ? ("\(over.asMoney) over budget", "exclamationmark.triangle.fill", Theme.negative)
-            : ("\((-over).asMoney) left in budget", "checkmark.circle.fill", Theme.positive)
+            : ("\((-over).asMoney) left in budget to spend", "checkmark.circle.fill", Theme.positive)
     }
 }

@@ -204,6 +204,21 @@ struct ProportionBar: View {
     let tint: Color
     /// "earned" or "spent" — the caption reads "$793 spent of $8,777".
     var verb: String
+    /// Draw a figure below zero as a fill measured against the plan.
+    ///
+    /// A fill bar starts at zero and runs one way, so a negative amount has
+    /// nowhere to go and bottoms out at a stub that reads as missing data
+    /// rather than as a bad month. Where the figure can legitimately go below
+    /// zero — a net balance can, income and spending cannot — this measures how
+    /// far into deficit it is as a share of what was planned: −$1,500 against a
+    /// $3,000 plan fills half, −$3,000 fills it.
+    ///
+    /// Off by default, and deliberately so. Every other bar in the app reads a
+    /// positive figure against a positive plan, and changing what a fill means
+    /// for all of them to suit one would be a silent change of meaning in
+    /// places like the per-category rows, where a refund can push an actual
+    /// below zero without that meaning "in deficit".
+    var deficitAgainstPlan: Bool = false
 
     private static let corner: CGFloat = 3
     private static let inset: CGFloat = 9
@@ -211,9 +226,22 @@ struct ProportionBar: View {
     private var scale: Int { planned > 0 ? max(amount, planned) : fallbackScale }
     private var isOver: Bool { planned > 0 && amount > planned }
 
+    /// Below zero, against a plan, and asked to say so.
+    private var isDeficit: Bool { deficitAgainstPlan && amount < 0 && planned > 0 }
+
     private func fraction(_ value: Int) -> Double {
         guard scale > 0 else { return 0 }
         return min(1, Double(value) / Double(scale))
+    }
+
+    /// How much of the track the fill covers.
+    ///
+    /// Separate from `fraction` because that one also places the plan marker,
+    /// which is measured the ordinary way whatever the amount is doing. In
+    /// deficit the magnitude is what fills: `scale` is already `planned` here,
+    /// since `max(-157, 3329)` is the plan.
+    private var fillFraction: Double {
+        isDeficit ? fraction(-amount) : fraction(amount)
     }
 
     private var captionText: String {
@@ -235,11 +263,39 @@ struct ProportionBar: View {
             }
 
             GeometryReader { geo in
-                let fill = max(2, geo.size.width * fraction(amount))
+                let fill = max(2, geo.size.width * fillFraction)
 
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: Self.corner).fill(tint.opacity(0.16))
                     RoundedRectangle(cornerRadius: Self.corner).fill(tint).frame(width: fill)
+
+                    /* Where the red stops and positive would begin.
+                     *
+                     * A fill running from the left normally means "this much of
+                     * the plan, achieved". In deficit it means the opposite, and
+                     * nothing else on the bar says which of the two is being
+                     * looked at. The line marks the boundary — everything behind
+                     * it is below zero — and is pushed further right the deeper
+                     * the month goes. It has nothing to mark once the figure is
+                     * positive, which is why it hangs off `isDeficit` rather
+                     * than a state of its own.
+                     *
+                     * Drawn *under* the caption, unlike the over-budget marker
+                     * below. That one sits near the right end of the track where
+                     * there is no text; this one lands wherever the fill ends,
+                     * which for a shallow deficit is in the middle of the words.
+                     * Over the top it struck through the figure — "-|157 kept of
+                     * $3,329" — which reads as a rendering fault rather than as
+                     * a zero line. Beneath, the glyphs win and the rule still
+                     * shows above and below them.
+                     */
+                    if isDeficit {
+                        Rectangle()
+                            .fill(Theme.text)
+                            .frame(width: 2)
+                            .overlay(Rectangle().stroke(Theme.surface, lineWidth: 1))
+                            .offset(x: geo.size.width * fillFraction - 1)
+                    }
 
                     // Drawn twice: once on the track, once clipped to the fill,
                     // so the ink changes colour exactly where the colour under
@@ -258,13 +314,20 @@ struct ProportionBar: View {
                             .overlay(Rectangle().stroke(Theme.surface, lineWidth: 1))
                             .offset(x: geo.size.width * fraction(planned) - 1)
                     }
+
                 }
                 .clipShape(RoundedRectangle(cornerRadius: Self.corner))
             }
             .frame(height: 21)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label), \(captionText)")
+        // The marker is a line, and a line says nothing out loud. Without this
+        // the bar tells a screen reader less than it tells everyone else — the
+        // caption alone reads "-$157 kept of $3,329" and leaves the one fact
+        // the line exists to carry entirely to the eye.
+        .accessibilityLabel(isDeficit
+            ? "\(label), \(captionText), below zero"
+            : "\(label), \(captionText)")
     }
 
     private func caption(width: CGFloat) -> some View {
