@@ -439,59 +439,38 @@
     "kind": "spend"
   },
   {
-    "slug": "daycare",
-    "label": "Daycare",
+    "slug": "childcare",
+    "label": "Childcare",
     "colour": "#B62B2B",
     "sortOrder": 701,
     "parent": "kids"
   },
   {
-    "slug": "babysitting",
-    "label": "Babysitting",
-    "colour": "#25D025",
-    "sortOrder": 702,
-    "parent": "kids"
-  },
-  {
-    "slug": "kid-clothing",
-    "label": "Kid Clothing",
+    "slug": "kid-essentials",
+    "label": "Kid Essentials",
     "colour": "#259DD0",
-    "sortOrder": 703,
-    "parent": "kids"
-  },
-  {
-    "slug": "kid-supplies",
-    "label": "Kid School Supplies",
-    "colour": "#2121A1",
-    "sortOrder": 704,
+    "sortOrder": 702,
     "parent": "kids"
   },
   {
     "slug": "kid-health",
     "label": "Kid Healthcare",
     "colour": "#D09425",
-    "sortOrder": 705,
+    "sortOrder": 703,
     "parent": "kids"
   },
   {
     "slug": "kid-education",
     "label": "Kid Education",
     "colour": "#CC5CC6",
-    "sortOrder": 706,
+    "sortOrder": 704,
     "parent": "kids"
   },
   {
     "slug": "kid-activities",
     "label": "Kid Activities",
     "colour": "#25D0BF",
-    "sortOrder": 707,
-    "parent": "kids"
-  },
-  {
-    "slug": "kid-gifts",
-    "label": "Kid Gifts",
-    "colour": "#5C6DCC",
-    "sortOrder": 708,
+    "sortOrder": 705,
     "parent": "kids"
   },
   {

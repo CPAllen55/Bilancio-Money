@@ -189,16 +189,16 @@ const SHOPS   = ["Amazon", "Target", "Costco"];
  * It also means the demo exercises the rule path rather than only the
  * classifier, which is worth having in the data somebody is shown. */
 const KID_RULES = {
-  "Bright Beginnings Academy": "daycare",
-  "Sitters Now":               "babysitting",
-  "Carter's":                  "kid-clothing",
-  "The Children's Place":      "kid-clothing",
-  "Lakeshore Learning":        "kid-supplies",
+  "Bright Beginnings Academy": "childcare",
+  "Sitters Now":               "childcare",
+  "Carter's":                  "kid-essentials",
+  "The Children's Place":      "kid-essentials",
+  "Lakeshore Learning":        "kid-essentials",
   "Pediatric Partners":        "kid-health",
   "Kumon Learning Center":     "kid-education",
   "Center Stage Dance":        "kid-activities",
   "Riverbend Soccer Club":     "kid-activities",
-  "The Toy Chest":             "kid-gifts",
+  "The Toy Chest":             "kid-essentials",
 };
 
 /* The pool a row was drawn from, recoverable afterwards from its Plaid

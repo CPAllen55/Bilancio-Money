@@ -86,7 +86,7 @@ const BY_DETAILED: Record<string, string> = {
   RENT_AND_UTILITIES_TELEPHONE: "cell-phone",
   GENERAL_SERVICES_INSURANCE: "insurance",
   GENERAL_SERVICES_EDUCATION: "tuition-fees",
-  GENERAL_SERVICES_CHILDCARE: "daycare",
+  GENERAL_SERVICES_CHILDCARE: "childcare",
   GENERAL_SERVICES_ACCOUNTING_AND_FINANCIAL_PLANNING: "business",
   // Interest you pay is an obligation, not a bank fee — and it is emphatically
   // not the same thing as interest you earn.
