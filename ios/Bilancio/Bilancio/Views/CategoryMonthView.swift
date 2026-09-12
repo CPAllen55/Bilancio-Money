@@ -30,7 +30,9 @@ final class CategoryMonthModel {
     /// Any range the API understands, not just a single month — the Tracker
     /// can be showing several months trailing, and a drill-down that silently
     /// narrowed to one of them would not add up to the bar it came from.
-    let range: SummaryRange
+    ///
+    /// Settable, because the run of months above the rows can now move it.
+    private(set) var range: SummaryRange
 
     private let client = APIClient(baseURL: Bilancio.apiBaseURL) {
         guard let session = Clerk.shared.session else { return nil }
@@ -59,12 +61,33 @@ final class CategoryMonthModel {
         }
         trend = await history
     }
+
+    /// Move to another month and fetch its rows.
+    ///
+    /// The screen opens on whichever month was touched in the chart that led
+    /// here, but the run of twelve bars above the rows asks the same question of
+    /// every other one — so touching those should answer it here rather than
+    /// send somebody back to start the drill again.
+    ///
+    /// The rows already on screen are deliberately left up while the new ones
+    /// are fetched, rather than dropping to `.loading`: a spinner would take the
+    /// chart away, and the chart is the thing being touched.
+    func show(month: String) async {
+        guard range.month != month else { return }
+        range = .month(month)
+        await load()
+    }
 }
 
 struct CategoryMonthView: View {
     @State private var model: CategoryMonthModel
     @State private var editing: TransactionsResponse.Row?
+    /// The month touched in the run of bars, held here rather than inside the
+    /// chart so that it can reach the rows.
+    @State private var picked: String?
     let title: String
+    /// The month this screen was opened on. Only a starting point now — read
+    /// `currentMonthLabel` for the month actually being shown.
     let monthLabel: String
 
     init(slug: String, range: SummaryRange, title: String, monthLabel: String) {
@@ -94,7 +117,7 @@ struct CategoryMonthView: View {
                     ContentUnavailableView(
                         "Nothing here",
                         systemImage: "tray",
-                        description: Text("No \(title.lowercased()) was recorded in \(monthLabel).")
+                        description: Text("No \(title.lowercased()) was recorded in \(currentMonthLabel).")
                     )
                 } else {
                     content(data)
@@ -105,11 +128,25 @@ struct CategoryMonthView: View {
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await model.load() }
         .task { await model.load() }
+        // Clearing the selection leaves the rows where they are. Touching a
+        // month is a request to go there; letting go of it is not a request to
+        // come back.
+        .onChange(of: picked) { _, month in
+            guard let month else { return }
+            Task { await model.show(month: month) }
+        }
         .sheet(item: $editing) { row in
             SplitTransactionView(row: row, categories: categories) {
                 Task { await model.load() }
             }
         }
+    }
+
+    /// The month the rows are actually for, which is no longer necessarily the
+    /// one the screen was opened on.
+    private var currentMonthLabel: String {
+        if let m = model.range.month { return TrendResponse.Month.shortLabel(of: m) }
+        return monthLabel
     }
 
     private var categories: [TransactionsResponse.Category] {
@@ -124,7 +161,7 @@ struct CategoryMonthView: View {
             VStack(spacing: Theme.sectionGap) {
                 Card {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(monthLabel)
+                        Text(currentMonthLabel)
                             .font(Theme.tileLabel)
                             .foregroundStyle(Theme.quietText)
                         Text(data.sum.out.asMoney)
@@ -147,7 +184,8 @@ struct CategoryMonthView: View {
                                     prior: trend.priorSeries,
                                     slug: model.slug,
                                     categories: data.categories,
-                                    highlight: model.range.month)
+                                    highlight: model.range.month,
+                                    picked: $picked)
                     }
 
                     VendorPie(vendors: data.vendors, total: data.sum.out)
@@ -383,7 +421,9 @@ private struct CategoryRun: View {
     /// has nothing to pick out, and the run is still worth showing.
     let highlight: String?
 
-    @State private var picked: String?
+    /// The month under the last touch, owned by the screen above so that
+    /// picking one here moves the rows below rather than only this readout.
+    @Binding var picked: String?
     @AppStorage("showLastYear") private var showLastYear = false
 
     /// A parent's own line is the sum of its children, so the figure comes
