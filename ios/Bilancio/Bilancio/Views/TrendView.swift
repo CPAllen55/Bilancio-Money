@@ -370,10 +370,6 @@ private struct CategoryTrendChart: View {
                                       lastYear: showLastYear ? yearAgo.first { $0.label == picked.month }?.cents : nil) {
                             self.picked = nil
                         }
-                    } else if !big {
-                        Text("Pinch to zoom, drag to scroll through the months. Touch a segment for its figure, or hold and slide across them. Turn the phone, or open this on its own, for a wider view.")
-                            .font(Theme.note)
-                            .foregroundStyle(Theme.quietText)
                     }
                 }
 
