@@ -1667,7 +1667,10 @@
   .bg-head:focus-visible{ outline:2px solid var(--mint-dim); outline-offset:3px;
                           border-radius:4px; }
   .bg-head b{ font-size:14.5px; }
-  .bg-chev{ font-size:11px; color:var(--muted); width:14px; text-align:center; flex:none; }
+  /* The same + and − square the Overview opens its categories with, so the two
+     dashboards open things the same way. The whole header is the button, so the
+     square answers a hover anywhere on it rather than only on itself. */
+  .bg-head:hover .ctog{ color:var(--ink); border-color:var(--mint-dim); }
   /* Shut: the year in miniature, so a card can be judged without opening it. */
   .bg-mini{ display:inline-flex; align-items:center; margin-left:6px; opacity:.9; }
   .bg-avg{ font-family:var(--font-num); font-size:12px; color:var(--muted);
@@ -7931,7 +7934,7 @@ function drawBudgeting() {
     return '<div class="bg-card income' + (open ? '' : ' shut') + '" data-parent="income">' +
       '<button class="bg-head" type="button" data-bg-card="income" ' +
         'aria-expanded="' + open + '">' +
-        '<span class="bg-chev" aria-hidden="true">' + (open ? '▾' : '▸') + '</span>' +
+        '<span class="ctog" aria-hidden="true">' + (open ? '−' : '+') + '</span>' +
         '<span class="swatch" style="background:' + colour + '"></span>' +
         '<b>Income and spending</b>' +
         (open || !perMonth.some(v => v > 0) ? ''
@@ -7982,7 +7985,7 @@ function drawBudgeting() {
       '<div class="bg-headrow">' +
       '<button class="bg-head" type="button" data-bg-card="' + escapeHtml(p.slug) + '" ' +
         'aria-expanded="' + open + '">' +
-        '<span class="bg-chev" aria-hidden="true">' + (open ? '▾' : '▸') + '</span>' +
+        '<span class="ctog" aria-hidden="true">' + (open ? '−' : '+') + '</span>' +
         '<span class="swatch" style="background:' + themed(p.slug, p.colour) + '"></span>' +
         '<b>' + escapeHtml(p.label) + '</b>' +
         (open || !perMonth.some(v => v > 0) ? ''
@@ -8099,7 +8102,7 @@ function bgLeaf(row) {
         'aria-expanded="' + open + '" title="' + (open ? 'Hide' : 'Show') +
         ' how this was worked out, month by month" ' +
         'aria-label="' + (open ? 'Hide' : 'Show') + ' the working and the months for ' +
-        escapeHtml(row.label) + '">' + (open ? '▾' : '▸') + '</button>' +
+        escapeHtml(row.label) + '">' + (open ? '−' : '+') + '</button>' +
       (open ? bgPanel(row, plan, work) : '') +
     '</div>';
 }
