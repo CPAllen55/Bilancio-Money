@@ -1029,6 +1029,12 @@
   .segb.on{ background:var(--surface); color:var(--ink); font-weight:500;
             box-shadow:0 1px 2px var(--shadow); }
   .segb:focus-visible{ outline:2px solid var(--mint-dim); outline-offset:-2px; }
+  /* Budgeting's choice of what a month already gone shows. */
+  .bg-history{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:6px 0 12px; }
+  .bg-history > span:first-child{ font-family:var(--font-num); font-size:11px; letter-spacing:.08em;
+                                   text-transform:uppercase; color:var(--muted); }
+  /* An actual is a record, not a control: it reads on hover and does not move. */
+  .bg-seg.past.actual{ cursor:default; }
   .th-legend{ display:flex; align-items:center; gap:22px; flex-wrap:wrap; }
   .lg{ display:inline-flex; align-items:center; gap:9px; font-size:12px;
        color:var(--ink-soft); }
@@ -3325,6 +3331,13 @@
     <section class="panel" id="v-budgeting">
       <h2 class="view">Your plan</h2>
       <p class="lede">Worked out from what you actually spend, then yours to move. Lower a category and watch what it frees up — the figure at the top is planned income minus planned spending, and it changes as you type.</p>
+      <div class="bg-history" id="bg-history" role="group" aria-label="What months that have already happened show">
+        <span>Past months show</span>
+        <span class="segtray">
+          <button type="button" class="segb on" data-bg-history="actual" aria-pressed="true">Actual</button>
+          <button type="button" class="segb" data-bg-history="budget" aria-pressed="false">Budget</button>
+        </span>
+      </div>
       <div class="card bg-hero" id="bg-hero"></div>
       <div id="bg-list"></div>
       <p class="msg" id="bg-msg"></p>
@@ -8093,6 +8106,77 @@ function bgNowLine(height) {
 
    A pinned month still beats a typed baseline. Naming one month is the more
    specific of the two statements. */
+/* What a month that has already happened shows on the Budgeting charts.
+
+   'actual' -- what was really spent, and what really came in -- is the default,
+   because a budget for a month that is over mostly says what was once expected;
+   what happened is the thing worth comparing a plan with. 'budget' puts the
+   plan back, which is where a past month's plan is changed. Months still to
+   come show the plan either way: there is nothing yet to be actual.
+
+   Only the charts read this. The headline, the rows and their yearly figures
+   describe the plan, and say so, in both modes. Remembered per browser. */
+let bgHistory = (() => {
+  try { return localStorage.getItem('bg-history') === 'budget' ? 'budget' : 'actual'; }
+  catch (err) { return 'actual'; }
+})();
+
+/* Whether this month is showing an actual rather than the plan. */
+const bgActualShown = (m) => bgHistory === 'actual' && bgPast(m);
+
+/* What a row really came to in a month: spending for a subcategory, money in
+   for the income row. Both arrive from /api/budget as `spent`. */
+function bgActualOf(row, m) {
+  return Math.max(0, Math.round(((row && row.spent) || {})[m] || 0));
+}
+
+/* A row's figures as the charts draw them: the plan, with months already gone
+   swapped for what actually happened when that is what is being shown. */
+function bgChartOf(row) {
+  const plan = bgPlanOf(row);
+  if (bgHistory !== 'actual') return plan;
+  const out = Object.assign({}, plan);
+  for (const m of bgData.months) if (bgPast(m)) out[m] = bgActualOf(row, m);
+  return out;
+}
+
+/* bgTotals, for the Income and spending chart: the same totals, with months
+   already gone swapped for what came in and what went out. The headline keeps
+   reading bgTotals, because it is a statement about the plan. */
+function bgChartTotals() {
+  const tt = bgTotals();
+  if (bgHistory !== 'actual') return tt;
+  const income = Object.assign({}, tt.income);
+  const expense = Object.assign({}, tt.expense);
+  const savings = Object.assign({}, tt.savings);
+  for (const m of bgData.months) {
+    if (!bgPast(m)) continue;
+    income[m] = bgActualOf(bgData.income, m);
+    expense[m] = bgData.categories.reduce((s, r) => s + bgActualOf(r, m), 0);
+    savings[m] = income[m] - expense[m];
+  }
+  return Object.assign({}, tt, { income, expense, savings });
+}
+
+function bgHistorySync() {
+  document.querySelectorAll('[data-bg-history]').forEach(b => {
+    const on = b.dataset.bgHistory === bgHistory;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+}
+bgHistorySync();
+$('bg-history').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-bg-history]');
+  if (!b) return;
+  const next = b.dataset.bgHistory === 'budget' ? 'budget' : 'actual';
+  if (next === bgHistory) return;
+  bgHistory = next;
+  try { localStorage.setItem('bg-history', bgHistory); } catch (err) { /* private mode */ }
+  bgHistorySync();
+  drawBudgeting();
+});
+
 function bgPlanOf(row) {
   const out = {};
   for (const m of bgData.months) {
@@ -8332,7 +8416,10 @@ function drawBudgeting() {
           ' between each pair is what that month keeps, green, or goes under' +
           ' by, red.' +
           ' Months left of' +
-          ' the dashed line have already happened, and can still be changed. Spending is the' +
+          (bgHistory === 'actual'
+            ? ' the dashed line show what actually came in and went out; switch to Budget to' +
+              ' change their plans. Spending is the'
+            : ' the dashed line have already happened, and can still be changed. Spending is the') +
           ' sum of the plans below and moves when they do.</div>' +
           '<div class="bg-kids">' + bgCols() + bgLeaf(inc) + '</div>'
         : '') +
@@ -8380,7 +8467,10 @@ function drawBudgeting() {
             ? bgChart(chartRows, p.slug) + bgLegend(legendRows, p.slug) + bgFocusNote(p, chartRows) +
               '<div class="bg-cap">Drag any block up or down to change that month' +
               ' — hold Alt for dollar-by-dollar. Arrow keys work too. Months left' +
-              ' of the dashed line have already happened, and can still be changed.</div>'
+              (bgHistory === 'actual'
+                ? ' of the dashed line show what was actually spent; switch to Budget to change' +
+                  ' their plan.</div>'
+                : ' of the dashed line have already happened, and can still be changed.</div>')
             : '') +
           '<div class="bg-kids">' + bgCols() + kids.map(bgLeaf).join('') + '</div>'
         : '') +
@@ -8730,7 +8820,7 @@ function bgMetricsHtml(slug, data) {
 function bgScaleOf(rows, lines) {
   let hi = 1;
   for (const m of bgData.months) {
-    const total = rows.reduce((s, r) => s + bgPlanOf(r)[m], 0);
+    const total = rows.reduce((s, r) => s + bgChartOf(r)[m], 0);
     if (total > hi) hi = total;
   }
   /* A line that is switched on gets to raise the ceiling, the same way the
@@ -8758,7 +8848,7 @@ function bgScaleOf(rows, lines) {
  * the things it is made of.
  */
 function bgVsScale() {
-  const t = bgTotals();
+  const t = bgChartTotals();
   let hi = 1;
   /* One ruler for both. Two bars measured against separate scales are two
      pictures side by side, and every comparison a reader makes between them
@@ -8816,7 +8906,7 @@ function bgVsCandle(g, ih, oh, base) {
 }
 
 function bgVsChart() {
-  const t = bgTotals();
+  const t = bgChartTotals();
   const hi = bgVsScale();
   const incColour = themed('income', bgData.income.colour);
   /* Read from the theme rather than written here, so the shade turns over with
@@ -8883,8 +8973,9 @@ function bgVsChart() {
         '<g class="bg-vs-candle ' + (kept >= 0 ? 'up' : 'down') +
           (past ? ' past' : '') + '" data-vsgap="' + m + '" ' +
           tipAttrs(kept >= 0 ? 'Kept' : 'Over by', m, Math.abs(kept), 0, {
-            note: kept >= 0 ? 'income above everything planned'
-                            : 'planned to spend more than comes in',
+            note: bgActualShown(m)
+              ? (kept >= 0 ? 'came in above what was spent' : 'spent more than came in')
+              : (kept >= 0 ? 'income above everything planned' : 'planned to spend more than comes in'),
             tone: kept >= 0 ? 'up' : 'down' }) + '>' +
           /* A wider invisible spine, so the thing can be pointed at. Three
              two-pixel lines are a hard target for a mouse and an impossible
@@ -8901,6 +8992,7 @@ function bgVsChart() {
 
     svg +=
       '<rect class="bg-seg' + (iv > 0 ? '' : ' empty') + (past ? ' past' : '') +
+        (bgActualShown(m) ? ' actual' : '') +
         '" x="' + g.xIn.toFixed(1) + '" y="' + (base - ih).toFixed(1) +
         '" width="' + g.barW.toFixed(1) + '" height="' + ih.toFixed(1) + '" rx="1.5" ' +
         'fill="' + relief('vs', incColour) + '" style="--seg:' + incColour + '" ' +
@@ -8923,8 +9015,8 @@ function bgVsChart() {
         '" y="' + (base - oh).toFixed(1) + '" width="' + g.barW.toFixed(1) +
         '" height="' + oh.toFixed(1) + '" rx="1.5" ' +
         'fill="' + relief('vs', outColour) + '" style="--seg:' + outColour + '" ' +
-        tipAttrs('Everything planned', m, ov, iv + ov,
-          { note: 'the sum of the plans below', tone: 'out' }) +
+        tipAttrs(bgActualShown(m) ? 'Spent' : 'Everything planned', m, ov, iv + ov,
+          { note: bgActualShown(m) ? 'what was actually spent' : 'the sum of the plans below', tone: 'out' }) +
         ' data-vsout="' + m + '"></rect>';
   });
 
@@ -8945,7 +9037,7 @@ function bgVsChart() {
  * of one per cent. Alignment by construction rather than by measurement.
  */
 function bgVsCols() {
-  const t = bgTotals();
+  const t = bgChartTotals();
   /* The same two colours the bars are drawn in, read the same way they are.
 
      A swatch is only worth having if it names the thing it sits beside, and
@@ -8975,10 +9067,10 @@ function bgVsCols() {
            out rather than by changing how the plot scales. */
         '<b>' + escapeHtml(bgData.labels[i].slice(0, 3)) + '</b>' +
         '<span class="in" data-vsfin="' + m + '" style="--dot:' + dotIn +
-          '" title="Income planned for ' + escapeHtml(bgData.labels[i]) + '">' +
+          '" title="' + (bgActualShown(m) ? 'Came in during ' : 'Income planned for ') + escapeHtml(bgData.labels[i]) + '">' +
           escapeHtml(money0(t.income[m])) + '</span>' +
         '<span class="out" data-vsfout="' + m + '" style="--dot:' + dotOut +
-          '" title="Planned to spend in ' + escapeHtml(bgData.labels[i]) + '">' +
+          '" title="' + (bgActualShown(m) ? 'Spent in ' : 'Planned to spend in ') + escapeHtml(bgData.labels[i]) + '">' +
           escapeHtml(money0(t.expense[m])) + '</span>' +
         '<span class="kept ' + (kept >= 0 ? 'up' : 'down') + '" data-vsfkept="' + m +
           '" title="' + (kept >= 0 ? 'Kept in ' : 'Over by, in ') +
@@ -8991,7 +9083,7 @@ function bgVsCols() {
    above them, because dragging income moves what is kept and editing any
    category below moves the spending bar. */
 function bgVsFit(svg) {
-  const t = bgTotals();
+  const t = bgChartTotals();
   const frozen = !!(bgDrag && bgDrag.svg === svg);
   const hi = (frozen ? Number(svg.dataset.hi) : bgVsScale()) || 1;
   if (!frozen) svg.dataset.hi = hi.toFixed(2);
@@ -9016,7 +9108,8 @@ function bgVsFit(svg) {
       outBar.setAttribute('y', (base - oh).toFixed(1));
       outBar.setAttribute('height', oh.toFixed(1));
       const ttl = outBar.querySelector('title');
-      if (ttl) ttl.textContent = bgData.labels[i] + ' · ' + money(ov) + ' planned to spend';
+      if (ttl) ttl.textContent = bgData.labels[i] + ' · ' + money(ov) +
+        (bgActualShown(m) ? ' spent' : ' planned to spend');
     }
     const kept = t.savings[m];
     const gap = svg.querySelector('g[data-vsgap="' + m + '"]');
@@ -9068,8 +9161,9 @@ function bgVsFit(svg) {
     if (gap) {
       gap.dataset.tipLabel = kept >= 0 ? 'Kept' : 'Over by';
       gap.dataset.tipAmount = Math.abs(kept);
-      gap.dataset.tipNote = kept >= 0 ? 'income above everything planned'
-                                      : 'planned to spend more than comes in';
+      gap.dataset.tipNote = bgActualShown(m)
+        ? (kept >= 0 ? 'came in above what was spent' : 'spent more than came in')
+        : (kept >= 0 ? 'income above everything planned' : 'planned to spend more than comes in');
       /* A drag can carry a month across zero, and a box still coloured green
          over the word "Over by" is worse than a box with no colour at all. */
       gap.dataset.tipTone = kept >= 0 ? 'up' : 'down';
@@ -9105,7 +9199,7 @@ function bgChart(kids, parentSlug) {
   const hi = bgScaleOf(kids, reach);
   const band = (BG_W - BG_PL * 2) / bgData.months.length;
   const barW = Math.min(52, band * 0.74);
-  const plans = kids.map(bgPlanOf);
+  const plans = kids.map(bgChartOf);
 
   /* The drawn order is recorded on the element. Re-fitting mid-drag walks that
      same list rather than recomputing which children qualify, so a category
@@ -9126,6 +9220,7 @@ function bgChart(kids, parentSlug) {
       y -= h;
       const fill = themed(r.slug, r.colour);
       svg += '<rect class="bg-seg' + (v > 0 ? '' : ' empty') + (past ? ' past' : '') +
+        (bgActualShown(m) ? ' actual' : '') +
         '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) +
         '" height="' + h.toFixed(1) + '" rx="1.5" fill="' + relief('bg', fill) + '" ' +
         'style="--seg:' + fill + '" ' +
@@ -9293,7 +9388,7 @@ function bgFit(svg) {
   if (bgLineOn(parent, 'yoy') && lineData.yoy) reach.push(Math.max(...lineData.yoy));
   const hi = (frozen ? Number(svg.dataset.hi) : bgScaleOf(rows, reach)) || 1;
   if (!frozen) svg.dataset.hi = hi.toFixed(2);
-  const plans = rows.map(bgPlanOf);
+  const plans = rows.map(bgChartOf);
 
   bgData.months.forEach((m) => {
     let y = BG_PT + BG_PLOT;
@@ -9565,7 +9660,10 @@ function bgTipShow(row, month, start, x, y) {
   el.style.setProperty('--tip-hue', hue);
   const i = bgData.months.indexOf(month);
   const label = bgData.labels[i] || month;
-  const v = bgPlanOf(row)[month];
+  /* A month showing what actually happened reports that, and the budget beside
+     it, rather than a plan the block is not drawn at. */
+  const actualHere = bgActualShown(month);
+  const v = actualHere ? bgActualOf(row, month) : bgPlanOf(row)[month];
   const moved = (start === null || start === undefined) ? 0 : v - start;
 
   /* What the whole column comes to. This used to carry the block's share of
@@ -9576,7 +9674,7 @@ function bgTipShow(row, month, start, x, y) {
      mostly gave the eye somewhere else to go. The column total stays because
      it is a different fact, not a restatement of the same one. */
   const column = bgShownKids(row.parentSlug)
-    .reduce((s, r) => s + bgPlanOf(r)[month], 0);
+    .reduce((s, r) => s + bgChartOf(r)[month], 0);
 
   /* Pinned means this box is being typed into rather than passed over: it
      stops following the pointer, stops hiding, and grows a field. */
@@ -9593,6 +9691,10 @@ function bgTipShow(row, month, start, x, y) {
     '<div class="ct-head">' + escapeHtml(row.label) +
       '<span class="ct-month">' + escapeHtml(label) + '</span></div>' +
     '<div class="ct-amount">' + money(v) + '</div>' +
+    (actualHere
+      ? '<div class="ct-share">' + (row === bgData.income ? 'Came in' : 'Spent') +
+        ' · budget was ' + escapeHtml(money(bgPlanOf(row)[month])) + '</div>'
+      : '') +
     /* The share of the column used to lead this line. It was arithmetic
        nobody asked for -- the figure above it is the answer, and what this
        line is for is saying what the month comes to and whether this one has
@@ -9897,6 +9999,10 @@ $('bg-list').addEventListener('pointerdown', (e) => {
      already reported against; whether to move that yardstick is the reader's
      call, and the Overview re-measures against whatever the plan now says. */
 
+  /* A block showing what actually happened is a record, not a plan: switch to
+     Budget to move a past month. */
+  if (bgActualShown(seg.dataset.month)) return;
+
   e.preventDefault();
   const month = seg.dataset.month;
   const box = svg.getBoundingClientRect();
@@ -10140,7 +10246,8 @@ $('bg-list').addEventListener('keydown', (e) => {
   /* Every month can be changed from the keyboard, the ones already gone
      included, on both sides of the divider. */
 
-  // Changing.
+  // Changing -- but not an actual, which is what happened rather than a plan.
+  if (bgActualShown(month)) return;
   const now = bgPlanOf(row)[month];
   let next = null, unpin = false;
   if (e.key === 'ArrowUp')   next = bgNudge(now,  1, e.shiftKey);
