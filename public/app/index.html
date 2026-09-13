@@ -752,6 +752,23 @@
      mark runs its full height instead. At 21px that is tall enough to see
      without needing to escape. */
   .btrack.thick .meter-tick{ top:0; bottom:0; box-shadow:0 0 0 1px var(--card-safe); }
+  /* The Net balance bar, alone above the headline and full width. Its track is
+     tinted with the side of zero the period is on, so a loss reads as a loss
+     before a word of the caption does. */
+  #ov-safe .btrack.net{ margin:10px 0 2px; }
+  .btrack.net.pos{ background:color-mix(in srgb, var(--bar-mint) 16%, var(--grid)); }
+  .btrack.net.neg{ background:color-mix(in srgb, var(--bar-coral) 16%, var(--grid)); }
+  /* The ceiling of a loss. Darker than the red it ends, and carrying the card's
+     halo like every mark, so it separates from the fill on one side and the
+     tinted track on the other. */
+  .meter-tick.ceil{ background:color-mix(in srgb, var(--bar-coral) 62%, #000); }
+  /* The headline and, beside it, what it was planned to be. */
+  .fig-row{ display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between;
+            gap:4px 16px; }
+  .fig-plan{ text-align:right; margin:0 0 6px; font-family:var(--font-num); white-space:nowrap; }
+  .fig-plan span{ display:block; font-size:12px; color:var(--muted); }
+  .fig-plan b{ font-size:14px; font-weight:600; color:var(--mint); }
+  .fig-plan b.down{ color:var(--coral); }
   /* The 74px label column is a quarter of a small phone. Below this the label
      goes above its bar instead, which hands the track the full width of the
      card — enough for the caption, which would otherwise start losing the
@@ -3797,6 +3814,56 @@ async function renderOverview() {
   const plan = outPlan;
   const overBudget = outBar.over;
 
+  /* Net balance, against what the period was planned to keep.
+
+     The awkward one of the three, because it can land either side of zero and
+     the other two cannot. So it is measured by size and drawn by sign:
+
+       kept, under plan   green: the share of the plan kept so far, the same
+                          reading as the Income bar
+       kept, past plan    green and full, with a white mark where the plan was
+       overspent          red on a red-tinted track, reaching as far right as
+                          the loss goes. As the period recovers it draws back
+                          to the left, and once it crosses zero it turns green
+                          and grows to the right like any other month.
+
+     The red carries a darker marker at its far end -- the ceiling of the loss --
+     so its extent reads even where the fill meets a track tinted the same way.
+
+     A plan that is itself negative, a period budgeted to spend more than it
+     earns, is not a target to measure a loss against, so it is treated as no
+     plan and the bar is scaled to the figure alone. The iOS Overview had this
+     bar first; this is that bar. */
+  const netPlanRaw = (s.budget && s.budget.available)
+    ? (typeof s.budget.net === 'number' ? s.budget.net : s.budget.income - s.budget.expense)
+    : 0;
+  const netPlan = netPlanRaw > 0 ? netPlanRaw : 0;
+  const netNeg = t.net < 0;
+  const netSize = Math.abs(t.net);
+  const netScale = Math.max(netSize, netPlan);
+  const netFillPct = netScale > 0 ? (netSize / netScale) * 100 : 0;
+  const netBar = {
+    planned: netPlan,
+    // Past the plan on the good side only: a loss is never past a plan to keep.
+    markPct: !netNeg && netPlan > 0 && t.net > netPlan ? (netPlan / netScale) * 100 : null,
+  };
+  const netCap = money0(t.net) + ' kept' + (netPlan > 0 ? ' of ' + money0(netPlan) : '');
+  const netHtml =
+    '<div class="btrack thick net ' + (netNeg ? 'neg' : 'pos') + '">' +
+      '<div class="bfill ' + (netNeg ? 'out' : 'in') + '" style="width:' + netFillPct.toFixed(2) + '%"></div>' +
+      capHtml(netCap, netFillPct) +
+      markHtml(netBar, 'Net balance budget',
+        money(t.net - netPlan) + ' more kept than ' + s.range.label.toLowerCase() +
+        ' was planned to keep.') +
+      (netNeg
+        ? '<div class="meter-tick ceil" style="left:clamp(0px, calc(' + netFillPct.toFixed(2) +
+          '% - 3px), calc(100% - 3px))" data-tip="1" data-tip-label="Net balance"' +
+          ' data-tip-month="' + escapeHtml(s.range.label) + '" data-tip-amount="' + t.net + '"' +
+          ' data-tip-note="' + escapeHtml(money(netSize) + ' more has gone out than came in' +
+            (netPlan > 0 ? ', against a plan to keep ' + money(netPlan) : '') + '.') + '"></div>'
+        : '') +
+    '</div>';
+
   /* The card was named after the figure at the top of it, but it has long
      since grown two bars, a budget mark and a verdict — the safe-to-spend
      number is one thing it reports, not what it is. Named for the period it
@@ -3820,13 +3887,18 @@ async function renderOverview() {
        with Math.max(0, …) around it — so a period that spent more than it
        earned reported $0.00 under the word "performance". Zero is not what
        happened; it is the arithmetic declining to say what happened. t.net
-       carries the sign, and it is the same number the Net Balance tile below
-       shows, so the headline and the row cannot disagree.
+       carries the sign, and it is the same number the Net balance bar above
+       it measures, so the headline and the bar cannot disagree.
 
        The floor still belongs where it was, in the per-day line: money left
        to spend cannot be negative, and "about −$40 a day for the 9 days left"
        is not advice. */
-    '<p class="fig' + (t.net < 0 ? ' down' : '') + '">' + money(t.net) + '</p>' +
+    netHtml +
+    '<div class="fig-row"><p class="fig' + (t.net < 0 ? ' down' : '') + '">' + money(t.net) + '</p>' +
+    (s.budget && s.budget.available
+      ? '<div class="fig-plan"><span>Budget</span><b' + (netPlanRaw < 0 ? ' class="down"' : '') + '>' +
+        money(netPlanRaw) + '</b></div>'
+      : '') + '</div>' +
     '<p class="fig-sub">' + (
       periodEnded ? 'This period is complete.'
       /* Still running, but with no usable day count -- a span. Say the half
@@ -3880,7 +3952,7 @@ async function renderOverview() {
     (plan > 0
       ? '<span class="status ' + (overBudget ? 'warn' : 'good') + '">' +
         (overBudget ? '! ' + money(t.expense - plan) + ' over budget'
-                    : '✓ ' + money(plan - t.expense) + ' left in budget') + '</span>'
+                    : '✓ ' + money(plan - t.expense) + ' left in budget to spend') + '</span>'
       : '') + '</div>';
 
   /* Every category against its plan, for this same window, where the eight
