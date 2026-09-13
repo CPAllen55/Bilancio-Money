@@ -763,10 +763,32 @@
   #ov-safe .net-row{ margin:12px 0 4px; }
   .btrack.net.pos{ background:color-mix(in srgb, var(--bar-mint) 16%, var(--grid)); }
   .btrack.net.neg{ background:color-mix(in srgb, var(--bar-coral) 16%, var(--grid)); }
-  /* The ceiling of a loss. Darker than the red it ends, and carrying the card's
-     halo like every mark, so it separates from the fill on one side and the
-     tinted track on the other. */
-  .meter-tick.ceil{ background:color-mix(in srgb, var(--bar-coral) 62%, #000); }
+  /* Budget marks on the Overview card.
+
+     Green on the income side -- Income and Net balance -- and red on the
+     spending side, each a brighter shade than the bar it cuts so it cannot be
+     mistaken for the fill. They were near-black, which read as a scratch on
+     the bar rather than as the plan.
+
+     And they stand proud of the bar, top and bottom. The thick track has to
+     clip its own contents or a long caption would spill across the card, so a
+     mark inside it could never overhang; the marks live beside the track, in
+     .bmeter, which is exactly as wide as the track and clips nothing. Their
+     left offsets are percentages of that same width, so nothing moved.
+
+     One pair of shades cannot serve both themes, because where a mark
+     overhangs it is read against the card. Measured: on cream the bright
+     shades are too faint on their own, so they carry a thin dark ring; on the
+     near-black card they are 9-12:1 unaided. The loss ceiling on a negative
+     Net balance takes the spending red, being the spending side of zero. */
+  :root{ --mark-in:#5BF0B5; --mark-out:#FF9AA8; --mark-ring:var(--card-safe); }
+  :root[data-theme="light"]{ --mark-in:#3FE08F; --mark-out:#FF7F93; --mark-ring:rgba(18,37,63,.62); }
+  .bmeter{ position:relative; }
+  .bmeter > .meter-tick{ top:-5px; bottom:-5px; width:4px; margin-left:-2px; border-radius:2px;
+                         box-shadow:0 0 0 1px var(--mark-ring); }
+  .bmeter > .meter-tick.in{ background:var(--mark-in); }
+  .bmeter > .meter-tick.out,
+  .bmeter > .meter-tick.ceil{ background:var(--mark-out); }
   /* The headline and, beside it, what it was planned to be. */
   .fig-row{ display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between;
             gap:4px 16px; }
@@ -2291,10 +2313,17 @@
      not worth three pixels. */
   .bv-kid .bv-row .btrack.thick{ height:18px; }
   .bv-kid .bcap, .bv-kid .bcap.on span{ font-size:11.5px; }
-  /* Full height, for the reason the Overview's mark is: the track clips now,
-     so an overhang would simply be cut off. */
-  .btrack.thick .bv-tick{ top:0; bottom:0; width:3px;
-                          box-shadow:0 0 0 1px var(--surface); }
+  /* The category bars' budget marks, dressed as the Overview card's are: green
+     on Income, red on spending, a brighter shade than the bar, and standing
+     proud of it top and bottom. They sit in .bmeter beside the clipping track
+     rather than inside it, for the reason given at .bmeter; the colours and
+     the ring are the same tokens, so the two views cannot drift apart. */
+  .bv-row .bmeter{ flex:1 1 auto; min-width:0; }
+  .bmeter > .bv-tick{ top:-5px; bottom:-5px; width:4px; margin-left:-2px; border-radius:2px;
+                      box-shadow:0 0 0 1px var(--mark-ring); }
+  .bv-kid .bmeter > .bv-tick{ top:-4px; bottom:-4px; }
+  .bmeter > .bv-tick.in{ background:var(--mark-in); }
+  .bmeter > .bv-tick.out{ background:var(--mark-out); }
   /* Where the budget ran out. Its whole job is to divide what was within
      budget from what was not, so it has to cut through the bar AND read on the
      card either side of it — which is why the colour follows the theme rather
@@ -3807,9 +3836,10 @@ async function renderOverview() {
     '<span class="bcap on" style="width:' + pct.toFixed(2) + '%"><span>' +
     escapeHtml(text) + '</span></span>';
 
-  const markHtml = (bar, label, note) =>
+  /* `side` is 'in' or 'out', and colours the mark -- see .bmeter. */
+  const markHtml = (bar, label, note, side) =>
     bar.markPct === null ? '' :
-    '<div class="meter-tick" style="left:' + bar.markPct.toFixed(2) + '%" ' +
+    '<div class="meter-tick ' + side + '" style="left:' + bar.markPct.toFixed(2) + '%" ' +
     'data-tip="1" data-tip-label="' + escapeHtml(label) + '"' +
     ' data-tip-month="' + escapeHtml(s.range.label) + '"' +
     ' data-tip-amount="' + bar.planned + '"' +
@@ -3855,15 +3885,17 @@ async function renderOverview() {
   const netCap = money0(t.net) + ' kept' + (netPlan > 0 ? ' of ' + money0(netPlan) : '');
   const netHtml =
     '<div class="brow net-row"><span class="blabel">Net balance</span>' +
-    '<div class="btrack thick net ' + (netNeg ? 'neg' : 'pos') + '">' +
+    '<div class="bmeter"><div class="btrack thick net ' + (netNeg ? 'neg' : 'pos') + '">' +
       '<div class="bfill ' + (netNeg ? 'out' : 'in') + '" style="width:' + netFillPct.toFixed(2) + '%"></div>' +
       capHtml(netCap, netFillPct) +
+    '</div>' +
       markHtml(netBar, 'Net balance budget',
         money(t.net - netPlan) + ' more kept than ' + s.range.label.toLowerCase() +
-        ' was planned to keep.') +
+        ' was planned to keep.', 'in') +
+      /* Centred on the end of the red, and kept inside the ends of the track. */
       (netNeg
-        ? '<div class="meter-tick ceil" style="left:clamp(0px, calc(' + netFillPct.toFixed(2) +
-          '% - 3px), calc(100% - 3px))" data-tip="1" data-tip-label="Net balance"' +
+        ? '<div class="meter-tick ceil" style="left:clamp(2px, ' + netFillPct.toFixed(2) +
+          '%, calc(100% - 2px))" data-tip="1" data-tip-label="Net balance"' +
           ' data-tip-month="' + escapeHtml(s.range.label) + '" data-tip-amount="' + t.net + '"' +
           ' data-tip-note="' + escapeHtml(money(netSize) + ' more has gone out than came in' +
             (netPlan > 0 ? ', against a plan to keep ' + money(netPlan) : '') + '.') + '"></div>'
@@ -3923,23 +3955,25 @@ async function renderOverview() {
     '<div class="bars">' +
       '<div class="brow">' +
         '<span class="blabel">Income</span>' +
-        '<div class="btrack thick">' +
+        '<div class="bmeter"><div class="btrack thick">' +
           '<div class="bfill in" style="width:' + inBar.fillPct.toFixed(2) + '%"></div>' +
           capHtml(inCap, inBar.fillPct) +
+        '</div>' +
           markHtml(inBar, 'Income budget',
             money(t.income - inPlan) + ' has come in past this point — more than ' +
-            s.range.label.toLowerCase() + ' was planned to earn.') +
+            s.range.label.toLowerCase() + ' was planned to earn.', 'in') +
         '</div>' +
       '</div>' +
       '<div class="brow">' +
         '<span class="blabel">Expenses</span>' +
-        '<div class="btrack thick">' +
+        '<div class="bmeter"><div class="btrack thick">' +
           '<div class="bfill out" style="width:' + outBar.fillPct.toFixed(2) + '%"></div>' +
           capHtml(outCap, outBar.fillPct) +
+        '</div>' +
           markHtml(outBar, 'Budget ran out here',
             money(t.expense - outPlan) + ' has gone out past this point. ' +
             'Everything to the right of the mark is over what was planned for ' +
-            s.range.label.toLowerCase() + '.') +
+            s.range.label.toLowerCase() + '.', 'out') +
         '</div>' +
       '</div>' +
     '</div>' +
@@ -9879,12 +9913,13 @@ function budgetPair(label, colour, actual, budget, expand, opts) {
       '<span class="swatch" style="background:' + colour + '"></span>' +
       '<b>' + escapeHtml(label) + '</b>' +
       verdict + '</div>' +
-    '<div class="bv-row"><div class="btrack thick">' +
+    '<div class="bv-row"><div class="bmeter"><div class="btrack thick">' +
       '<div class="bfill" style="width:' + fillPct.toFixed(1) + '%;background:' + fill + '"></div>' +
       capHtml +
+      '</div>' +
       (markPct !== null
-        ? '<div class="bv-tick" style="left:' + markPct.toFixed(1) + '%" title="budget ran out here — ' +
-          money(budget) + '"></div>'
+        ? '<div class="bv-tick ' + (income ? 'in' : 'out') + '" style="left:' + markPct.toFixed(1) + '%" title="' +
+          (income ? 'income plan — ' : 'budget ran out here — ') + money(budget) + '"></div>'
         : '') +
       '</div>' +
       /* The percentage takes the same colour as the bar it labels, which for
