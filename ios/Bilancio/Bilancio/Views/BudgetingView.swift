@@ -593,7 +593,8 @@ private struct PlanHero: View {
                 ProportionBar(label: "Spent so far", amount: spent, planned: expense,
                               fallbackScale: max(spent, expense),
                               tint: spent > expense ? Theme.negative : Theme.positive,
-                              verb: "spent")
+                              verb: "spent",
+                              isIncomeSide: false)
             }
         }
     }

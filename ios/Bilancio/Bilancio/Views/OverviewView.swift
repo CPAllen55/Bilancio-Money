@@ -261,7 +261,13 @@ private struct StandingCard: View {
                                                      summary.totals.expense),
                                   tint: Theme.tint(forNet: summary.totals.net),
                                   verb: "kept",
-                                  deficitAgainstPlan: true)
+                                  deficitAgainstPlan: true,
+                                  // Money kept is the income side of zero. The
+                                  // ceiling of a loss is the spending side, and
+                                  // the web colours it red for that reason —
+                                  // here the deficit mark takes the same green,
+                                  // which is worth a look once it is on screen.
+                                  isIncomeSide: true)
                         .padding(.vertical, 4)
 
                     /* The figure.
@@ -295,10 +301,12 @@ private struct StandingCard: View {
                 VStack(spacing: 12) {
                     ProportionBar(label: "Income", amount: summary.totals.income,
                                   planned: plannedIncome, fallbackScale: noPlanScale,
-                                  tint: Theme.incomeTint, verb: "earned")
+                                  tint: Theme.incomeTint, verb: "earned",
+                                  isIncomeSide: true)
                     ProportionBar(label: "Expenses", amount: summary.totals.expense,
                                   planned: plannedExpense, fallbackScale: noPlanScale,
-                                  tint: Theme.expenseTint, verb: "spent")
+                                  tint: Theme.expenseTint, verb: "spent",
+                                  isIncomeSide: false)
                 }
 
                 if let status = budgetStatus {

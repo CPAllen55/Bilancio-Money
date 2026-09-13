@@ -219,6 +219,18 @@ struct ProportionBar: View {
     /// places like the per-category rows, where a refund can push an actual
     /// below zero without that meaning "in deficit".
     var deficitAgainstPlan: Bool = false
+    /// Which side of the ledger this bar is on, which is what colours its mark.
+    ///
+    /// Not derived from `tint`: that changes with how the month is going —
+    /// amber near a limit, red past it — and a plan does not change sides
+    /// because it was missed. Nil where the question does not apply, as on a
+    /// credit limit, which is a ceiling rather than a plan; those keep a
+    /// neutral mark.
+    var isIncomeSide: Bool? = nil
+
+    /// How far a mark stands above and below the bar.
+    private static let overhang: CGFloat = 3
+    private static let markWidth: CGFloat = 4
 
     private static let corner: CGFloat = 3
     private static let inset: CGFloat = 9
@@ -269,34 +281,6 @@ struct ProportionBar: View {
                     RoundedRectangle(cornerRadius: Self.corner).fill(tint.opacity(0.16))
                     RoundedRectangle(cornerRadius: Self.corner).fill(tint).frame(width: fill)
 
-                    /* Where the red stops and positive would begin.
-                     *
-                     * A fill running from the left normally means "this much of
-                     * the plan, achieved". In deficit it means the opposite, and
-                     * nothing else on the bar says which of the two is being
-                     * looked at. The line marks the boundary — everything behind
-                     * it is below zero — and is pushed further right the deeper
-                     * the month goes. It has nothing to mark once the figure is
-                     * positive, which is why it hangs off `isDeficit` rather
-                     * than a state of its own.
-                     *
-                     * Drawn *under* the caption, unlike the over-budget marker
-                     * below. That one sits near the right end of the track where
-                     * there is no text; this one lands wherever the fill ends,
-                     * which for a shallow deficit is in the middle of the words.
-                     * Over the top it struck through the figure — "-|157 kept of
-                     * $3,329" — which reads as a rendering fault rather than as
-                     * a zero line. Beneath, the glyphs win and the rule still
-                     * shows above and below them.
-                     */
-                    if isDeficit {
-                        Rectangle()
-                            .fill(Theme.text)
-                            .frame(width: 2)
-                            .overlay(Rectangle().stroke(Theme.surface, lineWidth: 1))
-                            .offset(x: geo.size.width * fillFraction - 1)
-                    }
-
                     // Drawn twice: once on the track, once clipped to the fill,
                     // so the ink changes colour exactly where the colour under
                     // it does. That is what lets the figure sit inside a bar of
@@ -306,17 +290,40 @@ struct ProportionBar: View {
                         .foregroundStyle(.white)
                         .frame(width: fill, alignment: .leading)
                         .clipped()
-
-                    if isOver {
-                        Rectangle()
-                            .fill(Theme.text)
-                            .frame(width: 2)
-                            .overlay(Rectangle().stroke(Theme.surface, lineWidth: 1))
-                            .offset(x: geo.size.width * fraction(planned) - 1)
-                    }
-
                 }
                 .clipShape(RoundedRectangle(cornerRadius: Self.corner))
+                /* The marks live outside the clip.
+                 *
+                 * The track has to clip its own contents or a long caption would
+                 * spill across the card — which also means anything inside it is
+                 * cut off at the bar's edge, and a mark that cannot overhang
+                 * cannot stand proud. So they are drawn over the clipped track
+                 * instead, in a layer exactly its width, and their offsets are
+                 * fractions of that same width, so nothing moved.
+                 *
+                 * They sit over the caption as a result, which is what made the
+                 * old two-point near-black line read as a strike-through. The
+                 * ring is the answer to that, and it is the reason the web draws
+                 * one: a mark that carries its own edge separates from whatever
+                 * it crosses instead of looking like a fault in it.
+                 */
+                .overlay(alignment: .leading) {
+                    if isOver {
+                        mark(at: fraction(planned), across: geo.size.width, tint: markTint)
+                    }
+                    /* The boundary between deficit and positive. Nothing to mark
+                       once the figure is above zero, which is why it hangs off
+                       `isDeficit` rather than a state of its own.
+
+                       Red whatever side the bar belongs to. This is the ceiling
+                       of a loss, and a loss is the spending side of zero — the
+                       web colours it the same way for the same reason. Taking
+                       the bar's own side would put a green mark on the edge of a
+                       red deficit, which is what it did at first. */
+                    if isDeficit {
+                        mark(at: fillFraction, across: geo.size.width, tint: Theme.markOut)
+                    }
+                }
             }
             .frame(height: 21)
         }
@@ -328,6 +335,32 @@ struct ProportionBar: View {
         .accessibilityLabel(isDeficit
             ? "\(label), \(captionText), below zero"
             : "\(label), \(captionText)")
+    }
+
+    /// One budget mark, standing proud of the bar it cuts.
+    ///
+    /// Green on the income side, red on the spending side, neutral where the
+    /// question does not apply. Rounded, because a square nub on a rounded bar
+    /// reads as a chip out of it.
+    private func mark(at fraction: Double, across width: CGFloat,
+                      tint markColour: Color) -> some View {
+        RoundedRectangle(cornerRadius: Self.markWidth / 2)
+            .fill(markColour)
+            .overlay(
+                RoundedRectangle(cornerRadius: Self.markWidth / 2)
+                    .stroke(Theme.markRing, lineWidth: 1)
+            )
+            .frame(width: Self.markWidth)
+            .padding(.vertical, -Self.overhang)
+            .offset(x: width * fraction - Self.markWidth / 2)
+    }
+
+    private var markTint: Color {
+        switch isIncomeSide {
+        case .some(true):  return Theme.markIn
+        case .some(false): return Theme.markOut
+        case nil:          return Theme.text
+        }
     }
 
     private func caption(width: CGFloat) -> some View {

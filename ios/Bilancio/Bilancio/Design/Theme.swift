@@ -65,6 +65,49 @@ enum Theme {
         cents < 0 ? negative : positive
     }
 
+    // MARK: Budget marks
+    //
+    // Where a plan sat on a bar. Green on the income side and red on the
+    // spending side — the side, not the state: a spending bar turns amber near
+    // its limit and red past it, and its mark stays red throughout, because
+    // what the mark means is "this is the plan" and not "this is how it went".
+    //
+    // Brighter than the bar they cut, so they cannot be taken for the fill. The
+    // old marks were `Theme.text` at two points wide, which read as a scratch on
+    // the bar rather than as a plan.
+    //
+    // Two pairs, because where a mark stands proud it is read against the card
+    // rather than against the bar. The values are the web app's, measured there
+    // rather than guessed here: on cream the bright shades are faint on their
+    // own and carry a dark ring; on the near-black card they carry the card's
+    // own colour.
+
+    static var markIn: Color {
+        Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.357, green: 0.941, blue: 0.710, alpha: 1)  // #5BF0B5
+                : UIColor(red: 0.247, green: 0.878, blue: 0.561, alpha: 1)  // #3FE08F
+        })
+    }
+
+    static var markOut: Color {
+        Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 1.000, green: 0.604, blue: 0.659, alpha: 1)  // #FF9AA8
+                : UIColor(red: 1.000, green: 0.498, blue: 0.576, alpha: 1)  // #FF7F93
+        })
+    }
+
+    /// The hairline around a mark, so it separates from the fill on one side
+    /// and from the card on the other.
+    static var markRing: Color {
+        Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor.secondarySystemGroupedBackground
+                : UIColor(red: 0.071, green: 0.145, blue: 0.247, alpha: 0.62)
+        })
+    }
+
     /// The owl, in whichever colour the theme calls for.
     ///
     /// One shape, tinted, rather than two pieces of artwork. The gold mark is

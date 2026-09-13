@@ -230,7 +230,11 @@ struct TrackerCard: View {
                         planned: budget,
                         fallbackScale: actual,
                         tint: tone,
-                        verb: isIncome ? "earned" : "spent"
+                        verb: isIncome ? "earned" : "spent",
+                        // The side, not the state. `tone` goes amber near a
+                        // limit and red past it; the plan did not change sides
+                        // because it was missed.
+                        isIncomeSide: isIncome
                     )
 
                     if hasBudget {
@@ -344,7 +348,8 @@ private struct ChildRow: View {
                 planned: child.budget,
                 fallbackScale: isIncome ? max(parentTotal, child.actual) : child.actual,
                 tint: tone,
-                verb: isIncome ? "earned" : "spent"
+                verb: isIncome ? "earned" : "spent",
+                isIncomeSide: isIncome
             )
             .padding(.leading, 11)
         }
