@@ -2176,6 +2176,10 @@
      grows with its children rather than the children spilling into a shared
      list — which is the point of separating them at all. */
   .bv-list{ display:flex; flex-direction:column; gap:10px; }
+  /* The heading between the Overview's card and the categories under it. The
+     card is the answer and this is the working, so the gap above is wider than
+     the gaps between the cards below it. */
+  .ov-plan-head{ margin:26px 2px 10px; }
   /* Income is not one of the categories below it and should not read as the
      first of them. A mint edge down its left and a wider gap under it, so the
      eye takes it as the thing the rest is measured against rather than as the
@@ -3069,7 +3073,6 @@
     <div class="mark" role="presentation"></div>
     <div class="tabs" id="tabs">
       <button class="tab" data-view="overview" aria-current="true">Overview</button>
-      <button class="tab" data-view="tracker">Tracker</button>
       <button class="tab" data-view="trend">Trend</button>
       <button class="tab" data-view="net">Net Activity</button>
       <button class="tab" data-view="budgeting">Budgeting</button>
@@ -3091,7 +3094,7 @@
          March. A month to end at, and how far back to reach from it. -->
     <section class="panel" id="v-overview" aria-current="true">
       <h2 class="view">Where things stand</h2>
-      <p class="lede">This period at a glance, then the same four figures twice over: against the period before, and against what the period was expected to cost.</p>
+      <p class="lede">This period at a glance, then every category against what it was planned to cost. Green is within its budget, amber is nearly through it, and red is past it or has no budget yet. Open a category for what is inside it and the transactions behind it.</p>
       <div class="bar" style="padding-top:0">
         <span class="bv-controls">
           <select class="ctl" id="ov-range" aria-label="Month"></select>
@@ -3107,7 +3110,8 @@
         <span class="msg" id="global-msg"></span>
       </div>
       <div class="card" id="ov-safe"></div>
-      <div class="tiles" id="ov-tiles"></div>
+      <p class="eyebrow ov-plan-head">Against the plan</p>
+      <div id="bud-list" class="bv-list"></div>
       <p class="fc-method" id="budget-note" style="margin:14px 0 0"></p>
     </section>
 
@@ -3181,25 +3185,6 @@
       <div class="card"><div id="net-chart"></div></div>
     </section>
 
-
-    <section class="panel" id="v-tracker">
-      <h2 class="view">Against the plan</h2>
-      <p class="lede">How much of each budget has gone. Green is within it, red is past it — a full bar is the whole budget, and beyond that a line marks where it ran out, so the red past the line is the overspend. A category with no budget set yet shows red until you give it one — money going out against no plan is the one thing a plan cannot vouch for. Pick a month, and how many months back from it to include.</p>
-      <div class="bar" style="padding-top:0">
-        <span class="bv-controls">
-          <select class="ctl" id="bud-range" aria-label="Month"></select>
-          <select class="ctl" id="bud-trail" aria-label="Trailing periods">
-            <option value="1" selected>Month selected</option>
-            <option value="2">2 months trailing</option>
-            <option value="3">3 months trailing</option>
-            <option value="6">6 months trailing</option>
-            <option value="12">12 months trailing</option>
-            <option value="24">24 months trailing</option>
-          </select>
-        </span>
-      </div>
-      <div id="bud-list" class="bv-list"></div>
-    </section>
 
     <section class="panel" id="v-budgeting">
       <h2 class="view">Your plan</h2>
@@ -3594,9 +3579,7 @@ async function refresh() {
     // somebody's finances rather than about an empty account. The Banks tab
     // says it in its own words, and is where the button lives.
     if (view !== 'banks' && view !== 'budgeting' && view !== 'admin') {
-      // Categories may be looking at a month of its own; asking about the page
-      // range here as well would thrash a cache that only holds one range.
-      const s = await summaryFor(view === 'tracker' ? budgetRange() : range());
+      const s = await summaryFor(range());
       hasBanks = s.accountsCounted > 0;
       if (!hasBanks) { clearFirstRun(); showFirstRun(view); say(msg, ''); return; }
     }
@@ -3608,7 +3591,6 @@ async function refresh() {
     if (view === 'calendar')     await renderCalendar();
     if (view === 'net')          await renderNet();
     if (view === 'assets')       await renderAssets();
-    if (view === 'tracker')      await renderBudgetView();
     if (view === 'budgeting')    await renderBudgeting();
     if (view === 'transactions') await renderTransactions();
     if (view === 'banks')        await renderBanks();
@@ -3673,40 +3655,6 @@ const toneFor = (kind, value, shown) => {
   return Number(value) < 0 ? 't-neg' : 't-pos';
 };
 
-function budgetTiles(t, b) {
-  const rate = t.income ? (t.net / t.income) * 100 : 0;
-
-  // Three of the four need income to mean anything, and income only exists if
-  // an account that receives it is linked. With cards alone the honest answer
-  // is a dash: a budgeted income of $0 is not a plan to earn nothing, it is the
-  // absence of the information, and the two should not look alike.
-  const haveOut = b.available && b.expense > 0;
-  const haveIn = b.available && b.income > 0;
-  const noHistory = b.available ? 'nothing to compare' : 'not enough history';
-
-  const plan = (label, value, budgeted, actual, betterWhen, show, empty, kind) =>
-    tile(label, show ? value : '—', show ? budgeted : 0, show ? actual : 0,
-         betterWhen, '', { vs: 'actual', empty: empty || noHistory,
-                           tone: toneFor(kind, budgeted, show) });
-
-  /* Same order as the row above, and it has to stay that way: the two rows
-     are one four-column grid, and each column is a figure paired with what it
-     was planned to be. Reordering one row alone would leave every tile sitting
-     under a budget for something else. */
-  return [
-    plan('Income · budget',   money(b.income),  b.income,  t.income,  'down',
-         haveIn, haveIn ? null : 'no income linked', 'in'),
-    plan('Expenses · budget', money(b.expense), b.expense, t.expense, 'up',
-         haveOut, null, 'out'),
-    plan('Net Balance · budget', money(b.net),   b.net,     t.net,     'down',
-         haveIn, haveIn ? null : 'needs income', 'signed'),
-    plan('Net Balance Rate · budget',
-         b.savingsRate === null ? '—' : b.savingsRate.toFixed(1) + '%',
-         b.savingsRate || 0, rate, 'down',
-         haveIn && b.savingsRate !== null, haveIn ? null : 'needs income', 'signed')
-  ];
-}
-
 /* Says where the number came from. A budget nobody can explain is one nobody
    argues with, and this one is worth arguing with — it is derived, not chosen. */
 /* One sentence, because there is one method now and it is the same one the
@@ -3726,18 +3674,27 @@ function budgetNote(b) {
 /* Said plainly rather than left as three dashes to puzzle over. */
 function incomeNote(b) {
   return b.available && !b.income
-    ? ' No account that receives income is linked yet, so income, net balance and net balance rate have nothing to plan against — connect a current account and they fill in.'
+    ? ' No account that receives income is linked yet, so income has nothing to plan against — connect a current account and it fills in.'
     : '';
 }
 
 async function renderOverview() {
   fillMonthOptions('ov-range');
   const s = await summaryFor(range());
-  const t = s.totals, p = s.previous, safe = s.safeToSpend;
+  const t = s.totals, safe = s.safeToSpend;
 
-  // Capped at 100 so an overspent month does not draw a bar past the card, but
-  // the overspend is still stated in words below rather than hidden by the cap.
-  const overspent = t.expense > t.income && t.income > 0;
+  /* Whether the window has actually finished, from its own end date rather than
+     from a day count.
+
+     safeToSpend cannot answer this for every range. For a span the Worker sets
+     daysElapsed and daysInPeriod to the same number -- months times thirty for
+     both -- because a span is normally historical, so days-left is zero by
+     construction even when the span ends in the month still running. Trusting
+     it put "This period is complete." over three months ending in a September
+     with three weeks left. The iOS app found and fixed this first (884b3fd).
+
+     Both dates are YYYY-MM-DD in UTC, which compare correctly as strings. */
+  const periodEnded = s.range.end < new Date().toISOString().slice(0, 10);
 
   /* The two plans, and how each bar is drawn against its own.
    *
@@ -3839,12 +3796,17 @@ async function renderOverview() {
        is not advice. */
     '<p class="fig' + (t.net < 0 ? ' down' : '') + '">' + money(t.net) + '</p>' +
     '<p class="fig-sub">' + (
-      safe.daysLeft <= 0 ? 'This period is complete.'
+      periodEnded ? 'This period is complete.'
+      /* Still running, but with no usable day count -- a span. Say the half
+         that is true and leave out the clause it cannot support. */
+      : safe.daysLeft <= 0
+        ? (t.net < 0 ? 'That is ' + money(-t.net) + ' more out than in so far.'
+                     : 'That is ' + money(t.net) + ' kept so far.')
       : t.net < 0
         ? 'That is ' + money(-t.net) + ' more out than in, with ' + safe.daysLeft +
-          ' days still to go.'
+          ' day' + (safe.daysLeft === 1 ? '' : 's') + ' still to go.'
         : 'That is about <b>' + money(safe.perDay) + ' a day</b> for the ' +
-          safe.daysLeft + ' days left.') + '</p>' +
+          safe.daysLeft + ' day' + (safe.daysLeft === 1 ? '' : 's') + ' left.') + '</p>' +
     // Income above, spending directly beneath it, on the same scale. The
     // difference in their lengths is the money kept — visible without reading
     // a single number.
@@ -3871,14 +3833,12 @@ async function renderOverview() {
         '</div>' +
       '</div>' +
     '</div>' +
-    /* This read "$3,753.74 spent of $7,632.00" — spending against income, a
-       third comparison sitting under two bars that each make their own. Both
-       of its figures are printed inside the bars now, so what is left here is
-       the one thing neither bar shows: the difference between them. */
-    '<div class="meter-legend"><span class="mono">' +
-    (overspent
-      ? money(t.expense - t.income) + ' more went out than came in'
-      : (t.income > 0 ? 'The gap is ' + money(t.income - t.expense) + ' kept' : '')) + '</span>' +
+    /* The gap between the two bars was written out here too -- "The gap is
+       $3,878 kept". It is the headline figure at the top of this card said a
+       second time, and the iOS Overview has no such line for that reason. What
+       stays is the one thing neither the headline nor the bars say: where
+       spending stands against its budget. The empty span keeps it to the right. */
+    '<div class="meter-legend"><span class="mono"></span>' +
     /* This said "on pace", from the same straight-line assumption the marker
        used to draw: income times the fraction of the period elapsed. Bills do
        not arrive evenly. Rent clears on the 1st and the badge cried wolf for a
@@ -3891,29 +3851,14 @@ async function renderOverview() {
                     : '✓ ' + money(plan - t.expense) + ' left in budget') + '</span>'
       : '') + '</div>';
 
-  let sp = null;
-  try { sp = (await authed('/api/trend?months=12')).sparklines; } catch (e) { /* cosmetic only */ }
-  const line = (arr, colour) => (arr && arr.some(v => v) ? sparkline(arr, colour) : '');
+  /* Every category against its plan, for this same window, where the eight
+     tiles were. Four figures with four more beneath them is a table, and a
+     table asks the reader to do the comparing; the categories answer the
+     question the card provokes, which is where the money went.
 
-  /* In the order the ledger reads: what came in, what went out, what is left,
-     and what that is as a share. The figure at the top of the card above is
-     the same net, so the answer already leads the page — these are the row it
-     is worked out from and they follow their own sequence. */
-  $('ov-tiles').innerHTML = [
-    tile('Income',    money(t.income),  t.income,  p.income,  'up',
-         line(sp && sp.income,  'var(--mint)'), { tone: toneFor('in') }),
-    tile('Expenses',  money(t.expense), t.expense, p.expense, 'down',
-         line(sp && sp.expense, 'var(--coral)'), { tone: toneFor('out') }),
-    tile('Net Balance', money(t.net),   t.net,     p.net,     'up',
-         line(sp && sp.net, t.net < 0 ? 'var(--coral)' : 'var(--mint)'),
-         { tone: toneFor('signed', t.net) }),
-    tile('Net Balance Rate',
-         t.income ? ((t.net / t.income) * 100).toFixed(1) + '%' : '—',
-         t.income ? (t.net / t.income) * 100 : 0,
-         p.income ? (p.net / p.income) * 100 : 0, 'up',
-         line(sp && sp.savingsRate, t.net < 0 ? 'var(--coral)' : 'var(--mint)'),
-         { tone: toneFor('signed', t.net, !!t.income) })
-  ].concat(budgetTiles(t, s.budget || { available: false, months: 1, income: 0, expense: 0, net: 0, savingsRate: null })).join('');
+     Drawn from the summary already fetched: budgetRange reads the same two
+     menus as range(), so this is a cache hit rather than a second request. */
+  await renderBudgetView();
 
   const b = s.budget || { method: 'insufficient-data', months: 1 };
   $('budget-note').textContent = budgetNote(b) + incomeNote(b);
@@ -7915,7 +7860,7 @@ function drawBudgeting() {
       ? 'You have moved ' + moved + ' baseline' + (moved === 1 ? '' : 's') +
         (withPins ? ' and pinned months in ' + withPins + ' categor' + (withPins === 1 ? 'y' : 'ies') : '') + '. '
       : '') +
-    'This is the plan the Overview, the Tracker and the Trend forecast all read.';
+    'This is the plan the Overview and the Trend forecast both read.';
 }
 
 /* The heading over a list of leaves.
@@ -8057,7 +8002,7 @@ function bgMonths(row, plan) {
       '<input type="number" min="0" step="1" inputmode="decimal" ' +
         'class="' + (row.pinned[m] !== undefined ? 'pin' : '') + '" ' +
         (bgPast(m) ? 'disabled title="' + escapeHtml(bgData.labels[i]) +
-          ' has already happened — its plan is what the Tracker measured" ' : '') +
+          ' has already happened — its plan is what the Overview measured" ' : '') +
         'data-pin="' + escapeHtml(row.slug) + '" data-month="' + m + '" ' +
         'aria-label="' + bgData.labels[i] + ' for ' + escapeHtml(row.label) + '" ' +
         'value="' + (plan[m] / 100).toFixed(0) + '">' +
@@ -9581,11 +9526,16 @@ const budgetTxOpen = new Set();
 const budgetTxCache = {};
 let budgetRangeLabel = '';
 
-/* The same pair of menus as the Overview, so they mean the same thing. Reading
-   them through the shared mapper also drops the Tracker's old one-month span,
-   which was labelling its drill-downs "August 2026 to August 2026". */
-const budgetRange = () => spanRange('bud-range', 'bud-trail');
-const fillBudgetRanges = () => fillMonthOptions('bud-range');
+/* The Overview's own pair of menus.
+
+   This list was a tab of its own with a copy of them, so the figure at the top
+   of the Overview and the categories that explain it could be showing two
+   different months. It is the lower half of the Overview now, as it is in the
+   iOS app, and reads the same window as the card above it -- which is also what
+   makes a drill-down list the months that produced the figure it was opened
+   from, rather than quietly narrowing to one of them. */
+const budgetRange = () => spanRange('ov-range', 'ov-trail');
+const fillBudgetRanges = () => fillMonthOptions('ov-range');
 
 /* One bar, read as a proportion of its own budget.
  *
@@ -9860,10 +9810,8 @@ async function renderBudgetView() {
       '</div>';
   }).join('');
 
-  if (!bud.available) {
-    host.innerHTML += '<p class="fc-method" style="margin:4px 2px 0">' +
-      escapeHtml(budgetNote(bud)) + '</p>';
-  }
+  // No note here: the Overview already says under the whole page why there is
+  // no plan yet, and saying it again inside the list would say it twice.
 
   // The list was rebuilt from scratch, so anything that was open is now an
   // empty box. Fill it again rather than making the reader open it twice.
@@ -9955,14 +9903,6 @@ $('bud-list').addEventListener('click', (e) => {
   }
 });
 
-['bud-range', 'bud-trail'].forEach(id =>
-  $(id).addEventListener('change', () => {
-    summaryCache = null;
-    // The rows behind a figure belong to the months that produced it, so a new
-    // period asks again rather than reusing the last answer.
-    for (const k of Object.keys(budgetTxCache)) delete budgetTxCache[k];
-    refresh();
-  }));
 
 /* ------------------------------------------------------------------ pie -- */
 
