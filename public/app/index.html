@@ -1427,7 +1427,7 @@
   /* A month box that cannot be typed into says so by looking spent, and keeps
      the cursor that means it. */
   .bg-mon.past{ opacity:.55; }
-  .bg-mon.past input{ cursor:not-allowed; background:var(--row-alt); }
+  .bg-mon.past input{ background:var(--row-alt); }
 
   .bg-vs-out{ opacity:.85; cursor:default; pointer-events:all;
               transition:filter .12s ease, opacity .12s ease; }
@@ -1504,29 +1504,29 @@
      to nearly full alpha across four radii. The floor comes up to meet the
      rest — it is quiet at rest so it does not fight the bar, but a measure
      that lights everything except its own base looks broken. */
-  .bg-vs-candle:not(.past):hover .ccap.ceil,
-  .bg-vs-candle:not(.past):active .ccap.ceil{ stroke-width:3.25; }
-  .bg-vs-candle:not(.past):hover .ccap.floor,
-  .bg-vs-candle:not(.past):active .ccap.floor{ stroke-width:2.25; opacity:.85; }
-  .bg-vs-candle:not(.past):hover .cstem,
-  .bg-vs-candle:not(.past):active .cstem{ stroke-width:2.5; }
+  .bg-vs-candle:hover .ccap.ceil,
+  .bg-vs-candle:active .ccap.ceil{ stroke-width:3.25; }
+  .bg-vs-candle:hover .ccap.floor,
+  .bg-vs-candle:active .ccap.floor{ stroke-width:2.25; opacity:.85; }
+  .bg-vs-candle:hover .cstem,
+  .bg-vs-candle:active .cstem{ stroke-width:2.5; }
 
-  .bg-vs-candle.up:not(.past):hover .ccap,
-  .bg-vs-candle.up:not(.past):hover .cstem,
-  .bg-vs-candle.up:not(.past):active .ccap,
-  .bg-vs-candle.up:not(.past):active .cstem{ stroke:var(--cand-up-hot); }
-  .bg-vs-candle.down:not(.past):hover .ccap,
-  .bg-vs-candle.down:not(.past):hover .cstem,
-  .bg-vs-candle.down:not(.past):active .ccap,
-  .bg-vs-candle.down:not(.past):active .cstem{ stroke:var(--cand-dn-hot); }
+  .bg-vs-candle.up:hover .ccap,
+  .bg-vs-candle.up:hover .cstem,
+  .bg-vs-candle.up:active .ccap,
+  .bg-vs-candle.up:active .cstem{ stroke:var(--cand-up-hot); }
+  .bg-vs-candle.down:hover .ccap,
+  .bg-vs-candle.down:hover .cstem,
+  .bg-vs-candle.down:active .ccap,
+  .bg-vs-candle.down:active .cstem{ stroke:var(--cand-dn-hot); }
 
-  .bg-vs-candle.up:not(.past):hover,
-  .bg-vs-candle.up:not(.past):active{ filter:drop-shadow(0 0 3px var(--cand-up-lit))
+  .bg-vs-candle.up:hover,
+  .bg-vs-candle.up:active{ filter:drop-shadow(0 0 3px var(--cand-up-lit))
                             drop-shadow(0 0 8px var(--cand-up-lit))
                             drop-shadow(0 0 18px var(--cand-up-lit))
                             drop-shadow(0 0 34px var(--cand-up-glow)); }
-  .bg-vs-candle.down:not(.past):hover,
-  .bg-vs-candle.down:not(.past):active{ filter:drop-shadow(0 0 2px var(--cand-dn-lit))
+  .bg-vs-candle.down:hover,
+  .bg-vs-candle.down:active{ filter:drop-shadow(0 0 2px var(--cand-dn-lit))
                               drop-shadow(0 0 6px var(--cand-dn-lit))
                               drop-shadow(0 0 14px var(--cand-dn-lit))
                               drop-shadow(0 0 28px var(--cand-dn-glow)); }
@@ -1754,8 +1754,9 @@
   /* Dimmed because it has happened, and not ns-resize because it cannot be
      moved: a cursor that promises a drag the code refuses is the whole gap
      between a locked control and a broken one. */
-  .bg-seg.past{ opacity:.42; cursor:default; }
-  .bg-seg.past:hover{ stroke:none; filter:none; }
+  /* Dimmer, because it is history -- but it answers the pointer like any other
+     block, because it can be changed. */
+  .bg-seg.past{ opacity:.55; }
   .bg-seg.empty{ opacity:.16; }
   /* The lift Trend gives a segment, which this chart had the glow of but not
      the brightness: a shadow around an unchanged fill reads as an outline,
@@ -7663,10 +7664,14 @@ function bgRow(slug) {
 /**
  * A month that has already happened.
  *
- * The one definition, because it now decides three different things — whether
- * a block dims, whether the divider goes before it, and whether it can be
- * changed at all — and three copies of a rule are three chances for a month to
- * be locked while it still looks editable, or the reverse.
+ * The one definition, because it decides two things -- whether a block dims and
+ * whether the divider goes before it -- and two copies of a rule are two chances
+ * for a month to dim on one side of the divider and not the other.
+ *
+ * It used to decide a third, whether the month could be changed at all. Every
+ * month can be now: a plan that turned out wrong for a month already gone is
+ * the reader's to correct, and the Overview simply measures that month against
+ * whatever its plan now says.
  *
  * Compared as text rather than by position in the list: YYYY-MM sorts the way
  * it reads, and a currentMonth that is not itself in the window still puts
@@ -7946,7 +7951,7 @@ function drawBudgeting() {
           ' between each pair is what that month keeps, green, or goes under' +
           ' by, red.' +
           ' Months left of' +
-          ' the dashed line have already happened and are fixed. Spending is the' +
+          ' the dashed line have already happened, and can still be changed. Spending is the' +
           ' sum of the plans below and moves when they do.</div>' +
           '<div class="bg-kids">' + bgCols() + bgLeaf(inc) + '</div>'
         : '') +
@@ -7994,7 +7999,7 @@ function drawBudgeting() {
             ? bgChart(chartRows, p.slug) + bgLegend(legendRows, p.slug) + bgFocusNote(p, chartRows) +
               '<div class="bg-cap">Drag any block up or down to change that month' +
               ' — hold Alt for dollar-by-dollar. Arrow keys work too. Months left' +
-              ' of the dashed line have already happened and are fixed.</div>'
+              ' of the dashed line have already happened, and can still be changed.</div>'
             : '') +
           '<div class="bg-kids">' + bgCols() + kids.map(bgLeaf).join('') + '</div>'
         : '') +
@@ -8032,12 +8037,9 @@ function bgCols() {
    whose effect cannot be seen is a button nobody dares press. That the
    baseline is $739 is most of the reason to want it back. */
 function bgRevertLabel(row) {
-  /* Only the months still to come. A pin on a month that has already happened
-     is fixed -- the plan for a past month is what the Tracker reported
-     against, so clearing it would rewrite the yardstick rather than correct a
-     forecast. Counting them here would put a number on the button that
-     pressing it could not deliver. */
-  const pins = Object.keys(row.pinned).filter(m => !bgPast(m)).length;
+  /* Every pinned month, past ones included -- they can be changed now, so they
+     can be cleared, and "back to the baseline" means all of it. */
+  const pins = Object.keys(row.pinned).length;
   const over = row.baselineOverride > 0;
   const base = Math.max(0, Math.round(row.baseline || 0));
   if (over && pins) return '↺ Back to the baseline, ' + money0(base) + ' a month';
@@ -8160,14 +8162,14 @@ function bgMonths(row, plan) {
   /* This grid wraps to six and then three columns, so a month is not always
      in the same place as the band above it and a vertical rule through it
      would point at the wrong boundary. The months that have gone are marked
-     and disabled instead, which says the same thing at any width. */
+     instead -- dimmer, still editable -- which says the same thing at any width. */
   return '<div class="bg-months">' + bgData.months.map((m, i) => {
     return '<label class="bg-mon' + (bgPast(m) ? ' past' : '') + '">' +
       '<span>' + bgData.labels[i].slice(0, 3) + '</span>' +
       '<input type="number" min="0" step="1" inputmode="decimal" ' +
         'class="' + (row.pinned[m] !== undefined ? 'pin' : '') + '" ' +
-        (bgPast(m) ? 'disabled title="' + escapeHtml(bgData.labels[i]) +
-          ' has already happened — its plan is what the Overview measured" ' : '') +
+        (bgPast(m) ? 'title="' + escapeHtml(bgData.labels[i]) +
+          ' has already happened. Its plan can still be changed." ' : '') +
         'data-pin="' + escapeHtml(row.slug) + '" data-month="' + m + '" ' +
         'aria-label="' + bgData.labels[i] + ' for ' + escapeHtml(row.label) + '" ' +
         'value="' + (plan[m] / 100).toFixed(0) + '">' +
@@ -9287,11 +9289,6 @@ $('bg-list').addEventListener('input', (e) => {
     if (!row) return;
     const raw = pin.value.trim();
     const month = pin.dataset.month;
-    /* A disabled input raises no input event, so arriving here means the
-       markup and the rule have come apart. Doing nothing is the right answer
-       either way: better a box that ignores a keystroke than one that writes
-       over a month the Tracker has already reported on. */
-    if (bgPast(month)) return;
     if (raw === '') { delete row.pinned[month]; bgLive(); bgSave({ slug: row.slug, month, amount: null }); return; }
     const cents = Math.round(Number(raw) * 100);
     if (!isFinite(cents) || cents < 0) return;
@@ -9434,9 +9431,6 @@ $('bg-list').addEventListener('click', (e) => {
       bgSave({ slug: row.slug, baseline: null });
     }
     for (const m of Object.keys(row.pinned)) {
-      /* A month that has already happened is fixed everywhere else on this
-         page, and reverting is not the one exception. */
-      if (bgPast(m)) continue;
       delete row.pinned[m];
       bgSave({ slug: row.slug, month: m, amount: null });
     }
@@ -9470,12 +9464,10 @@ $('bg-list').addEventListener('pointerdown', (e) => {
   const svg = seg.ownerSVGElement;
   const row = bgData && bgRow(seg.dataset.seg);
   if (!svg || !row) return;
-  /* A month that has happened cannot be planned. Checked before anything is
-     picked up rather than when it is put down, so the block never moves under
-     the pointer and then springs back — a control that responds and then
-     undoes itself reads as a bug, where one that does not move reads as a
-     rule. Hovering still works, because the figure is still worth reading. */
-  if (bgPast(seg.dataset.month)) return;
+  /* A month that has already happened drags like any other. It used to be
+     locked, on the reasoning that its plan was the yardstick the Overview had
+     already reported against; whether to move that yardstick is the reader's
+     call, and the Overview re-measures against whatever the plan now says. */
 
   e.preventDefault();
   const month = seg.dataset.month;
@@ -9578,7 +9570,6 @@ function bgDragEnd(e) {
      needs saving -- so this costs no new gesture and no new hit area. */
   if (!d.moved) {
     bgFit(d.svg);
-    if (bgPast(d.month)) { bgTipHide(); return; }   // history is not editable
     bgTipPin = { slug: d.row.slug, month: d.month };
     bgTipShow(d.row, d.month, null, e.clientX, e.clientY);
     const box = bgTipEl && bgTipEl.querySelector('#bg-tip-input');
@@ -9622,7 +9613,7 @@ function bgTipCommit() {
   if (!box || !bgTipPin) return;
   const row = bgRow(bgTipPin.slug);
   const month = bgTipPin.month;
-  if (!row || bgPast(month)) { bgTipUnpin(false); return; }
+  if (!row) { bgTipUnpin(false); return; }
   const raw = box.value.trim();
   /* Emptied on purpose means "go back to the plan", which is the same thing
      the month boxes below already do with an empty field. */
@@ -9711,10 +9702,8 @@ $('bg-list').addEventListener('keydown', (e) => {
     return;
   }
 
-  /* Moving between blocks is allowed everywhere — reading a month you cannot
-     change is still worth doing, and a keyboard user who could not cross the
-     divider could not reach the months past it. Changing stops here. */
-  if (bgPast(month)) return;
+  /* Every month can be changed from the keyboard, the ones already gone
+     included, on both sides of the divider. */
 
   // Changing.
   const now = bgPlanOf(row)[month];
