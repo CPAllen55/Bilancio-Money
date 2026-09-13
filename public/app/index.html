@@ -3753,6 +3753,23 @@ function sparkline(values, stroke) {
 }
 
 /** Direction is not the same as good: more in is good, more out is not. */
+/* 'prior month', 'prior year', 'prior 3 months': what a range is compared against,
+   read from the range key the API was asked for, so the words cannot drift from
+   the comparison that was actually made. See resolveRange in summary-routes. */
+function vsLabel(key) {
+  if (key === 'this-month' || key === 'last-month' || /^month:/.test(key)) return 'prior month';
+  if (key === 'ytd') return 'prior year';
+  if (/^day:/.test(key)) return 'prior day';
+  const span = /^span:(\d{4})-(\d{2})\.\.(\d{4})-(\d{2})$/.exec(key || '');
+  const last = /^last-(\d+)$/.exec(key || '');
+  const n = span ? (span[3] - span[1]) * 12 + (span[4] - span[2]) + 1 : last ? Number(last[1]) : 0;
+  if (n === 1) return 'prior month';
+  if (n === 12) return 'prior year';
+  if (n > 12 && n % 12 === 0) return 'prior ' + (n / 12) + ' years';
+  if (n > 1) return 'prior ' + n + ' months';
+  return 'prior period';
+}
+
 function tile(label, value, now, before, betterWhen, spark, opts) {
   const o = opts || {};
   let cls = 'flat', arrow = '', text = o.empty || 'no prior period';
@@ -4094,20 +4111,26 @@ async function renderOverview() {
      and what that is as a share. The figure at the top of the card above is
      the same net, so the answer already leads the page — these are the row it
      is worked out from and they follow their own sequence. */
+  /* What the four cards are measured against, said as what it is. The Overview
+     asks for one month or a run of months, and the API compares either with the
+     same length immediately before -- so one month is against the prior month,
+     twelve against the prior year, and three against the three months before,
+     which is neither and says so. */
+  const vs = vsLabel(s.range.key);
   $('ov-tiles').innerHTML = [
     tile('Income',    money(t.income),  t.income,  p.income,  'up',
-         line(sp && sp.income,  'var(--mint)'), { tone: toneFor('in') }),
+         line(sp && sp.income,  'var(--mint)'), { vs: vs, tone: toneFor('in') }),
     tile('Expenses',  money(t.expense), t.expense, p.expense, 'down',
-         line(sp && sp.expense, 'var(--coral)'), { tone: toneFor('out') }),
+         line(sp && sp.expense, 'var(--coral)'), { vs: vs, tone: toneFor('out') }),
     tile('Net Balance', money(t.net),   t.net,     p.net,     'up',
          line(sp && sp.net, t.net < 0 ? 'var(--coral)' : 'var(--mint)'),
-         { tone: toneFor('signed', t.net) }),
+         { vs: vs, tone: toneFor('signed', t.net) }),
     tile('Net Balance Rate',
          t.income ? ((t.net / t.income) * 100).toFixed(1) + '%' : '—',
          t.income ? (t.net / t.income) * 100 : 0,
          p.income ? (p.net / p.income) * 100 : 0, 'up',
          line(sp && sp.savingsRate, t.net < 0 ? 'var(--coral)' : 'var(--mint)'),
-         { tone: toneFor('signed', t.net, !!t.income) })
+         { vs: vs, tone: toneFor('signed', t.net, !!t.income) })
   ].concat(budgetTiles(t, s.budget || { available: false, months: 1, income: 0, expense: 0, net: 0, savingsRate: null })).join('');
 
   const b = s.budget || { method: 'insufficient-data', months: 1 };
