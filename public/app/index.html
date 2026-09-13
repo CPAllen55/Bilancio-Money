@@ -1741,6 +1741,38 @@
   .bg-key{ display:inline-flex; align-items:center; gap:5px; font-size:11.5px;
            color:var(--ink-soft); }
   .bg-key i{ width:9px; height:9px; border-radius:2px; display:inline-block; flex:none; }
+  /* A key that can be pressed. The global button rule gives every button a
+     border, padding and a mono face, none of which a legend chip wants until it
+     is hovered or chosen -- so they are taken back off here. */
+  button.bg-key{ background:none; border:1px solid transparent; border-radius:999px;
+                 padding:2px 9px 2px 6px; font:inherit; font-size:11.5px; color:inherit;
+                 cursor:pointer; transition:opacity .15s, border-color .15s; }
+  button.bg-key:hover{ border-color:var(--hair-strong); color:inherit; }
+  button.bg-key.on{ border-color:var(--key, var(--hair-strong)); font-weight:600; }
+  .bg-legend.focused button.bg-key:not(.on){ opacity:.45; }
+  .bg-legend.focused button.bg-key:not(.on):hover{ opacity:.8; }
+
+  /* The subcategory's name is the control that narrows the chart to it. It
+     carries the category's colour so the row and its blocks in the chart read
+     as one thing. */
+  .bg-name-btn{ display:inline-flex; align-items:center; gap:8px; max-width:100%;
+                background:none; border:0; padding:2px 0; margin:0; font:inherit;
+                color:inherit; cursor:pointer; text-align:left; }
+  .bg-name-btn:hover{ color:inherit; }
+  .bg-name-btn i{ width:11px; height:11px; border-radius:3px; flex:none; }
+  .bg-name-btn .bg-name{ display:block; min-width:0; }
+  .bg-name-btn:hover .bg-name{ text-decoration:underline; text-underline-offset:3px;
+                               text-decoration-color:var(--hair-strong); }
+  .bg-name-btn:focus-visible{ outline:2px solid var(--mint-dim); outline-offset:3px; border-radius:4px; }
+  .bg-name-btn[aria-pressed="true"] .bg-name{ font-weight:600; }
+  /* The chosen row, marked in its own colour down the left, the way every
+     category card is marked. */
+  .bg-leaf.focus{ box-shadow:inset 3px 0 0 var(--leaf); background:var(--row-alt);
+                  margin:0 -10px; padding-left:10px; padding-right:10px; border-radius:6px; }
+  .bg-focus-note{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px;
+                  margin-top:8px; font-size:12.5px; color:var(--ink-soft); }
+  .bg-focus-note b{ color:var(--ink); }
+  .bg-focus-note button{ font-size:11.5px; padding:4px 10px; }
   .bg-cap{ font-family:var(--font-num); font-size:11.5px; color:var(--muted);
            margin-top:7px; min-height:16px; }
   .bg-cap.live{ color:var(--ink); }
@@ -7813,6 +7845,14 @@ function drawBudgeting() {
     const p = o.p, kids = o.kids, year = o.year;
     const open = bgCardOpen.has(p.slug);
     const shown = bgShownKids(p.slug);
+    /* The chart can be narrowed to one subcategory -- see bgFocus. Everything
+       drawn FROM the chart follows it, the line toggles included, so a
+       subcategory with no spending last year offers no Year ago. The rows
+       beneath still list every subcategory, and so does the legend, which
+       also gains the chosen one if it has no plan and so was not in it. */
+    const chartRows = bgChartRows(p.slug, shown, kids);
+    const legendRows = chartRows.length === 1 && !shown.includes(chartRows[0])
+      ? shown.concat(chartRows) : shown;
     const perMonth = bgData.months.map(m =>
       kids.reduce((s, r) => s + bgPlanOf(r)[m], 0));
 
@@ -7835,11 +7875,11 @@ function drawBudgeting() {
       '</button>' +
       /* Only on an open card: there is no chart to draw a line across when it
          is shut, and a control that does nothing is worse than no control. */
-      (open && shown.length ? bgMetricsHtml(p.slug, bgLineData(shown)) : '') +
+      (open && chartRows.length ? bgMetricsHtml(p.slug, bgLineData(chartRows)) : '') +
       '</div>' +
       (open
-        ? (shown.length
-            ? bgChart(shown, p.slug) + bgLegend(shown) +
+        ? (chartRows.length
+            ? bgChart(chartRows, p.slug) + bgLegend(legendRows, p.slug) + bgFocusNote(p, chartRows) +
               '<div class="bg-cap">Drag any block up or down to change that month' +
               ' — hold Alt for dollar-by-dollar. Arrow keys work too. Months left' +
               ' of the dashed line have already happened and are fixed.</div>'
@@ -7897,6 +7937,10 @@ function bgRevertLabel(row) {
 /** One leaf: what it costs a month, and the twelve months behind that. */
 function bgLeaf(row) {
   const plan = bgPlanOf(row);
+  /* Only a spending subcategory can narrow a chart. Income's row sits under a
+     different chart whose bars are not subcategories. */
+  const focusable = !!row.parentSlug && !row.sources;
+  const focused = focusable && bgFocus.get(row.parentSlug) === row.slug;
   const year = bgData.months.reduce((s, m) => s + plan[m], 0);
   const shown = row.baselineOverride ?? row.baseline;
   const open = bgOpen.has(row.slug);
@@ -7913,8 +7957,17 @@ function bgLeaf(row) {
      caret out of the box being typed in. */
   const revert = bgRevertLabel(row);
 
-  return '<div class="bg-leaf" data-slug="' + escapeHtml(row.slug) + '">' +
-      '<div><div class="bg-name">' + escapeHtml(row.label) + '</div>' +
+  return '<div class="bg-leaf' + (focused ? ' focus' : '') + '" data-slug="' + escapeHtml(row.slug) + '"' +
+      (focused ? ' style="--leaf:' + themed(row.slug, row.colour) + '"' : '') + '>' +
+      '<div>' + (focusable
+        ? '<button type="button" class="bg-name-btn" ' +
+          'data-bg-focus="' + escapeHtml(row.parentSlug) + ':' + (focused ? '' : escapeHtml(row.slug)) + '" ' +
+          'aria-pressed="' + focused + '" ' +
+          'title="' + (focused ? 'Show every subcategory on the chart'
+                            : 'Show only ' + escapeHtml(row.label) + ' on the chart') + '">' +
+          '<i style="background:' + themed(row.slug, row.colour) + '"></i>' +
+          '<span class="bg-name">' + escapeHtml(row.label) + '</span></button>'
+        : '<div class="bg-name">' + escapeHtml(row.label) + '</div>') +
         (note.length
           ? '<div class="bg-note">' + escapeHtml(note.join(' · ')) + '</div>'
           : '') +
@@ -8132,6 +8185,36 @@ const BG_METRICS = [
   { id: 'yoy',   label: 'Year ago', colour: 'var(--line-previous)' },
 ];
 const bgLineOn = (slug, id) => bgLines.has(slug + ':' + id);
+
+/* Which subcategory each card's chart is narrowed to, if any: parent -> leaf.
+
+   Kept per card, like the line toggles, so narrowing Food to Groceries does not
+   narrow Home as well. Not remembered across visits -- a chart that opens
+   already showing a fraction of its category would look like a bug. */
+const bgFocus = new Map();
+
+/* The rows a card's chart is drawn from: every subcategory with a plan, or only
+   the one chosen. A choice that no longer names a row -- a category deleted
+   while chosen -- falls back to all of them rather than to an empty chart. */
+function bgChartRows(parentSlug, shown, kids) {
+  const chosen = bgFocus.get(parentSlug);
+  if (!chosen) return shown;
+  const row = kids.find(r => r.slug === chosen);
+  return row ? [row] : shown;
+}
+
+/* Said under the chart while it is narrowed, because Average, Trend and Year
+   ago look exactly the same whether they describe a category or one part of
+   it, and the reader deserves to know which they are looking at. */
+function bgFocusNote(p, chartRows) {
+  const chosen = bgFocus.get(p.slug);
+  if (!chosen || chartRows.length !== 1 || chartRows[0].slug !== chosen) return '';
+  const r = chartRows[0];
+  return '<div class="bg-focus-note"><span>Showing <b>' + escapeHtml(r.label) + '</b> only.' +
+    ' Average, Trend and Year ago are worked out from ' + escapeHtml(r.label) + ' alone.</span>' +
+    '<button type="button" data-bg-focus="' + escapeHtml(p.slug) + ':">Show all of ' +
+    escapeHtml(p.label) + '</button></div>';
+}
 
 function bgMetricsHtml(slug, data) {
   return '<div class="bg-metrics">' + BG_METRICS.map(m => {
@@ -8623,14 +8706,32 @@ function bgLinesSvg(data, onFor, band, _unused, hi) {
   return out;
 }
 
-function bgLegend(kids) {
-  return '<div class="bg-legend">' + kids.map(r =>
-    '<span class="bg-key"><i style="background:' +
-      /* A row with no colour of its own is not a category — the planned-
-         spending total is the only one — and takes the colour its bar is
-         drawn in rather than whatever themed() makes of a null. */
-      (r.colour === null ? 'var(--coral)' : themed(r.slug, r.colour)) + '"></i>' +
-    escapeHtml(r.label) + '</span>').join('') + '</div>';
+/* The key beneath a chart.
+
+   Given a parent, each key is a button that narrows the chart to that
+   subcategory, and the chosen one stays lit while the rest dim. Without one --
+   the Income and spending chart, whose keys are not subcategories -- they stay
+   plain labels, because pressing them could not mean anything. */
+function bgLegend(kids, parentSlug) {
+  const chosen = parentSlug ? bgFocus.get(parentSlug) : null;
+  const swatch = (r) =>
+    /* A row with no colour of its own is not a category — the planned-
+       spending total is the only one — and takes the colour its bar is
+       drawn in rather than whatever themed() makes of a null. */
+    (r.colour === null ? 'var(--coral)' : themed(r.slug, r.colour));
+  return '<div class="bg-legend' + (chosen ? ' focused' : '') + '">' + kids.map(r => {
+    if (!parentSlug) {
+      return '<span class="bg-key"><i style="background:' + swatch(r) + '"></i>' +
+        escapeHtml(r.label) + '</span>';
+    }
+    const on = chosen === r.slug;
+    return '<button type="button" class="bg-key' + (on ? ' on' : '') + '" ' +
+      'style="--key:' + swatch(r) + '" ' +
+      'data-bg-focus="' + escapeHtml(parentSlug) + ':' + (on ? '' : escapeHtml(r.slug)) + '" ' +
+      'aria-pressed="' + on + '" ' +
+      'title="' + (on ? 'Show every subcategory' : 'Show only ' + escapeHtml(r.label)) + '">' +
+      '<i style="background:' + swatch(r) + '"></i>' + escapeHtml(r.label) + '</button>';
+  }).join('') + '</div>';
 }
 
 /* Geometry only, applied to the blocks already on screen. A redraw would
@@ -9176,6 +9277,17 @@ function bgLive() {
 }
 
 $('bg-list').addEventListener('click', (e) => {
+  /* Choosing a subcategory, from its row or its key. The attribute carries
+     "parent:leaf" to choose and "parent:" to go back to all of them, so the
+     markup decides what a press means and this only carries it out. */
+  const focus = e.target.closest('[data-bg-focus]');
+  if (focus) {
+    const [parent, leaf] = focus.dataset.bgFocus.split(':');
+    if (leaf) bgFocus.set(parent, leaf); else bgFocus.delete(parent);
+    drawBudgeting();
+    return;
+  }
+
   /* Checked first. It sits in the header row beside the card's own button,
      and a metric being switched on is not a request to close the card. */
   const line = e.target.closest('[data-bg-line]');
