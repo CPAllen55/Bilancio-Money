@@ -680,7 +680,11 @@
   /* Two columns since the amount moved inside the bar. The track takes back
      the 96px the figure used to hold, which is what makes room for a caption
      that names two numbers rather than one. */
-  .brow{ display:grid; grid-template-columns:74px minmax(0,1fr); gap:12px; align-items:center; }
+  /* Wide enough for "Net balance", the longest of the three labels, on one line.
+     All three rows share this column, and that is what lines their tracks up: a
+     narrower one wraps that label and pushes its bar out of line with the two
+     beneath it. Measured in the browser, not guessed. */
+  .brow{ display:grid; grid-template-columns:96px minmax(0,1fr); gap:12px; align-items:center; }
   .blabel{ font-family:var(--font-num); font-size:11px; letter-spacing:.08em;
            text-transform:uppercase; color:var(--muted); }
   .btrack{ position:relative; height:10px; border-radius:2px; background:var(--grid); }
@@ -752,10 +756,11 @@
      mark runs its full height instead. At 21px that is tall enough to see
      without needing to escape. */
   .btrack.thick .meter-tick{ top:0; bottom:0; box-shadow:0 0 0 1px var(--card-safe); }
-  /* The Net balance bar, alone above the headline and full width. Its track is
-     tinted with the side of zero the period is on, so a loss reads as a loss
-     before a word of the caption does. */
-  #ov-safe .btrack.net{ margin:10px 0 2px; }
+  /* The Net balance row, above the headline, laid out exactly like Income and
+     Expenses so its track starts where theirs do. Its track is tinted with the
+     side of zero the period is on, so a loss reads as a loss before a word of
+     the caption does. */
+  #ov-safe .net-row{ margin:12px 0 4px; }
   .btrack.net.pos{ background:color-mix(in srgb, var(--bar-mint) 16%, var(--grid)); }
   .btrack.net.neg{ background:color-mix(in srgb, var(--bar-coral) 16%, var(--grid)); }
   /* The ceiling of a loss. Darker than the red it ends, and carrying the card's
@@ -3849,6 +3854,7 @@ async function renderOverview() {
   };
   const netCap = money0(t.net) + ' kept' + (netPlan > 0 ? ' of ' + money0(netPlan) : '');
   const netHtml =
+    '<div class="brow net-row"><span class="blabel">Net balance</span>' +
     '<div class="btrack thick net ' + (netNeg ? 'neg' : 'pos') + '">' +
       '<div class="bfill ' + (netNeg ? 'out' : 'in') + '" style="width:' + netFillPct.toFixed(2) + '%"></div>' +
       capHtml(netCap, netFillPct) +
@@ -3862,7 +3868,7 @@ async function renderOverview() {
           ' data-tip-note="' + escapeHtml(money(netSize) + ' more has gone out than came in' +
             (netPlan > 0 ? ', against a plan to keep ' + money(netPlan) : '') + '.') + '"></div>'
         : '') +
-    '</div>';
+    '</div></div>';
 
   /* The card was named after the figure at the top of it, but it has long
      since grown two bars, a budget mark and a verdict — the safe-to-spend
