@@ -844,3 +844,80 @@ export function planIncome(
     level: Math.round(level), dropped, short, payers, monthsUsed: months.length,
   };
 }
+
+/* ═════════════════════════════════════════════════════════ as of a month ══ */
+
+/**
+ * The months to plan, grouped by how much history each one was entitled to.
+ *
+ * A budget for May is what could have been said at the start of May: learned
+ * from the months before May and nothing after. Planning every month of the
+ * year from all the history there is today rewrites January every time August
+ * closes, which makes a past month's budget a statement about the present, and
+ * gives "was I over budget in March?" a different answer each month.
+ *
+ * So a month already over learns only from the months before it, and a month
+ * still to come learns from everything complete. A past month's figure then
+ * changes only when the history before it changes -- a transaction
+ * recategorised, an account linked with older history -- never because time
+ * moved on.
+ *
+ * Months sharing a cutoff share one run of the engine: every month from the
+ * current one onward is a single group.
+ */
+export function historyCutoffs(
+  learn: string[], wanted: string[],
+): { upTo: number; wanted: string[] }[] {
+  const groups = new Map<number, string[]>();
+  for (const m of wanted) {
+    const upTo = learn.filter((k) => k < m).length;
+    const g = groups.get(upTo);
+    if (g) g.push(m); else groups.set(upTo, [m]);
+  }
+  return [...groups.entries()].sort((a, b) => a[0] - b[0])
+    .map(([upTo, months]) => ({ upTo, wanted: months }));
+}
+
+/**
+ * planSubcategory, with each month planned from the history before it.
+ *
+ * The working that describes the category -- its commitments, its level, its
+ * outliers -- is today's, from the latest group, because that is what the
+ * readout explains and what a baseline override replaces. Only each month's
+ * figure and its breakdown come from that month's own run.
+ */
+export function planSubcategoryAsOf(
+  slug: string,
+  totals: number[],
+  history: MerchantHistory,
+  names: Map<string, string>,
+  months: string[],
+  wanted: string[],
+  over?: number,
+): SubPlan {
+  const runs = historyCutoffs(months, wanted).map((g) => planSubcategory(
+    slug, totals.slice(0, g.upTo), history, names, months.slice(0, g.upTo), g.wanted, over,
+  ));
+  const latest = runs[runs.length - 1]
+    ?? planSubcategory(slug, totals, history, names, months, wanted, over);
+  return {
+    ...latest,
+    plan: Object.assign({}, ...runs.map((r) => r.plan)),
+    parts: Object.assign({}, ...runs.map((r) => r.parts)),
+  };
+}
+
+/** planIncome, the same way: each month from the history before it. */
+export function planIncomeAsOf(
+  totals: number[],
+  history: MerchantHistory,
+  names: Map<string, string>,
+  months: string[],
+  wanted: string[],
+): IncomePlan {
+  const runs = historyCutoffs(months, wanted).map((g) => planIncome(
+    totals.slice(0, g.upTo), history, names, months.slice(0, g.upTo), g.wanted,
+  ));
+  const latest = runs[runs.length - 1] ?? planIncome(totals, history, names, months, wanted);
+  return { ...latest, plan: Object.assign({}, ...runs.map((r) => r.plan)) };
+}

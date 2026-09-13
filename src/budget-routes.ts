@@ -45,7 +45,7 @@ import {
 import { loadOverrides, learnWindow, type Override } from "./plan";
 import { shapeBudget } from "./budget-shape";
 import {
-  planSubcategory, planIncome, type MerchantHistory,
+  planSubcategoryAsOf, planIncomeAsOf, type MerchantHistory,
 } from "./budget-engine";
 
 const budget = new Hono<{ Bindings: Env }>();
@@ -110,7 +110,7 @@ budget.get("/budget", async (c) => {
       const merchants: MerchantHistory = new Map(
         learn.map((m) => [m, buckets.get(m)?.byMerchant?.[cat.slug] ?? {}]),
       );
-      const sub = planSubcategory(
+      const sub = planSubcategoryAsOf(
         cat.slug, totals, merchants, names, learn, planMonths,
         over && over.baseline > 0 ? over.baseline : undefined,
       );
@@ -202,7 +202,7 @@ budget.get("/budget", async (c) => {
       const merchants: MerchantHistory = new Map(
         learn.map((m) => [m, buckets.get(m)?.byIncomeMerchant?.[cat.slug] ?? {}]),
       );
-      const got = planIncome(totals, merchants, names, learn, planMonths);
+      const got = planIncomeAsOf(totals, merchants, names, learn, planMonths);
       return {
         slug: cat.slug, label: cat.label, colour: cat.colour,
         level: got.level, plan: got.plan,

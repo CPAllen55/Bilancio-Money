@@ -16,7 +16,7 @@ import type { getDb } from "./db/client";
 import { budgetPlansV2 } from "./db/schema";
 import { shapeBudget, type Shape } from "./budget-shape";
 import {
-  planSubcategory, planIncome, type SubPlan, type MerchantHistory,
+  planSubcategoryAsOf, planIncomeAsOf, type SubPlan, type MerchantHistory,
 } from "./budget-engine";
 
 type Db = ReturnType<typeof getDb>["db"];
@@ -165,7 +165,7 @@ export function buildShapedPlan(
     );
 
     const over = overrides.get(cat.id);
-    const sub = planSubcategory(
+    const sub = planSubcategoryAsOf(
       cat.slug, totals, merchants, names, learn, months,
       over && over.baseline > 0 ? over.baseline : undefined,
     );
@@ -191,7 +191,7 @@ export function buildShapedPlan(
      number while the Overview promises another is worse than either. */
   const incomeParts = categories
     .filter((c) => c.kind === "income" && c.parentSlug)
-    .map((c) => planIncome(
+    .map((c) => planIncomeAsOf(
       learn.map((m) => buckets.get(m)?.byIncome?.[c.slug] ?? 0),
       new Map(learn.map((m) => [m, buckets.get(m)?.byIncomeMerchant?.[c.slug] ?? {}])),
       names, learn, months,
