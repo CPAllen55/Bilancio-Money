@@ -264,51 +264,24 @@ private struct StandingCard: View {
                                   deficitAgainstPlan: true)
                         .padding(.vertical, 4)
 
-                    /* The figure, and what it was meant to be.
+                    /* The figure.
                      *
-                     * Every other number on this card is already read against a
-                     * plan — both bars carry theirs, and the status line below
-                     * carries the expense budget. The headline was the one
-                     * figure standing on its own, which left the card saying
-                     * "actuals against plan" everywhere except the place the eye
-                     * lands first.
+                     * The plan it is measured against used to sit beside this in
+                     * small print. The bar above now carries it — "-$157 kept of
+                     * $3,329" — so a second copy two lines below said the same
+                     * number twice and made the headline share its line for
+                     * nothing.
                      *
-                     * Beside it rather than beneath it, and quiet: the answer
-                     * has to stay the thing you see, and a second figure of the
-                     * same weight would make you read both before knowing
-                     * either.
+                     * The sign is kept and the colour follows it, rather than the
+                     * figure being made absolute and the meaning moved into a
+                     * word beside it.
                      */
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        // The sign is kept and the colour follows it, rather
-                        // than the figure being made absolute and the meaning
-                        // moved into a word beside it.
-                        Text(net.asMoney)
-                            .font(Theme.figure(40))
-                            .monospacedDigit()
-                            .foregroundStyle(Theme.tint(forNet: net))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
-
-                        if let planned = plannedNet {
-                            Spacer(minLength: 4)
-                            VStack(alignment: .trailing, spacing: 0) {
-                                Text("Budget")
-                                    .font(Theme.tileLabel)
-                                    .foregroundStyle(Theme.quietText)
-                                // Coloured by its own sign, the same way the
-                                // figure beside it is. A plan that expects to
-                                // lose money should look like one, and reading
-                                // the two together only works if a colour means
-                                // the same thing in both.
-                                Text(planned.asMoney)
-                                    .font(Theme.note)
-                                    .monospacedDigit()
-                                    .foregroundStyle(Theme.tint(forNet: planned))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.7)
-                            }
-                        }
-                    }
+                    Text(net.asMoney)
+                        .font(Theme.figure(40))
+                        .monospacedDigit()
+                        .foregroundStyle(Theme.tint(forNet: net))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
 
                     Text(subline)
                         .font(Theme.body)
