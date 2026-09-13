@@ -1862,6 +1862,30 @@
   /* The blanks before the 1st hold the shape and nothing else, so they take no
      border -- an empty box with an edge reads as a day with nothing in it. */
   .cal-cell.empty{ border:0; background:none; min-height:0; }
+  /* A day that can be opened says so on hover, and the one that is open stays
+     marked while its breakdown is on screen below. */
+  .cal-cell.can{ cursor:pointer; }
+  .cal-cell.can:hover{ border-color:var(--mint-dim); }
+  .cal-cell.can:focus-visible{ outline:2px solid var(--mint-dim); outline-offset:1px; }
+  .cal-cell.sel{ box-shadow:inset 0 0 0 2px var(--mint-dim); border-color:var(--mint-dim); }
+
+  /* The day, opened: two donuts side by side, the transactions beneath. */
+  .cal-day{ margin-top:18px; }
+  .cal-pies{ display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:28px; margin-top:16px; }
+  @media (max-width:760px){ .cal-pies{ grid-template-columns:1fr; } }
+  .cal-pie .eyebrow{ margin:0 0 10px; }
+  .cal-pie svg{ display:block; width:250px; max-width:100%; height:auto; margin:0 auto; }
+  .cal-key{ margin-top:12px; }
+  .cal-key .pv-row{ cursor:pointer; border-radius:5px; padding:5px 6px; }
+  .cal-key .pv-row:hover{ background:var(--row-alt); }
+  .cal-key .pv-row:focus-visible{ outline:2px solid var(--mint-dim); outline-offset:-2px; }
+  .cal-key .pv-row.sel{ background:var(--row-alt); }
+  .cal-key .pv-row.sel .pv-name{ font-weight:600; color:var(--ink); }
+  .cal-key .pv-row.dim{ opacity:.5; }
+  .cal-key .pv-share{ font-family:var(--font-num); font-size:11px; color:var(--muted);
+                      width:38px; text-align:right; flex:none; }
+  .cal-day-tx{ margin-top:22px; padding-top:16px; border-top:1px solid var(--hair); }
+  .cal-day-tx .eyebrow{ margin:0 0 8px; }
   .cal-num{ font:500 11.5px/1 var(--font-num); color:var(--muted); }
 
   /* Today gets the gold the rest of the app uses for "this is the one you are
@@ -3243,7 +3267,7 @@
       <p class="lede">What each day cost, and which days carry a subscription.
         Look ahead and the spending stops — nothing has been spent yet — but the
         subscriptions keep landing, because they are the part of a month that is
-        known in advance.</p>
+        known in advance. Click a day to see where it went.</p>
       <div class="cal-bar">
         <button type="button" class="ctl" id="cal-prev" aria-label="Previous month">&#8592;</button>
         <b id="cal-label"></b>
@@ -3252,6 +3276,7 @@
         <span id="cal-sum" class="cal-sum"></span>
       </div>
       <div id="cal-grid"></div>
+      <div class="card cal-day" id="cal-day" hidden></div>
     </section>
 
     <section class="panel" id="v-net">
@@ -5905,8 +5930,17 @@ async function renderCalendar() {
       : middle > 0 && d.spent > middle * 1.6 ? ' heavy'
       : '';
     const subs = d.subs || [];
+    /* A day that has happened can be opened; one still to come has no
+       transactions to show, only the subscriptions already written on it. */
+    const openable = !future;
     return '<div class="cal-cell' + (d.date === r.today ? ' today' : '') +
-      (future ? ' future' : '') + (subs.length ? ' hassub' : '') + band + '"' +
+      (future ? ' future' : '') + (subs.length ? ' hassub' : '') + band +
+      (openable ? ' can' : '') + (openable && d.date === calDay ? ' sel' : '') + '"' +
+      (openable
+        ? ' data-cal-day="' + d.date + '" tabindex="0" role="button" aria-pressed="' +
+          (d.date === calDay) + '" aria-label="' + escapeHtml(MONTH_NAMES[m - 1] + ' ' + day) +
+          ', show where it went"'
+        : '') +
       (d.spent > 0 || subs.length
         ? ' ' + tipAttrs(calTipLabel(d, subs), null, d.spent, 0, {
             when: MONTH_NAMES[m - 1] + ' ' + day,
@@ -5931,6 +5965,9 @@ async function renderCalendar() {
   }).join('');
 
   grid.innerHTML = '<div class="cal-month">' + head + blanks + cells + '</div>';
+
+  if (calDay && calDay.slice(0, 7) !== r.month) { calDay = null; calCat = null; calSub = null; }
+  drawCalDay();
 }
 
 const calTipLabel = (d, subs) =>
@@ -5942,9 +5979,250 @@ const calTipNote = (subs) => subs
   .map(s => s.name + ' ' + money(s.cents) + (s.projected ? ' (due)' : ''))
   .join(' · ');
 
-$('cal-prev').addEventListener('click', () => { calMonth = calShift(calMonth, -1); renderCalendar(); });
-$('cal-next').addEventListener('click', () => { calMonth = calShift(calMonth, 1); renderCalendar(); });
-$('cal-today').addEventListener('click', () => { calMonth = null; renderCalendar(); });
+$('cal-prev').addEventListener('click', () => { calMonth = calShift(calMonth, -1); calCloseDay(); renderCalendar(); });
+$('cal-next').addEventListener('click', () => { calMonth = calShift(calMonth, 1); calCloseDay(); renderCalendar(); });
+$('cal-today').addEventListener('click', () => { calMonth = null; calCloseDay(); renderCalendar(); });
+
+/* ── A day, opened ──────────────────────────────────────────────────────────
+ *
+ * Click a day and it breaks down underneath the calendar the way a slice of
+ * the Trend does: what the day was spent on by category, the subcategories
+ * beside that, and the transactions beneath both.
+ *
+ * The three move together. Choosing a category narrows the subcategory donut
+ * to what is inside it and the list to that category's rows; choosing a
+ * subcategory narrows the list again, and lights its category on the left if
+ * it was not already -- so the left donut never disagrees with the right one
+ * about what is being looked at. Choosing either again lets it go.
+ *
+ * With nothing chosen the right donut is every subcategory the day touched,
+ * rather than the insides of whichever category happened to be biggest: a
+ * default the reader did not pick would look like a selection they had made.
+ *
+ * Figures come from /api/summary for that one day, with budget=0 so the plan is
+ * not fitted for a view that never shows it -- and from the summary rather than
+ * from the rows, because a split transaction belongs to several categories and
+ * only the server's tally knows by how much.
+ */
+let calDay = null;     // YYYY-MM-DD, or null
+let calCat = null;     // a parent slug chosen on the left, or null
+let calSub = null;     // a subcategory chosen on the right, or null
+const calDayCache = {};
+const calTxCache = {};
+
+function calCloseDay() { calDay = null; calCat = null; calSub = null; }
+
+/* A failed request is not remembered, or the day stays broken until reload. */
+function calDaySummary(date) {
+  const key = 'day:' + date;
+  if (!calDayCache[key]) {
+    calDayCache[key] = authed('/api/summary?budget=0&range=' + encodeURIComponent(key))
+      .catch(err => { delete calDayCache[key]; throw err; });
+  }
+  return calDayCache[key];
+}
+function calDayTx(date, bucket) {
+  const key = date + '|' + (bucket || '');
+  if (!calTxCache[key]) {
+    calTxCache[key] = authed('/api/transactions?range=' + encodeURIComponent('day:' + date) +
+      (bucket ? '&bucket=' + encodeURIComponent(bucket) : '') + '&limit=100')
+      .catch(err => { delete calTxCache[key]; throw err; });
+  }
+  return calTxCache[key];
+}
+
+function calDayLabel(date) {
+  return new Date(date + 'T00:00:00Z').toLocaleDateString('en-US',
+    { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
+/* A category's parent, or the slug itself when it has none. */
+const calParentOf = (slug) => {
+  const c = categoryList.find(x => x.slug === slug);
+  return c && c.parentSlug ? c.parentSlug : slug;
+};
+
+/* One donut, drawn the way the Trend's is: same radius, sheen, hole, and the
+   chosen slice named in the middle. `kind` is 'cat' or 'sub'. */
+function calDonut(entries, sel, kind, word, of) {
+  const total = entries.reduce((s, e) => s + e[1], 0) || 1;
+  const R = 132, CX = 150, CY = 150;
+  const prefix = 'cal' + kind;
+  const colours = entries.map(([slug]) => colourOf(slug));
+  let angle = -Math.PI / 2;
+  const slices = entries.map(([slug, v]) => {
+    const a0 = angle, a1 = angle + (v / total) * Math.PI * 2;
+    angle = a1;
+    const on = sel === slug;
+    return '<path class="slice' + (on ? ' sel' : '') + (sel && !on ? ' dim' : '') + '" ' +
+      'd="' + arcPath(CX, CY, R, a0, a1) + '" fill="' + relief(prefix, colourOf(slug)) + '" ' +
+      'style="color:' + colourOf(slug) + '" data-cal-' + kind + '="' + escapeHtml(slug) + '" ' +
+      tipAttrs(labelOfSlug(slug), null, v, total, { when: calDayLabel(calDay), of, ink: colourOf(slug) }) +
+      ' tabindex="0" role="button" aria-pressed="' + on + '"></path>';
+  }).join('');
+  const chosen = sel && entries.some(e => e[0] === sel) ? sel : null;
+  const mid = chosen ? labelOfSlug(chosen) : word;
+  const short = mid.length > 18 ? mid.slice(0, 17) + '…' : mid;
+  const figure = chosen ? entries.find(e => e[0] === chosen)[1] : total;
+  return '<svg viewBox="0 0 300 300" role="img" aria-label="' + escapeHtml(word) + ' by share">' +
+    reliefDefs(prefix, colours, [CY - R, CY + R]) + PIE_SHEEN + slices +
+    '<circle class="pie-sheen" cx="' + CX + '" cy="' + CY + '" r="' + R + '"/>' +
+    '<circle class="pie-hole" cx="' + CX + '" cy="' + CY + '" r="88"/>' +
+    '<circle cx="' + CX + '" cy="' + CY + '" r="68" fill="var(--surface)"/>' +
+    '<text x="' + CX + '" y="' + (CY - 5) + '" text-anchor="middle" font-size="17" fill="' +
+      (chosen ? colourOf(chosen) : 'var(--ink)') + '">' + escapeHtml(money0(figure)) + '</text>' +
+    '<text x="' + CX + '" y="' + (CY + 15) + '" text-anchor="middle" font-size="11" fill="var(--muted)">' +
+      escapeHtml(short) + (short !== mid ? '<title>' + escapeHtml(mid) + '</title>' : '') + '</text>' +
+    '</svg>';
+}
+
+/* The key under a donut. Every row picks, like a slice does. */
+function calKey(entries, sel, kind) {
+  const total = entries.reduce((s, e) => s + e[1], 0) || 1;
+  return '<div class="pv-key cal-key">' + entries.map(([slug, v]) => {
+    const on = sel === slug;
+    return '<div class="pv-row' + (on ? ' sel' : '') + (sel && !on ? ' dim' : '') + '" ' +
+      'data-cal-' + kind + '="' + escapeHtml(slug) + '" role="button" tabindex="0" aria-pressed="' + on + '">' +
+      '<i style="background:' + colourOf(slug) + '"></i>' +
+      '<span class="pv-name" title="' + escapeHtml(labelOfSlug(slug)) + '">' + escapeHtml(labelOfSlug(slug)) + '</span>' +
+      '<span class="pv-share">' + Math.round((v / total) * 100) + '%</span>' +
+      '<span class="pv-amt">' + escapeHtml(money0(v)) + '</span></div>';
+  }).join('') + '</div>';
+}
+
+async function drawCalDay() {
+  const host = $('cal-day');
+  if (!host) return;
+  $('cal-grid').querySelectorAll('.cal-cell.sel').forEach(c => {
+    c.classList.remove('sel'); c.setAttribute('aria-pressed', 'false');
+  });
+  if (!calDay) { host.hidden = true; host.innerHTML = ''; return; }
+
+  const cell = $('cal-grid').querySelector('[data-cal-day="' + calDay + '"]');
+  if (cell) { cell.classList.add('sel'); cell.setAttribute('aria-pressed', 'true'); }
+  host.hidden = false;
+
+  const day = calDay;
+  const head = (right) =>
+    '<div class="pie-head"><div class="pie-title"><b>' + escapeHtml(calDayLabel(day)) + '</b>' +
+      (right ? '<span class="pie-range">' + right + '</span>' : '') + '</div>' +
+      '<button type="button" class="ctl" data-cal-close>Close</button></div>';
+  if (!host.innerHTML) host.innerHTML = head('') + '<p class="hint">Loading…</p>';
+
+  let s;
+  try { s = await calDaySummary(day); }
+  catch (err) { if (calDay === day) host.innerHTML = head('') + '<p class="hint">' + escapeHtml(err.message) + '</p>'; return; }
+  if (calDay !== day) return;   // another day was clicked while this one loaded
+  if (s.categories) { categoryList = s.categories; rememberColours(categoryList); }
+
+  const byParent = (s.totals && s.totals.byParent) || {};
+  const byCategory = (s.totals && s.totals.byCategory) || {};
+  const cats = Object.entries(byParent).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  if (calCat && !(byParent[calCat] > 0)) { calCat = null; calSub = null; }
+
+  /* Every subcategory the day touched, or only those inside the chosen
+     category. Spending filed directly on a parent appears under the parent's
+     own name, as it does in the Trend's breakdown. */
+  const subs = Object.entries(byCategory)
+    .filter(([slug, v]) => v > 0 && (!calCat || slug === calCat || calParentOf(slug) === calCat))
+    .sort((a, b) => b[1] - a[1]);
+  if (calSub && !subs.some(e => e[0] === calSub)) calSub = null;
+
+  const spent = cats.reduce((sum, e) => sum + e[1], 0);
+  const summary = spent > 0 ? escapeHtml(money(spent)) + ' spent' : 'nothing spent';
+
+  host.innerHTML = head(summary) +
+    (cats.length
+      ? '<div class="cal-pies">' +
+          '<div class="cal-pie"><p class="eyebrow">Categories</p>' +
+            calDonut(cats, calCat, 'cat', 'spent', 'of the day') + calKey(cats, calCat, 'cat') + '</div>' +
+          '<div class="cal-pie"><p class="eyebrow">Subcategories' +
+            (calCat ? ' · ' + escapeHtml(labelOfSlug(calCat)) : '') + '</p>' +
+            calDonut(subs, calSub, 'sub', calCat ? labelOfSlug(calCat) : 'spent',
+                     calCat ? 'of ' + labelOfSlug(calCat) : 'of the day') +
+            calKey(subs, calSub, 'sub') + '</div>' +
+        '</div>'
+      : '<p class="hint" style="margin-top:12px">No spending on this day.</p>') +
+    '<div class="cal-day-tx" id="cal-day-tx"><p class="hint">Loading…</p></div>';
+
+  drawCalDayTx();
+}
+
+/* The rows behind whatever is chosen: the subcategory, else the category, else
+   the whole day. */
+async function drawCalDayTx() {
+  const box = $('cal-day-tx');
+  if (!box) return;
+  const day = calDay, bucket = calSub || calCat || null;
+  try {
+    const r = await calDayTx(day, bucket);
+    if (calDay !== day || (calSub || calCat || null) !== bucket) return;
+    const what = bucket ? labelOfSlug(bucket) : 'Every transaction';
+    if (!r.transactions.length) {
+      box.innerHTML = '<p class="hint">No transactions' + (bucket ? ' in ' + escapeHtml(what) : '') + ' on this day.</p>';
+      return;
+    }
+    box.innerHTML =
+      '<p class="eyebrow">' + escapeHtml(what) + ' · ' + r.total + ' transaction' + (r.total === 1 ? '' : 's') + '</p>' +
+      '<table class="data pie-table"><tbody>' +
+      r.transactions.map(t =>
+        '<tr><td class="num date">' + t.date + '</td>' +
+        '<td>' + avatar(t) + '<span class="tx-name" title="' + escapeHtml(t.name) + '">' +
+          escapeHtml(t.name) + '</span></td>' +
+        '<td class="num' + (t.amount > 0 ? ' in' : '') + '">' +
+          (t.amount > 0 ? '+' : '') + money(t.amount) + '</td></tr>').join('') +
+      '</tbody></table>' +
+      (r.total > r.transactions.length
+        ? '<p class="hint">' + (r.total - r.transactions.length) + ' more not shown.</p>' : '');
+  } catch (err) {
+    if (calDay === day) box.innerHTML = '<p class="hint">' + escapeHtml(err.message) + '</p>';
+  }
+}
+
+function calOpen(target) {
+  const cell = target.closest('[data-cal-day]');
+  if (!cell) return false;
+  const date = cell.dataset.calDay;
+  if (calDay === date) { calCloseDay(); drawCalDay(); return true; }
+  calDay = date; calCat = null; calSub = null;
+  $('cal-day').innerHTML = '';
+  drawCalDay().then(() => {
+    if (calDay === date) $('cal-day').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  return true;
+}
+
+function calPick(target) {
+  if (target.closest('[data-cal-close]')) { calCloseDay(); drawCalDay(); return true; }
+  const cat = target.closest('[data-cal-cat]');
+  if (cat) {
+    const slug = cat.dataset.calCat;
+    calCat = calCat === slug ? null : slug;
+    calSub = null;
+    drawCalDay();
+    return true;
+  }
+  const sub = target.closest('[data-cal-sub]');
+  if (sub) {
+    const slug = sub.dataset.calSub;
+    if (calSub === slug) { calSub = null; }
+    else { calSub = slug; calCat = calParentOf(slug); }
+    drawCalDay();
+    return true;
+  }
+  return false;
+}
+
+$('cal-grid').addEventListener('click', (e) => { calOpen(e.target); });
+$('cal-grid').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  if (calOpen(e.target)) e.preventDefault();
+});
+$('cal-day').addEventListener('click', (e) => { calPick(e.target); });
+$('cal-day').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  if (calPick(e.target)) e.preventDefault();
+});
 
 async function renderTrend() {
   const months = trendMonths;

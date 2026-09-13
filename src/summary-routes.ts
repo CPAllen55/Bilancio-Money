@@ -876,6 +876,12 @@ summary.get("/summary", async (c) => {
     const range = c.req.query("range") ?? "this-month";
     const account = c.req.query("account") ?? "all";
     const { current, previous, daysElapsed, daysInPeriod } = resolveRange(range, new Date());
+    /* ?budget=0 skips the plan. Fitting it reads up to three years of history,
+       which is right for a view that shows the plan and wasted on one that does
+       not -- the Calendar asks for a single day's categories each time a day is
+       clicked, and should not wait on a budget it never draws. Absent, or any
+       other value, and the budget is computed exactly as before. */
+    const wantBudget = c.req.query("budget") !== "0";
 
     const [ctx, ids] = await Promise.all([
       loadCategories(db, auth.user.id),
@@ -902,7 +908,7 @@ summary.get("/summary", async (c) => {
       inWindow(previous),
       splitsIn(current),
       splitsIn(previous),
-      budgetFor(db, auth.user.id, ids, ctx, current, new Date()),
+      wantBudget ? budgetFor(db, auth.user.id, ids, ctx, current, new Date()) : Promise.resolve(null),
     ]);
     const now = tally(nowRows as AmountRow[], ctx, nowSplits);
     const before = tally(prevRows as AmountRow[], ctx, prevSplits);
