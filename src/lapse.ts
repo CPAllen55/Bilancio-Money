@@ -24,7 +24,7 @@ import { getDb } from "./db/client";
 import { items, users } from "./db/schema";
 import { openToken } from "./crypto";
 import { removeItem, PlaidError } from "./plaid";
-import { LAPSE_GRACE_DAYS } from "./entitlement";
+import { LAPSE_GRACE_DAYS, billingOpen } from "./entitlement";
 import { isDemoItem } from "./plaid-routes";
 
 /* A ceiling per run, so one day with a large cohort ending cannot run the
@@ -37,6 +37,11 @@ const ALREADY_GONE = new Set(["ITEM_NOT_FOUND", "INVALID_ACCESS_TOKEN"]);
 
 export async function closeLapsedConnections(env: Env, now: Date = new Date()):
   Promise<{ closed: number; failed: number }> {
+  /* Nobody can have failed to pay while there is no way to pay. See billingOpen. */
+  if (!billingOpen(env)) {
+    console.log("lapse: billing is not open yet; nothing closed");
+    return { closed: 0, failed: 0 };
+  }
   const cutoff = new Date(now.getTime() - LAPSE_GRACE_DAYS * 24 * 60 * 60 * 1000);
   const { db, ready, close } = getDb(env);
   let closed = 0, failed = 0;

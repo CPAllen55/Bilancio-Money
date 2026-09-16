@@ -67,7 +67,7 @@ plaid.post("/link-token/update", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
-    const refused = writeRefusal(auth.user);
+    const refused = writeRefusal(auth.user, c.env);
     if (refused) return c.json(refused, 402);
 
     let itemId: unknown;
@@ -119,7 +119,7 @@ plaid.post("/link-token", async (c) => {
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
 
-    const refused = writeRefusal(auth.user) ?? trialBankLimit(auth.user, await openBanks(db, auth.user.id));
+    const refused = writeRefusal(auth.user, c.env) ?? trialBankLimit(auth.user, await openBanks(db, auth.user.id), c.env);
     if (refused) return c.json(refused, 402);
 
     // The web app posts no body at all, so an unparseable one means "web"
@@ -164,7 +164,7 @@ plaid.post("/exchange", async (c) => {
        billing when the public token is exchanged for an access token, so this
        is the last moment a refusal costs nothing -- and a link token can be
        fetched while the trial has room and used after it does not. */
-    const refused = writeRefusal(auth.user) ?? trialBankLimit(auth.user, await openBanks(db, auth.user.id));
+    const refused = writeRefusal(auth.user, c.env) ?? trialBankLimit(auth.user, await openBanks(db, auth.user.id), c.env);
     if (refused) return c.json(refused, 402);
 
     const exchanged = await exchangePublicToken(c.env, publicToken);
@@ -432,7 +432,7 @@ plaid.post("/sync", async (c) => {
     /* Nothing new arrives once access has ended. Not an error: the page calls
        this after it loads, and a red message every visit would be a nag rather
        than information. The flag lets it say so once, quietly. */
-    if (writeRefusal(auth.user)) {
+    if (writeRefusal(auth.user, c.env)) {
       return c.json({ ok: true, readOnly: true, items: 0, added: 0, modified: 0, removed: 0, more: false, pending: [], failed: [] });
     }
 

@@ -32,7 +32,23 @@
  * reading of what the data is: theirs, held here.
  */
 
+import { configured as appleConfigured } from "./apple";
+
 export type Plan = "trial" | "active" | "free" | "lapsed";
+
+/**
+ * Whether anybody can actually pay yet, on the web or in the iPhone app.
+ *
+ * Nothing that ends access is enforced until this is true: the read-only gate,
+ * the trial's bank limit and the lapse job all stand down. Enforcing them with
+ * no way to subscribe would lock people out of their own figures and close
+ * their banks for failing to do something they could not do -- which is the
+ * trap this module's header warns about. Switching billing on (the Stripe key,
+ * or the Apple bindings) switches enforcement on with it.
+ */
+export function billingOpen(env: Env): boolean {
+  return !!env.STRIPE_SECRET_KEY || appleConfigured(env);
+}
 
 export interface Entitled {
   plan: Plan;
@@ -146,15 +162,17 @@ export function whyReadOnly(u: Entitled, now: Date = new Date()): string | null 
  * billing, turning alerts off on a phone, or signing out. Somebody whose access
  * has ended must still be able to leave, and to stop what we hold.
  */
-export function writeRefusal(u: Entitled, now: Date = new Date()):
+export function writeRefusal(u: Entitled, env: Env, now: Date = new Date()):
   { error: "read_only"; reason: string } | null {
+  if (!billingOpen(env)) return null;
   const why = whyReadOnly(u, now);
   return why ? { error: "read_only", reason: why } : null;
 }
 
 /** The refusal for a trial that already has as many banks as it may. */
-export function trialBankLimit(u: Entitled, openBanks: number):
+export function trialBankLimit(u: Entitled, openBanks: number, env: Env):
   { error: "trial_bank_limit"; reason: string; limit: number } | null {
+  if (!billingOpen(env)) return null;
   if (u.plan !== "trial" || openBanks < TRIAL_MAX_BANKS) return null;
   return {
     error: "trial_bank_limit",

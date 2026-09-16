@@ -58,7 +58,7 @@ cats.post("/categories", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
-    const refused = writeRefusal(auth.user);
+    const refused = writeRefusal(auth.user, c.env);
     if (refused) return c.json(refused, 402);
 
     let label: unknown, colour: unknown, parent: unknown;
@@ -189,7 +189,7 @@ cats.delete("/categories/:id", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
-    const refused = writeRefusal(auth.user);
+    const refused = writeRefusal(auth.user, c.env);
     if (refused) return c.json(refused, 402);
 
     const id = c.req.param("id");
@@ -255,7 +255,7 @@ cats.post("/transactions/:id/category", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
-    const refused = writeRefusal(auth.user);
+    const refused = writeRefusal(auth.user, c.env);
     if (refused) return c.json(refused, 402);
 
     const txId = c.req.param("id");
@@ -412,7 +412,7 @@ cats.delete("/rules/:id", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
-    const refused = writeRefusal(auth.user);
+    const refused = writeRefusal(auth.user, c.env);
     if (refused) return c.json(refused, 402);
 
     const gone = await db
@@ -450,7 +450,7 @@ cats.put("/transactions/:id/splits", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
-    const refused = writeRefusal(auth.user);
+    const refused = writeRefusal(auth.user, c.env);
     if (refused) return c.json(refused, 402);
 
     const txId = c.req.param("id");

@@ -87,7 +87,7 @@ metals.put("/metals", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
-    const refused = writeRefusal(auth.user);
+    const refused = writeRefusal(auth.user, c.env);
     if (refused) return c.json(refused, 402);
 
     let body: unknown;
