@@ -7,7 +7,7 @@
 
 import { Hono } from "hono";
 import { getDb } from "./db/client";
-import { users, waitlist } from "./db/schema";
+import { users } from "./db/schema";
 import { requireUser } from "./auth";
 import plaidRoutes from "./plaid-routes";
 import summaryRoutes from "./summary-routes";
@@ -22,11 +22,6 @@ import logoRoutes from "./logo-routes";
 import notificationRoutes from "./notification-routes";
 import adminRoutes from "./admin-routes";
 import { closeLapsedConnections } from "./lapse";
-
-// Deliberately loose. The only thing worth rejecting here is input that cannot
-// be an address at all - anything stricter starts refusing real people.
-const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MAX_EMAIL_LENGTH = 254; // RFC 5321
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -66,101 +61,6 @@ app.get("/api/me", async (c) => {
       ok: true,
       user: { id: user.id, email: user.email, createdAt: user.createdAt },
     });
-  } finally {
-    c.executionCtx.waitUntil(close());
-  }
-});
-
-/**
- * Clerk's waitlist, joined on somebody's behalf.
- *
- * Clerk is in waitlist mode, so the queue that actually matters is Clerk's:
- * it sends the confirmation, it sends the invitation when somebody is
- * approved, and approving is done from its dashboard. A landing page writing
- * only to the table below would be collecting addresses into a list nobody
- * reads -- which is worse than collecting nothing, because it looks to the
- * person filling it in exactly like joining a queue.
- *
- * Idempotent at Clerk's end: an address already on the list returns the entry
- * that is already there rather than failing, so somebody who signs up twice
- * keeps their original place.
- *
- * Best effort, and deliberately so. The row below is the durable record; this
- * is the notification. If Clerk is unreachable the address is still captured
- * and can be added by hand, which is a better failure than telling somebody
- * their sign-up did not work when it did.
- */
-async function joinClerkWaitlist(env: Env, email: string): Promise<void> {
-  if (!env.CLERK_SECRET_KEY) return;
-  const res = await fetch("https://api.clerk.com/v1/waitlist_entries", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.CLERK_SECRET_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ email_address: email }),
-  });
-  if (!res.ok) {
-    console.warn("clerk waitlist rejected", res.status, (await res.text()).slice(0, 200));
-  }
-}
-
-/**
- * The waitlist. Unauthenticated by necessity - these people have no account,
- * that is the whole point.
- *
- * Two places write here: the landing page, and the iOS app's signed-out
- * screen. `source` is what tells them apart afterwards, which is the only way
- * to answer whether the App Store listing is bringing anybody in.
- */
-app.post("/api/waitlist", async (c) => {
-  let email: unknown, source: unknown;
-  try {
-    ({ email, source } = await c.req.json());
-  } catch {
-    return c.json({ error: "bad_request", reason: "body must be JSON" }, 400);
-  }
-
-  if (typeof email !== "string") {
-    return c.json({ error: "bad_request", reason: "email is required" }, 400);
-  }
-
-  const normalised = email.trim().toLowerCase();
-  if (normalised.length > MAX_EMAIL_LENGTH || !LOOKS_LIKE_EMAIL.test(normalised)) {
-    return c.json({ error: "bad_request", reason: "that does not look like an email" }, 400);
-  }
-
-  /* Where the address came from. An allowlist rather than the string as sent:
-     this is an unauthenticated endpoint, the column is read by a human
-     deciding who to invite, and free text from strangers has no business in
-     it. Anything unrecognised is recorded as having come from the landing
-     page, which is where all of them came from before there was a second
-     place to ask. */
-  const from = source === "ios" ? "ios" : "landing";
-
-  const { db, ready, close } = getDb(c.env);
-  try {
-    await ready;
-    await db
-      .insert(waitlist)
-      .values({ email: normalised, source: from })
-      // Signing up twice is not an error, and the second attempt must not
-      // overwrite the original createdAt - their place in the queue is earned.
-      .onConflictDoNothing({ target: waitlist.email });
-
-    /* Then Clerk, which is the queue somebody is actually admitted from. It
-       cannot be allowed to fail the request: the address is already saved, and
-       an error here would tell a person their sign-up failed when it did not. */
-    try {
-      await joinClerkWaitlist(c.env, normalised);
-    } catch (err) {
-      console.warn("clerk waitlist unreachable:",
-        err instanceof Error ? err.message : err);
-    }
-
-    // Identical response whether the address was new or already present. The
-    // alternative lets anyone test whether a given person is on the list.
-    return c.json({ ok: true });
   } finally {
     c.executionCtx.waitUntil(close());
   }
