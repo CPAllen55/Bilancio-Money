@@ -159,14 +159,11 @@ it, so there is nothing a clip could usefully show.
 Tick it, and give the demo account. Then, in **Notes**:
 
 ```
-Access is by waitlist while we open the app to a first group, so signing up
-creates a place in a queue rather than an account — please sign in with the
-account above rather than registering. It signs in with the email address and
-password given, and needs no emailed code.
-
-Continue with Apple and Continue with Google are on the sign-in screen and
-both work, but a fresh account signed in that way joins the waitlist rather
-than reaching the app. The account above is the way in.
+Please sign in with the account above rather than registering. It signs in
+with the email address and password given, needs no emailed code, and already
+holds data. Sign-up is open, and Continue with Apple and Continue with Google
+both work, but a new account starts empty and would need a real bank connected
+to show anything.
 
 The account is pre-populated with about two years of transactions, so every
 screen has data in it. There is no need to connect a bank, and we would ask

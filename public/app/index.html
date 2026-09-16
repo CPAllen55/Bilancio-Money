@@ -3186,9 +3186,9 @@
 
   <div class="gate" id="gate" hidden>
     <h2 class="view">Sign in to your ledger</h2>
-    <p id="gate-note">Bilancio is opening gradually. Join the waitlist and we will write you in.</p>
+    <p id="gate-note">Sign in, or create an account — 14 days free, no card needed.</p>
     <button class="primary" id="go-signin" type="button">Sign in</button>
-    <p><a href="/#signup" style="color:var(--mint-dim)">Not on the list yet? Join the waitlist</a></p>
+    <p><a href="/app/?signup" id="go-signup" style="color:var(--mint-dim)">New to Bilancio? Create an account</a></p>
   </div>
 
   <div id="app" hidden>
@@ -3601,7 +3601,16 @@ async function boot() {
     return;
   }
 
-  if (!window.Clerk.user) { $('gate').hidden = false; return; }
+  if (!window.Clerk.user) {
+    /* "Start your free trial" on the landing page arrives as /app/?signup, and
+       means create an account -- not a sign-in form with a small link under it. */
+    if (new URLSearchParams(location.search).has('signup')) {
+      window.Clerk.redirectToSignUp({ redirectUrl: location.origin + '/app' });
+      return;
+    }
+    $('gate').hidden = false;
+    return;
+  }
 
   $('app').hidden = false;
   $('who').hidden = false;
@@ -11796,6 +11805,10 @@ markTheme();
 
 $('go-signin').addEventListener('click', () =>
   window.Clerk.redirectToSignIn({ redirectUrl: location.origin + '/app' }));
+$('go-signup').addEventListener('click', (e) => {
+  e.preventDefault();
+  window.Clerk.redirectToSignUp({ redirectUrl: location.origin + '/app' });
+});
 $('signout').addEventListener('click', async () => {
   await window.Clerk.signOut();
   location.reload();

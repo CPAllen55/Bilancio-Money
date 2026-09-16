@@ -416,34 +416,25 @@
            other. The handoff put "See the demo" here; the same destination
            under a different name is not a way in for a reader who has one. -->
       <a class="signin" href="/app/">Sign in</a>
-      <a class="btn" href="#join">Join the waitlist</a>
+      <a class="btn" href="/app/?signup">Start free</a>
     </nav>
   </div>
 </header>
 
 <section class="hero">
   <div class="wrap">
-    <span class="badge">Early access · waitlist open</span>
+    <span class="badge">Now open · 14 days free</span>
     <h1>Find out where you actually stand.</h1>
     <p class="sub">Your accounts in one place, sorted, with a budget that builds itself from
       what you have actually spent — and then says plainly whether you are inside it.</p>
 
-    <form class="capture" data-signup>
-      <input type="email" placeholder="you@example.com" required aria-label="Email address">
-      <button type="submit" class="btn">Join the waitlist</button>
-    </form>
-    <!-- The price belongs here as well as in the pricing section. This form is
-         above the fold and is where most people will actually sign up; asking
-         for an address without saying what it leads to is the sort of thing a
-         reader forgives once. -->
-    <p class="fine" data-fine>We are letting people in a few at a time. One email, when
-      your place comes up. Free during early access, then $4.99 a month.</p>
-    <p class="sign-err" data-error role="alert" hidden></p>
-
-    <div class="done" data-done>
-      <span class="tick" aria-hidden="true">✓</span>
-      <span><b>You're on the list.</b> We'll write to you when the ledger opens.</span>
-    </div>
+    <!-- The price belongs beside the button as well as in the pricing section.
+         This is above the fold and is where most people will actually start;
+         asking somebody to sign up without saying what it leads to is the sort
+         of thing a reader forgives once. -->
+    <p class="capture"><a class="btn" href="/app/?signup">Start your free trial</a></p>
+    <p class="fine">14 days free from the day you connect your first bank, then $4.99 a
+      month. No card needed to start.</p>
 
     <div class="hero-shot">
       <img src="/shots/shot-overview.png"
@@ -673,7 +664,7 @@
   </div>
 </section>
 
-<!-- Before the waitlist form, deliberately. Somebody about to leave an email
+<!-- Before the sign-up button, deliberately. Somebody about to leave an email
      address should know what it will cost before they leave it, not after. -->
 <section class="pricing" id="pricing">
   <div class="wrap">
@@ -695,9 +686,9 @@
       </article>
     </div>
 
-    <p class="plan-note"><b>Nothing is being charged yet.</b> Bilancio is free while
-      access is by waitlist; the prices above are what it will cost when subscriptions
-      open, and nobody is billed without entering payment details first.</p>
+    <p class="plan-note"><b>No card to start.</b> Your trial begins when you connect your
+      first bank, and nobody is billed without entering payment details and agreeing to
+      the charge first.</p>
     <p class="plan-note">Every account starts with a 14-day free trial, from the day you
       connect your first bank, with up to two bank connections while you try it. Once you
       subscribe there is no limit — the price is the same whether you hold one account or
@@ -707,23 +698,14 @@
 
 <section class="join" id="join">
   <div class="wrap">
-    <span class="eyebrow">Early access</span>
-    <h2>Reserve your line in the ledger.</h2>
-    <p class="lede">We are opening Bilancio to a small first group. Leave your email and
-      we will write you in.</p>
+    <span class="eyebrow">Get started</span>
+    <h2>Open your ledger.</h2>
+    <p class="lede">Create an account, connect a bank, and see where you actually stand —
+      with two years of your own history already in it.</p>
 
-    <form class="capture" data-signup>
-      <input type="email" placeholder="you@example.com" required aria-label="Email address">
-      <button type="submit" class="btn">Join the waitlist</button>
-    </form>
-    <p class="fine" data-fine>We will email you once, when your place comes up. Free
-      during early access, then $4.99 a month — or $3.99 a month billed annually.</p>
-    <p class="sign-err" data-error role="alert" hidden></p>
-
-    <div class="done" data-done>
-      <span class="tick" aria-hidden="true">✓</span>
-      <span><b>You're on the list.</b> We'll write to you when the ledger opens.</span>
-    </div>
+    <p class="capture"><a class="btn" href="/app/?signup">Start your free trial</a></p>
+    <p class="fine">14 days free, then $4.99 a month — or $3.99 a month billed annually.
+      Already have an account? <a href="/app/">Sign in</a>.</p>
 
     <!-- This said "See the demo" and went to /app/, which is the application and
          asks for a sign-in. A reader who has not been let in yet clicked a word
@@ -733,7 +715,7 @@
          The screens above ARE the demo: every one of them is the product
          running on an account of invented transactions, and it says so. So the
          link points at them, and says what it does. -->
-    <p style="margin-top:26px"><a class="btn-ghost" href="#views">See what you are joining</a></p>
+    <p style="margin-top:26px"><a class="btn-ghost" href="#views">See the dashboards first</a></p>
   </div>
 </section>
 
@@ -770,60 +752,6 @@
       coins[i].style.animationDelay = (1.02 + c * 0.10 + i * 0.06).toFixed(2) + 's';
     }
   }
-
-  /* ---- the waitlist ----
-     Two forms, one state. Whichever is used, both show the confirmation — a
-     page that asks again lower down for something already given is a page
-     contradicting itself.
-
-     The confirmation appears only once the server has accepted the address.
-     It promises we will email them, so it has to be true. */
-  var forms = Array.prototype.slice.call(document.querySelectorAll('[data-signup]'));
-
-  function settle() {
-    forms.forEach(function (f) {
-      var wrap = f.parentNode;
-      f.style.display = 'none';
-      var fine = wrap.querySelector('[data-fine]');
-      var err = wrap.querySelector('[data-error]');
-      var done = wrap.querySelector('[data-done]');
-      if (fine) fine.style.display = 'none';
-      if (err) err.hidden = true;
-      if (done) done.style.display = 'flex';
-    });
-  }
-
-  forms.forEach(function (form) {
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var input = form.querySelector('input[type=email]');
-      var btn = form.querySelector('button[type=submit]');
-      var err = form.parentNode.querySelector('[data-error]');
-      var original = btn.textContent;
-
-      if (err) err.hidden = true;
-      btn.disabled = true;
-      btn.textContent = 'Adding…';
-
-      fetch('/api/waitlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: input.value })
-      }).catch(function () {
-        // fetch rejects with "Failed to fetch", which tells a visitor nothing.
-        throw new Error('Could not reach the server. Check your connection and try again.');
-      }).then(function (res) {
-        return res.json().catch(function () { return {}; }).then(function (body) {
-          if (!res.ok) throw new Error(body.reason || 'Something went wrong. Try again in a moment.');
-          settle();
-        });
-      }).catch(function (e2) {
-        if (err) { err.textContent = e2.message; err.hidden = false; }
-        btn.disabled = false;
-        btn.textContent = original;
-      });
-    });
-  });
 })();
 </script>
 
