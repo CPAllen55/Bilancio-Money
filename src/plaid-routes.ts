@@ -11,7 +11,7 @@ import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
 import { accounts, items, transactions, users } from "./db/schema";
 import { requireUser } from "./auth";
-import { trialBankLimit, trialEnd, writeRefusal } from "./entitlement";
+import { trialBankLimit, trialBankUsage, trialEnd, writeRefusal } from "./entitlement";
 import { checkBudgetAlerts } from "./budget-alerts";
 import { openToken, sealToken } from "./crypto";
 import {
@@ -740,7 +740,11 @@ plaid.get("/items", async (c) => {
         })),
       });
     }
-    return c.json({ ok: true, items: out });
+    /* Counted the same way the limit counts: open and real. The page shows it
+       and greys the Connect button at the limit, so nobody opens Plaid only to
+       be told no. The server still decides -- this is only the warning. */
+    const open = mine.filter((i) => i.closedAt === null && !isDemoItem(i.plaidItemId)).length;
+    return c.json({ ok: true, items: out, trialBanks: trialBankUsage(auth.user, open) });
   } finally {
     c.executionCtx.waitUntil(close());
   }

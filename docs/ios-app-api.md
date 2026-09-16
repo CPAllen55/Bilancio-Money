@@ -225,7 +225,10 @@ subscription has lapsed. Show `reason`; it is a complete sentence.
   `/link-token/update` and `/exchange`. Disconnecting a bank
   (`DELETE /api/plaid/items/:id`) is never refused.
 - `error: "trial_bank_limit"` (with `limit`) — a trial already has two open
-  bank connections. Asked at `/link-token` and again at `/exchange`.
+  bank connections. Asked at `/link-token` and again at `/exchange`. **Applied
+  now, before billing opens** — unlike `read_only`, it takes nothing away.
+  `GET /api/plaid/items` returns `trialBanks: { used, max }` for a trial
+  account (null otherwise), so the app can show "1 of 2" and grey the button.
 - `POST /api/plaid/sync` does not refuse. It answers `readOnly: true` with
   nothing synced.
 

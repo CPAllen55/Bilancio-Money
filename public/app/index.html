@@ -559,6 +559,11 @@
     :root[data-theme="light"] .tabs::after{ width:100%; }
   }
 
+  /* A trial's bank allowance, under the Connect button. */
+  .bank-limit{ margin:6px 0 0; font-size:13px; color:var(--muted); }
+  .bank-limit b{ color:var(--ink); }
+  button.primary.at-limit{ opacity:.45; cursor:not-allowed; }
+  button.primary.at-limit:hover{ background:var(--mint); border-color:var(--mint); }
   .bar{ display:flex; align-items:center; justify-content:space-between; gap:16px;
         flex-wrap:wrap; padding:16px 0 22px; }
   select.ctl{ font-family:var(--font-num); font-size:12px; background:var(--bg-panel);
@@ -3391,6 +3396,7 @@
         </span>
       </div>
       <p class="msg" id="bank-msg"></p>
+      <p class="bank-limit" id="bank-limit" hidden></p>
 
       <!-- The other place a balance comes from. Banks arrive over Plaid;
            metal is typed in, because a safe has no API. It sits on this tab
@@ -11201,6 +11207,7 @@ async function renderBanks() {
 
   const res = await authed('/api/plaid/items');
   hasBanks = res.items.length > 0;
+  drawBankLimit(res.trialBanks);
   const host = $('bank-list');
   $('danger').hidden = false;
 
@@ -11235,6 +11242,24 @@ async function renderBanks() {
       ).join('') +
     '</div>'
   ).join('');
+}
+
+/* A trial's bank allowance: a line under the button, and the button greyed at
+   the limit. Not disabled -- a disabled button says nothing when clicked, and
+   this one explains why (see the click handler). The server enforces the limit
+   regardless; this is only so nobody opens Plaid to be refused at the end. */
+let bankLimit = null;
+function drawBankLimit(t) {
+  bankLimit = t && t.max ? t : null;
+  const note = $('bank-limit'), btn = $('link-bank');
+  const full = !!(bankLimit && bankLimit.used >= bankLimit.max);
+  btn.classList.toggle('at-limit', full);
+  btn.setAttribute('aria-disabled', String(full));
+  if (!bankLimit) { note.hidden = true; return; }
+  note.hidden = false;
+  note.innerHTML = '<b>' + Math.min(bankLimit.used, bankLimit.max) + ' of ' + bankLimit.max +
+    '</b> bank connections used during your free trial' +
+    (full ? ' — disconnect one to connect a different bank.' : '.');
 }
 
 /* The same invitation wherever a tab would otherwise show a wall of zeroes.
@@ -11534,6 +11559,11 @@ async function resumePlaidOAuth() {
 
 $('link-bank').addEventListener('click', async () => {
   const btn = $('link-bank'), msg = $('bank-msg');
+  if (bankLimit && bankLimit.used >= bankLimit.max) {
+    say(msg, 'Your free trial includes ' + bankLimit.max + ' bank connections. ' +
+      'To connect a different bank, disconnect one of these first.', 'bad');
+    return;
+  }
   btn.disabled = true;
   say(msg, 'Opening Plaid…');
   try {
