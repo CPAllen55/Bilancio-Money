@@ -170,4 +170,14 @@ enum Theme {
     static let cardPadding: CGFloat = 14
     static let gutter: CGFloat = 12
     static let sectionGap: CGFloat = 20
+
+    /// How wide a dashboard's column is allowed to get.
+    ///
+    /// Every card here is a label against a figure, and stretched across an
+    /// iPad the two end up a hand's width apart with nothing between them —
+    /// which is not a wider card, it is the same card with the answer moved
+    /// away from the question. 700 is close to the widest an iPhone Pro Max
+    /// reads at, so the phone is unaffected and the iPad gets the layout the
+    /// cards were drawn for, centred, rather than one stretched to fit.
+    static let column: CGFloat = 700
 }

@@ -135,6 +135,7 @@ struct CalendarView: View {
             }
             .padding(.horizontal)
             .padding(.bottom, Theme.sectionGap)
+            .dashboardColumn()
         }
         .background(Theme.background)
     }

@@ -246,6 +246,7 @@ struct BudgetingView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding()
+            .dashboardColumn()
         }
         .background(Theme.background)
     }

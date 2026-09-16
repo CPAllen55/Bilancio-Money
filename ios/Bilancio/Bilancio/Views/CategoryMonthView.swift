@@ -209,6 +209,7 @@ struct CategoryMonthView: View {
                 }
             }
             .padding()
+            .dashboardColumn()
         }
         .background(Theme.background)
     }

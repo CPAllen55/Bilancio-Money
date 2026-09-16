@@ -124,6 +124,7 @@ struct ForecastView: View {
                 }
             }
             .padding()
+            .dashboardColumn()
         }
         .background(Theme.background)
     }

@@ -219,6 +219,7 @@ struct BanksView: View {
                 }
             }
         }
+        .dashboardColumn()
         .navigationTitle("Banks")
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await model.load() }

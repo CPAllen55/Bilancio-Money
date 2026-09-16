@@ -56,6 +56,7 @@ struct SubscriptionView: View {
                 content(status)
             }
         }
+        .dashboardColumn()
         .navigationTitle("Subscription")
         .navigationBarTitleDisplayMode(.large)
         .task {

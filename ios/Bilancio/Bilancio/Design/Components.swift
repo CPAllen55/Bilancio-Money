@@ -484,6 +484,21 @@ struct OwlMark: View {
 }
 
 extension View {
+    /// Centres a dashboard's column and stops it stretching on an iPad.
+    ///
+    /// Applied to the stack inside a ScrollView rather than to the ScrollView
+    /// itself, so the background and the scroll indicator still run to the
+    /// edges of the screen — a column that carries its own background with it
+    /// reads as a panel floating on the page, which is a different design and
+    /// not this one.
+    ///
+    /// Width rather than idiom: an iPad app in a narrow split is a phone
+    /// layout by any measure that matters, and asking about the size class
+    /// gets that right where asking about the device does not.
+    func dashboardColumn() -> some View {
+        modifier(DashboardColumn())
+    }
+
     /// Puts the mark above the start of a dashboard's title.
     ///
     /// Leading rather than centred: a large title starts at the left margin, so
@@ -505,6 +520,25 @@ extension View {
                 ToolbarItem(placement: .topBarLeading) { OwlMark() }
             }
         }
+    }
+}
+
+/// The column cap itself. See `dashboardColumn()`.
+struct DashboardColumn: ViewModifier {
+    @Environment(\.horizontalSizeClass) private var width
+
+    func body(content: Content) -> some View {
+        // Two frames: the first caps the column, the second gives it the whole
+        // width to sit centred in. One frame with a maxWidth would cap it and
+        // then leave it pinned to the leading edge.
+        content
+            .frame(maxWidth: width == .regular ? Theme.column : .infinity)
+            .frame(maxWidth: .infinity)
+            // The margins take the same ground as the column. Without this a
+            // capped List paints its grouped background inside the column and
+            // the window's white shows either side of it, which reads as a
+            // panel sitting on a page rather than as one page.
+            .background(Theme.background)
     }
 }
 

@@ -152,6 +152,7 @@ struct TransactionsView: View {
                 LedgerCard(rows: data.transactions, categories: byslug, editing: $editing)
             }
             .padding()
+            .dashboardColumn()
         }
         .background(Theme.background)
     }

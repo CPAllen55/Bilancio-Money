@@ -118,6 +118,7 @@ struct NetWorthView: View {
                 }
             }
             .padding()
+            .dashboardColumn()
         }
         .background(Theme.background)
     }

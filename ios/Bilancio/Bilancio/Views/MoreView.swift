@@ -93,9 +93,13 @@ struct MoreView: View {
                 } header: {
                     Text("Appearance")
                 } footer: {
-                    Text("System follows whatever your iPhone is set to, including its light and dark schedule.")
+                    // "This device" rather than "your iPhone": the app runs on
+                    // an iPad too, where naming the wrong one reads as copy
+                    // written for somebody else's screen.
+                    Text("System follows whatever this device is set to, including its light and dark schedule.")
                 }
             }
+            .dashboardColumn()
             .navigationTitle("More")
             .owlMark()
         }

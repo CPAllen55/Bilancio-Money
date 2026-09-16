@@ -108,6 +108,7 @@ struct TrendView: View {
                 YearAgoCard(now: data.series, before: data.priorSeries)
             }
             .padding()
+            .dashboardColumn()
         }
         .background(Theme.background)
     }

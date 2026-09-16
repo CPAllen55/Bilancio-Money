@@ -178,6 +178,7 @@ struct BudgetAlertsView: View {
                 content
             }
         }
+        .dashboardColumn()
         .navigationTitle("Budget alerts")
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
