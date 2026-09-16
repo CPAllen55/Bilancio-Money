@@ -39,6 +39,9 @@ enum APIError: LocalizedError {
     case notSignedIn
     case unauthorized(reason: String)
     case http(status: Int, body: String)
+    /// 402: the account's trial or subscription has ended, or a trial already
+    /// has as many banks as it may. The Worker's sentence is the whole message.
+    case needsSubscription(String)
     case transport(String)
     case decoding(String)
 
@@ -53,6 +56,8 @@ enum APIError: LocalizedError {
             return "The server rejected the session (\(reason))."
         case .http(let status, let body):
             return "The server returned \(status). \(body)"
+        case .needsSubscription(let message):
+            return message
         case .transport(let message):
             return message
         case .decoding(let message):
@@ -163,6 +168,9 @@ struct APIClient {
             if let body = try? JSONDecoder().decode(APIErrorBody.self, from: data) {
                 if status == 401 {
                     throw APIError.unauthorized(reason: body.reason ?? body.error)
+                }
+                if status == 402 {
+                    throw APIError.needsSubscription(body.reason ?? body.explanation)
                 }
                 // The Worker's 400s explain themselves — "the parts add up to
                 // more than the transaction" is the whole message a person

@@ -12,12 +12,12 @@ export const itemStatus = pgEnum("item_status", [
  * What a person is entitled to, and why.
  *
  * Written before there is any billing to enforce it, on purpose. The states
- * are promises made at the moment of invitation — "you get a free month",
+ * are promises made at the moment of invitation — "you get a free trial",
  * "you are comped" — and a promise that lives only in the inviter's memory is
  * one nobody can honour eighty users later. Recording it costs a column;
  * reconstructing it from invite dates does not work at all.
  *
- *   trial   the free month. planUntil is when it ends.
+ *   trial   the 14-day free trial. planUntil is when it ends.
  *   active  paying. planUntil is the end of the paid period.
  *   free    comped, permanently. planUntil is null and stays null.
  *   lapsed  was paying or trialling, is not now. Read-only.
@@ -125,6 +125,15 @@ export const items = pgTable("items", {
   status: itemStatus("status").notNull().default("good"),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
   consentExpirationTime: timestamp("consent_expiration_time", { withTimezone: true }),
+  /* When we closed this connection at Plaid because access ended — a trial
+     that ran out, or a subscription that stopped. NULL while it is open.
+
+     Closed is not deleted. The access token is dead, so nothing syncs, but the
+     accounts and transactions under it stay: somebody whose trial lapsed still
+     sees their history, and if they subscribe and connect the same bank again
+     the new connection replaces this one. Only the person disconnecting it, or
+     deleting their account, removes the data. See src/lapse.ts. */
+  closedAt: timestamp("closed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("items_user_idx").on(t.userId),

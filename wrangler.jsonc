@@ -135,6 +135,13 @@
   // Worker (bilancio-money-production) that owns no custom domain and receives
   // no traffic. This top-level config IS production; local overrides come from
   // .dev.vars and .env.
+  // Once a day: close Plaid connections for accounts whose trial or
+  // subscription ended more than a week ago, so they stop costing a monthly
+  // fee. See src/lapse.ts.
+  "triggers": {
+    "crons": ["23 9 * * *"]
+  },
+
   "observability": {
     "enabled": true
   }

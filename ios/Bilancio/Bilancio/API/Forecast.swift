@@ -54,6 +54,10 @@ struct BankItemsResponse: Decodable {
         /// A linked-but-never-synced item should not look identical to one
         /// holding a year of history.
         let awaitingFirstSync: Bool
+        /// Closed at Plaid when the trial or subscription ended. The history is
+        /// still here; nothing syncs, and connecting the bank again replaces it.
+        /// Absent from older responses, so it defaults to open.
+        let closed: Bool?
         let accounts: [Account]
 
         struct Account: Decodable, Identifiable {
@@ -67,7 +71,9 @@ struct BankItemsResponse: Decodable {
 
         /// The one status worth acting on: the bank wants a fresh login and
         /// every sync fails until it gets one.
-        var needsAttention: Bool { status == "login_required" }
+        var needsAttention: Bool { status == "login_required" && !isClosed }
+
+        var isClosed: Bool { closed ?? false }
     }
 }
 

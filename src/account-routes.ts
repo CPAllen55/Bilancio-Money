@@ -37,6 +37,7 @@ account.delete("/account", async (c) => {
     // cheerful confirmation that their banks are disconnected when they are not.
     const mine = await db.select().from(items).where(eq(items.userId, auth.user.id));
     for (const item of mine) {
+      if (item.closedAt) continue;   // closed at Plaid already, when access ended
       try {
         await removeItem(c.env, await openToken(c.env, item.accessTokenCiphertext, item.accessTokenIv));
       } catch (err) {

@@ -215,6 +215,26 @@ returns the resolved answer in `category`; trust it.
 
 ---
 
+## When access has ended
+
+Writes answer **402** with `{ error, reason }` once a trial has run out or a
+subscription has lapsed. Show `reason`; it is a complete sentence.
+
+- `error: "read_only"` — every write in the table above except the device
+  endpoints and `DELETE /api/account`, plus `POST /api/plaid/link-token`,
+  `/link-token/update` and `/exchange`. Disconnecting a bank
+  (`DELETE /api/plaid/items/:id`) is never refused.
+- `error: "trial_bank_limit"` (with `limit`) — a trial already has two open
+  bank connections. Asked at `/link-token` and again at `/exchange`.
+- `POST /api/plaid/sync` does not refuse. It answers `readOnly: true` with
+  nothing synced.
+
+Seven days after access ends a daily job closes the account's connections at
+Plaid (`src/lapse.ts`). `GET /api/plaid/items` then reports `closed: true`:
+history is kept and still counted, nothing syncs, and `/link-token/update`
+answers 409 `closed`. Connecting the same bank again replaces the closed
+connection and its data.
+
 ## Known gaps, before they surprise you
 
 - **Only subcategories are budgeted.** `buildShapedPlan` skips any category

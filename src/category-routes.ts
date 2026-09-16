@@ -20,6 +20,7 @@ import {
   accounts, items,
 } from "./db/schema";
 import { requireUser } from "./auth";
+import { writeRefusal } from "./entitlement";
 import { loadCategories } from "./summary-routes";
 import { merchantKey, stableRuleKey } from "./categories";
 import { checkSplits, remainderOf, type Split } from "./splits";
@@ -57,6 +58,8 @@ cats.post("/categories", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+    const refused = writeRefusal(auth.user);
+    if (refused) return c.json(refused, 402);
 
     let label: unknown, colour: unknown, parent: unknown;
     try {
@@ -186,6 +189,8 @@ cats.delete("/categories/:id", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+    const refused = writeRefusal(auth.user);
+    if (refused) return c.json(refused, 402);
 
     const id = c.req.param("id");
 
@@ -250,6 +255,8 @@ cats.post("/transactions/:id/category", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+    const refused = writeRefusal(auth.user);
+    if (refused) return c.json(refused, 402);
 
     const txId = c.req.param("id");
     let categoryId: unknown, applyToMerchant: unknown;
@@ -405,6 +412,8 @@ cats.delete("/rules/:id", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+    const refused = writeRefusal(auth.user);
+    if (refused) return c.json(refused, 402);
 
     const gone = await db
       .delete(merchantRules)
@@ -441,6 +450,8 @@ cats.put("/transactions/:id/splits", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+    const refused = writeRefusal(auth.user);
+    if (refused) return c.json(refused, 402);
 
     const txId = c.req.param("id");
     let body: unknown;

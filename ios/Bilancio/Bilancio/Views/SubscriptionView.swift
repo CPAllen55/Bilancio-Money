@@ -292,7 +292,7 @@ struct SubscriptionView: View {
 
     private func plan(_ status: BillingStatus) -> String {
         switch status.plan {
-        case "trial":  return "Free month"
+        case "trial":  return "Free trial"
         case "active": return "Subscribed"
         case "lapsed": return "Ended"
         default:       return "Free"

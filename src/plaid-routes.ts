@@ -7,11 +7,11 @@
  */
 
 import { Hono } from "hono";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
 import { accounts, items, transactions, users } from "./db/schema";
 import { requireUser } from "./auth";
-import { trialEnd } from "./entitlement";
+import { trialBankLimit, trialEnd, writeRefusal } from "./entitlement";
 import { checkBudgetAlerts } from "./budget-alerts";
 import { openToken, sealToken } from "./crypto";
 import {
@@ -67,6 +67,8 @@ plaid.post("/link-token/update", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+    const refused = writeRefusal(auth.user);
+    if (refused) return c.json(refused, 402);
 
     let itemId: unknown;
     let platform: unknown;
@@ -83,6 +85,15 @@ plaid.post("/link-token/update", async (c) => {
       .from(items)
       .where(and(eq(items.id, itemId), eq(items.userId, auth.user.id)));
     if (!item) return c.json({ error: "not_found" }, 404);
+    /* A closed connection has no token left to repair: Plaid was told to forget
+       it. The way back is a new connection to the same bank, which replaces
+       this one -- see /exchange. */
+    if (item.closedAt) {
+      return c.json({
+        error: "closed",
+        reason: "This connection was closed when access ended. Connect the bank again to bring it back.",
+      }, 409);
+    }
 
     try {
       const token = await openToken(c.env, item.accessTokenCiphertext, item.accessTokenIv);
@@ -107,6 +118,9 @@ plaid.post("/link-token", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+
+    const refused = writeRefusal(auth.user) ?? trialBankLimit(auth.user, await openBanks(db, auth.user.id));
+    if (refused) return c.json(refused, 402);
 
     // The web app posts no body at all, so an unparseable one means "web"
     // rather than a bad request. Only a native client has any reason to say
@@ -146,6 +160,13 @@ plaid.post("/exchange", async (c) => {
       return c.json({ error: "bad_request", reason: "publicToken is required" }, 400);
     }
 
+    /* Asked again here, not only when the link token was issued. Plaid starts
+       billing when the public token is exchanged for an access token, so this
+       is the last moment a refusal costs nothing -- and a link token can be
+       fetched while the trial has room and used after it does not. */
+    const refused = writeRefusal(auth.user) ?? trialBankLimit(auth.user, await openBanks(db, auth.user.id));
+    if (refused) return c.json(refused, 402);
+
     const exchanged = await exchangePublicToken(c.env, publicToken);
     const accountsRes = await getAccounts(c.env, exchanged.access_token);
 
@@ -182,13 +203,32 @@ plaid.post("/exchange", async (c) => {
           keyVersion: sealed.keyVersion,
           institutionName,
           status: "good",
+          closedAt: null,
         },
       })
       .returning();
 
     await upsertAccounts(db, item.id, accountsRes.accounts);
 
-    /* The free month starts here, on the first bank ever connected.
+    /* The same bank, connected again after its old connection was closed at a
+       lapse. The new one brings its own two years of history, so the closed
+       one's copy is removed rather than left to show every transaction twice.
+       Merchant rules and categories are the person's, not the bank's, and
+       survive. Only closed connections are touched: two open logins at one
+       bank -- a personal and a joint account -- are both real. */
+    if (institutionId) {
+      const replaced = await db.delete(items).where(and(
+        eq(items.userId, auth.user.id),
+        eq(items.institutionId, institutionId),
+        isNotNull(items.closedAt),
+        ne(items.id, item.id),
+      )).returning({ id: items.id });
+      if (replaced.length) {
+        console.log(`replaced ${replaced.length} closed connection(s) for user ${auth.user.id}`);
+      }
+    }
+
+    /* The free trial starts here, on the first bank ever connected.
      *
      * Not at sign-up: somebody invited on a Tuesday who links a bank at the
      * weekend would lose five days of it to waiting, and somebody who signs up
@@ -197,7 +237,7 @@ plaid.post("/exchange", async (c) => {
      *
      * Guarded on planUntil being null rather than on the item count, so that
      * disconnecting every bank and linking a new one does not hand out a
-     * second free month. Only ever set once; nothing here can move it.
+     * second trial. Only ever set once; nothing here can move it.
      *
      * A comped account is left alone — it is on "free" with no expiry, and
      * starting a trial clock on it would eventually take the comp away.
@@ -374,6 +414,14 @@ async function syncOneItem(
 /** Items created by scripts/demo.mjs, which no Plaid call can ever service. */
 export const isDemoItem = (plaidItemId: string) => plaidItemId.startsWith("demo-item-");
 
+/* Connections that count toward a trial's limit: open, and real. A closed one
+   costs nothing at Plaid, and a demo one was never at Plaid at all. */
+async function openBanks(db: ReturnType<typeof getDb>["db"], userId: string): Promise<number> {
+  const rows = await db.select({ plaidItemId: items.plaidItemId }).from(items)
+    .where(and(eq(items.userId, userId), isNull(items.closedAt)));
+  return rows.filter((r) => !isDemoItem(r.plaidItemId)).length;
+}
+
 plaid.post("/sync", async (c) => {
   const { db, ready, close } = getDb(c.env);
   try {
@@ -381,8 +429,17 @@ plaid.post("/sync", async (c) => {
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
 
-    // Only this user's items. The client never names which.
-    const mine = await db.select().from(items).where(eq(items.userId, auth.user.id));
+    /* Nothing new arrives once access has ended. Not an error: the page calls
+       this after it loads, and a red message every visit would be a nag rather
+       than information. The flag lets it say so once, quietly. */
+    if (writeRefusal(auth.user)) {
+      return c.json({ ok: true, readOnly: true, items: 0, added: 0, modified: 0, removed: 0, more: false, pending: [], failed: [] });
+    }
+
+    // Only this user's open items. The client never names which, and a closed
+    // one has no token left to sync with.
+    const mine = await db.select().from(items)
+      .where(and(eq(items.userId, auth.user.id), isNull(items.closedAt)));
     if (!mine.length) return c.json({ ok: true, items: 0, added: 0, modified: 0, removed: 0 });
 
     let added = 0, modified = 0, removed = 0, more = false;
@@ -471,6 +528,7 @@ plaid.post("/webhook", async (c) => {
     // An item we do not hold — most likely one that was disconnected while a
     // webhook was in flight. Acknowledged so Plaid stops retrying it.
     if (!item) return c.json({ ok: true, ignored: "unknown item" });
+    if (item.closedAt) return c.json({ ok: true, ignored: "closed item" });
 
     if (type === "TRANSACTIONS") {
       // SYNC_UPDATES_AVAILABLE is the modern one; the *_UPDATE codes are the
@@ -667,7 +725,10 @@ plaid.get("/items", async (c) => {
         lastSyncedAt: item.lastSyncedAt,
         // A linked-but-never-synced item should not look identical to one
         // holding a year of history.
-        awaitingFirstSync: item.lastSyncedAt === null,
+        awaitingFirstSync: item.lastSyncedAt === null && item.closedAt === null,
+        /* Closed at Plaid when access ended. History is still here; syncing
+           and repair are not. Connecting the bank again replaces it. */
+        closed: item.closedAt !== null,
         accounts: owned.map((a) => ({
           id: a.id,
           name: a.name,
@@ -714,10 +775,13 @@ plaid.delete("/items/:id", async (c) => {
       .limit(1);
     if (!item) return c.json({ error: "not_found" }, 404);
 
-    try {
-      await removeItem(c.env, await openToken(c.env, item.accessTokenCiphertext, item.accessTokenIv));
-    } catch (err) {
-      return c.json(plaidFailure(err), 502);
+    // Already closed at Plaid when access ended: nothing left to revoke.
+    if (!item.closedAt) {
+      try {
+        await removeItem(c.env, await openToken(c.env, item.accessTokenCiphertext, item.accessTokenIv));
+      } catch (err) {
+        return c.json(plaidFailure(err), 502);
+      }
     }
 
     await db.delete(items).where(eq(items.id, item.id));

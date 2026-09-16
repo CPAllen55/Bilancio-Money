@@ -39,6 +39,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "./db/client";
 import { budgetPlansV2 } from "./db/schema";
 import { requireUser } from "./auth";
+import { writeRefusal } from "./entitlement";
 import {
   loadCategories, monthlyBuckets, ownedAccountIds, type MerchantNames,
 } from "./summary-routes";
@@ -352,6 +353,8 @@ budget.put("/budget", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+    const refused = writeRefusal(auth.user);
+    if (refused) return c.json(refused, 402);
 
     let body: any;
     try { body = await c.req.json(); }

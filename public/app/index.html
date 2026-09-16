@@ -11205,13 +11205,16 @@ async function renderBanks() {
       '<div class="inst"><span>' + escapeHtml(it.institution || 'Bank') + ' — ' + it.accounts.length +
         ' account' + (it.accounts.length === 1 ? '' : 's') +
         (it.awaitingFirstSync ? ' <span class="warnpill">· waiting for transactions</span>' : '') +
-        (it.status && it.status !== 'good'
+        /* Closed when access ended. The history underneath is still counted;
+           nothing new arrives, and the way back is connecting it again. */
+        (it.closed ? ' <span class="warnpill">· closed — history kept, not syncing</span>' : '') +
+        (!it.closed && it.status && it.status !== 'good'
           ? ' <span class="warnpill">· needs you to sign in again</span>' : '') + '</span>' +
         /* Offered before Disconnect, and styled as the primary of the two,
            because a bank asking for a fresh sign-in is repaired by signing in —
            not by throwing the connection away and re-importing two years of
            history to fix an expired password. */
-        (it.status && it.status !== 'good'
+        (!it.closed && it.status && it.status !== 'good'
           ? '<button class="relink" type="button" data-item="' + escapeHtml(it.id) + '" ' +
             'data-name="' + escapeHtml(it.institution || 'this bank') + '">Reconnect</button>'
           : '') +
@@ -11329,9 +11332,11 @@ $('bank-list').addEventListener('click', async (e) => {
         ? 'Subscribed through the App Store' + (when ? ', renewing ' + when : '') + '.'
       : s.plan === 'active'
         ? 'Subscribed' + (when ? ', renewing ' + when : '') + '.'
-      : s.plan === 'trial' && when   ? 'Your free month runs until ' + when + '.'
-      : s.plan === 'trial'           ? 'Your free month starts when you connect your first account.'
-      : 'Your access has ended. Everything already here stays visible; adding and editing need a subscription.';
+      : s.plan === 'trial' && until && until < new Date()
+        ? 'Your free trial has ended. Everything already here stays visible; adding banks, syncing and editing need a subscription.'
+      : s.plan === 'trial' && when   ? 'Your free trial runs until ' + when + '. It includes up to 2 bank connections.'
+      : s.plan === 'trial'           ? 'Your 14-day free trial starts when you connect your first account.'
+      : 'Your access has ended. Everything already here stays visible; adding banks, syncing and editing need a subscription.';
     $('billing-state').textContent = state;
 
     const acts = $('billing-acts');
@@ -11558,7 +11563,8 @@ $('sync-now').addEventListener('click', async () => {
       if (r.more) say(msg, 'Syncing… ' + total.added + ' so far');
     } while (r.more && rounds < 40);
 
-    if (!r.items) say(msg, 'Nothing to sync — no banks linked yet.');
+    if (r.readOnly) say(msg, 'Syncing is paused while your account is view-only. Subscribe to bring your banks up to date.');
+    else if (!r.items) say(msg, 'Nothing to sync — no banks linked yet.');
     else if (r.pending && r.pending.length) say(msg, r.pending.join(', ') + ' is still preparing transactions. Try again shortly.');
     else if (r.failed && r.failed.length)
       say(msg, r.failed.map(function(f){ return f.bank + ': ' + f.message; }).join(' · ') +

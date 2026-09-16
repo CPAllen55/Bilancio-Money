@@ -21,6 +21,7 @@ import billingRoutes from "./billing-routes";
 import logoRoutes from "./logo-routes";
 import notificationRoutes from "./notification-routes";
 import adminRoutes from "./admin-routes";
+import { closeLapsedConnections } from "./lapse";
 
 // Deliberately loose. The only thing worth rejecting here is input that cannot
 // be an address at all - anything stricter starts refusing real people.
@@ -208,4 +209,14 @@ app.all("/api/*", (c) =>
 
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
-export default app;
+/* The HTTP app, plus the daily cron (wrangler.jsonc, "triggers") that closes
+   bank connections for accounts whose access ended more than a week ago. */
+export default {
+  fetch: app.fetch,
+  scheduled(_event, env, ctx) {
+    ctx.waitUntil(
+      closeLapsedConnections(env).then(() => undefined)
+        .catch((err) => console.error("lapse job failed:", err)),
+    );
+  },
+} satisfies ExportedHandler<Env>;

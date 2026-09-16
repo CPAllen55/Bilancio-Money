@@ -120,8 +120,9 @@ data, your bank connections and your sign-in.
 
 SUBSCRIPTION
 
-Bilancio Money is free for one month, starting when you connect your first
-account. After that it needs a subscription:
+Bilancio Money is free for 14 days, starting when you connect your first
+account, with up to two bank connections during the trial. After that it needs
+a subscription:
 
   Monthly — $4.99 per month
   Yearly — $47.90 per year

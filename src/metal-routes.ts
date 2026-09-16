@@ -12,6 +12,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "./db/client";
 import { metalHoldings } from "./db/schema";
 import { requireUser } from "./auth";
+import { writeRefusal } from "./entitlement";
 import {
   METALS, METAL_LABEL, type Metal,
   fromOunces, latestPrices, refreshPrices, toOunces, valueCents,
@@ -86,6 +87,8 @@ metals.put("/metals", async (c) => {
     await ready;
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+    const refused = writeRefusal(auth.user);
+    if (refused) return c.json(refused, 402);
 
     let body: unknown;
     try { body = await c.req.json(); }

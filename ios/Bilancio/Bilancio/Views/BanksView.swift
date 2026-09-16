@@ -251,7 +251,11 @@ struct BanksView: View {
     /// to do something, and the one where nothing has arrived yet. A healthy
     /// connection is the expectation and does not need a badge to confirm it.
     @ViewBuilder private func status(for item: BankItemsResponse.Item) -> some View {
-        if item.needsAttention {
+        if item.isClosed {
+            Label("Closed · history kept", systemImage: "pause.circle")
+                .font(.caption2)
+                .foregroundStyle(Theme.caution)
+        } else if item.needsAttention {
             Label("Needs sign-in", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption2)
                 .foregroundStyle(Theme.negative)
