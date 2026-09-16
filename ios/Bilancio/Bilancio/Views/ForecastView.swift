@@ -101,11 +101,19 @@ struct ForecastView: View {
                                     .foregroundStyle(Theme.tint(forNet: m.net))
                                 }
                             }
-                            // Projected months are drawn faintly. A forecast
-                            // that looks exactly like a record invites being
-                            // read as one.
+                            /* Solid is the plan; faded is what already
+                               happened.
+
+                               The other way round reads more naturally on this
+                               screen alone — a forecast drawn faintly is
+                               obviously a guess — but Budgeting and the budget
+                               editor both say it this way, and a fade that
+                               means "projected" here and "recorded" two taps
+                               away means nothing at all. The screen is called
+                               The year ahead, so the months ahead are the ones
+                               it is about. */
                             .foregroundStyle(
-                                Theme.tint(forNet: m.net).opacity(m.projected ? 0.4 : 1)
+                                Theme.tint(forNet: m.net).opacity(m.projected ? 1 : 0.4)
                             )
                         }
                         .chartXSelection(value: $picked)
@@ -116,7 +124,7 @@ struct ForecastView: View {
                         .animation(.snappy(duration: 0.2), value: picked)
 
                         if data.firstProjectedMonth != nil {
-                            Text("Faded months are projected from the plan, not recorded.")
+                            Text("Solid months are projected from the plan; faded months already happened.")
                                 .font(Theme.note)
                                 .foregroundStyle(Theme.quietText)
                         }
