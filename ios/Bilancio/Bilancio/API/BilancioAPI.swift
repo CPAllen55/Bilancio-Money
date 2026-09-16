@@ -29,6 +29,11 @@ enum Bilancio {
         URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
     /* Ours, and it has to be: nobody else can describe what this app collects. */
     static let privacyURL = URL(string: "https://bilanciomoney.com/privacy")!
+
+    /* What the service is, rather than what the software is licensed as.
+       Shown where somebody is about to make an account, and from More, so it
+       is reachable by a reader who never opens the Subscription screen. */
+    static let termsURL = URL(string: "https://bilanciomoney.com/terms")!
 }
 
 /// Why a call did not produce a body.

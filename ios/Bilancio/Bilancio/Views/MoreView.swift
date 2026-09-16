@@ -98,6 +98,22 @@ struct MoreView: View {
                     // written for somebody else's screen.
                     Text("System follows whatever this device is set to, including its light and dark schedule.")
                 }
+
+                /* Both documents, always reachable.
+                 *
+                 * They were only ever on the Subscription screen, in the
+                 * footer under the plans — which is drawn for somebody who can
+                 * still buy something and hidden from everybody who already
+                 * has. A subscriber therefore had no way to read the privacy
+                 * policy from inside the app at all, and guideline 5.1.1(i)
+                 * asks for one in the app and not only on the listing.
+                 */
+                Section {
+                    Link("Terms of Service", destination: Bilancio.termsURL)
+                    Link("Privacy Policy", destination: Bilancio.privacyURL)
+                } header: {
+                    Text("Legal")
+                }
             }
             .dashboardColumn()
             .navigationTitle("More")

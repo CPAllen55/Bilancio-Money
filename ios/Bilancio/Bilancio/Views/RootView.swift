@@ -153,6 +153,22 @@ private struct SignedOutView: View {
                     .font(Theme.note)
             }
             .padding(.top, 20)
+
+            /* Said before the account exists, not after.
+             *
+             * Sign-in is Clerk's own screen and we cannot write on it, so the
+             * agreement goes on the last screen that is ours — which is also
+             * the right place for it: somebody about to hand over their email
+             * can read what they are agreeing to first, and both documents are
+             * one tap away rather than named and left unreachable.
+             */
+            Text("By continuing you agree to the [Terms of Service](\(Bilancio.termsURL)) and [Privacy Policy](\(Bilancio.privacyURL)).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .tint(Theme.accent)
+                .padding(.top, 24)
+                .padding(.horizontal, 24)
         }
         .padding()
     }
