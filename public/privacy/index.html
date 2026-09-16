@@ -92,7 +92,7 @@
 <main class="wrap">
 
   <h1>Privacy Policy</h1>
-  <p class="stamp">Last updated August 20, 2026</p>
+  <p class="stamp">Last updated September 16, 2026</p>
 
   <p class="lede">Bilancio Money reads your bank accounts so it can show you what you
   have and where it went. That is the only thing it does with your data. It is not sold,
@@ -113,10 +113,23 @@
   <strong>email address</strong> and a <strong>user ID</strong>. If you have enabled
   multi-factor authentication, Clerk holds the phone number or authenticator secret —
   we never see it.</p>
+  <p>Alongside that we keep the state of your account: when your free month started and
+  ends, whether you have a subscription, and where it was bought. If you subscribe we
+  store the <strong>identifiers</strong> Stripe or Apple give us for your subscription —
+  a customer ID, a subscription ID, or Apple's transaction ID — so we can tell whether it
+  is active. We do not receive or store card numbers (see section 2).</p>
+
+  <h3>Notifications</h3>
+  <p>If you turn on budget alerts in the iPhone app, we store the <strong>push token</strong>
+  Apple assigns to that install of the app, whether it is a test or App Store build, and
+  which categories you asked to be alerted about. We also record which alerts have already
+  been sent, so you are not told the same thing twice.</p>
 
   <h3>The waitlist</h3>
-  <p>If you enter an email address on the landing page we store that address, the date,
-  which page it came from, and whether an invitation has been sent. Nothing else.</p>
+  <p>If you join the waitlist — on the website or in the iPhone app — we store your email
+  address, the date, where you joined from, and whether an invitation has been sent.
+  Nothing else. The address is also passed to Clerk, which sends the confirmation and,
+  when you are let in, the invitation.</p>
 
   <h3>Your bank data, through Plaid</h3>
   <p>Bilancio connects to your bank using <a href="https://plaid.com/legal/"
@@ -155,17 +168,23 @@
 
   <h3>Things you create</h3>
   <p>Categories you add, rules you set ("Starbucks is always Coffee"), categories you
-  change on individual transactions, and any notes or tags you attach to them.</p>
+  change on individual transactions, how you split a transaction between categories, any
+  notes or tags you attach, changes you make to your budget, and precious-metal holdings
+  you enter by hand (the metal and the number of ounces).</p>
 
   <h2>2. What we do not collect</h2>
   <ul>
     <li><strong>Bank credentials.</strong> These go to Plaid, never to us.</li>
     <li><strong>Full account numbers.</strong> Only the last four digits, as Plaid supplies them.</li>
     <li><strong>Social Security numbers, dates of birth, or government ID.</strong> Never requested.</li>
-    <li><strong>Payment card details.</strong> Bilancio does not currently charge for anything.</li>
+    <li><strong>Payment card details.</strong> If you subscribe, your card is entered with
+      Stripe (on the website) or held by Apple (in the iPhone app). Card numbers are never
+      sent to us or stored by us.</li>
     <li><strong>Analytics, advertising, or tracking data.</strong> There are no analytics
       scripts, no advertising pixels, and no third-party trackers anywhere on this site
-      or in the app. We do not know which pages you visit.</li>
+      or in the app. We do not build a record of what you look at. Our hosting keeps
+      short-lived technical logs of requests, described in section 6, for security and
+      fixing faults — not for tracking.</li>
   </ul>
 
   <h2>3. How we use it</h2>
@@ -174,7 +193,10 @@
     <li>To show you your balances, transactions, categories, trends and forecasts</li>
     <li>To keep your data current by syncing with your bank through Plaid</li>
     <li>To apply the categorisation rules you have set</li>
+    <li>To work out your free month and whether your subscription is active</li>
+    <li>To send the budget alerts you have turned on</li>
     <li>To contact you about your account or about the service itself</li>
+    <li>To keep the service secure and to investigate faults</li>
   </ul>
 
   <div class="box">
@@ -196,11 +218,14 @@
       user ID so one account cannot read another's.</li>
   </ul>
   <p>No system is perfectly secure, and we will not claim otherwise. If we become aware
-  of a breach affecting your data, we will tell you.</p>
+  of a breach affecting your data, we will tell you, and notify the authorities where the
+  law requires it. To report a security problem, email
+  <strong>security@bilanciomoney.com</strong>.</p>
 
   <h2>5. Who else touches your data</h2>
   <p>We use a small number of service providers. Each is bound by its own agreement and
-  may only process your data to provide its service to us.</p>
+  may only process your data to provide its service to us. None of them is permitted to
+  sell it or use it for advertising on our behalf.</p>
 
   <table>
     <thead><tr><th>Provider</th><th>What it does</th></tr></thead>
@@ -209,8 +234,20 @@
         data. Governed by <a href="https://plaid.com/legal/" rel="noopener">Plaid's own
         privacy policy</a>, which you accept when you link an account.</td></tr>
       <tr><td>Clerk</td><td>Handles sign-in, sessions and multi-factor authentication.</td></tr>
-      <tr><td>Cloudflare</td><td>Serves the website and runs the application.</td></tr>
+      <tr><td>Cloudflare</td><td>Serves the website and runs the application, and keeps
+        short-lived request logs. Also forwards email sent to our
+        @bilanciomoney.com addresses to our inbox.</td></tr>
       <tr><td>Neon</td><td>Hosts the database.</td></tr>
+      <tr><td>Stripe</td><td>Only if you subscribe on the website. Takes the payment and
+        holds your card details, under
+        <a href="https://stripe.com/privacy" rel="noopener">Stripe's privacy policy</a>.
+        We receive your subscription's status and identifiers, never the card
+        number.</td></tr>
+      <tr><td>Apple</td><td>Only if you use the iPhone app. Takes payment for
+        subscriptions bought in the app, under Apple's terms; tells us whether that
+        subscription is active. Also delivers budget alerts to your phone — the alert's
+        text, such as a category name and whether it is over budget, passes through
+        Apple's push notification service to reach you.</td></tr>
       <tr><td>Google Fonts</td><td>Serves the typefaces the site uses. Your browser
         requests these from Google, which means Google receives your IP address. No other
         information is sent, and no cookie is set.</td></tr>
@@ -223,12 +260,25 @@
 
   <h2>6. How long we keep it</h2>
   <ul>
-    <li><strong>Transactions and balances</strong> are kept while the bank connection is
-      active. Disconnect the bank and its accounts and transactions are deleted, along
-      with any category changes you made to them.</li>
+    <li><strong>Transactions and balances</strong> are kept until you disconnect the bank
+      or delete your account. When <em>you</em> disconnect a bank, its accounts and
+      transactions are deleted, along with any category changes you made to them.</li>
+    <li><strong>If your free month or subscription ends</strong>, we may stop syncing and
+      close your bank connections at Plaid. The history already in Bilancio is kept, so
+      it is still there if you come back; it is deleted when you delete your account.</li>
     <li><strong>Your account</strong> is kept until you ask us to delete it.</li>
+    <li><strong>Push tokens</strong> are deleted when you turn alerts off on that phone,
+      when Apple tells us the token no longer works, or when you delete your account.</li>
     <li><strong>Waitlist emails</strong> are kept until you ask us to remove yours, or
       until we stop operating the waitlist.</li>
+    <li><strong>Request logs</strong> kept by our hosting provider are deleted
+      automatically after a few days.</li>
+    <li><strong>Backups.</strong> Our database provider keeps a short restore history so
+      the service can recover from a fault. Something you delete can remain in that history
+      for up to 7 days before it is gone for good. It is not used for anything else.</li>
+    <li><strong>Payment records</strong> are kept by Stripe or Apple under their own
+      policies and the tax and accounting laws that apply to them. Deleting your Bilancio
+      account does not delete their records of what you paid.</li>
   </ul>
 
   <h2>7. Your choices and rights</h2>
@@ -246,6 +296,9 @@
     under <em>Banks</em>. Disconnecting revokes our access at Plaid and then deletes that
     bank's accounts and transactions. Deleting your account does that for every connected
     bank, then erases your data and your sign-in. Neither can be undone.</p>
+    <p><strong>Deleting your account does not cancel a subscription.</strong> Cancel it
+    first — on the website from your account page, or for a subscription bought in the
+    iPhone app, in your Apple account under Settings, your name, then Subscriptions.</p>
     <p>For a copy of your data, a correction, or removal from the waitlist, email
     <strong>privacy@bilanciomoney.com</strong> from the address on your account and we will
     action it within <strong>30 days</strong>.</p>
@@ -263,8 +316,11 @@
   discriminate against you for exercising them.</p>
 
   <h2>8. Cookies</h2>
-  <p>Bilancio uses cookies only to keep you signed in. There are no advertising cookies,
-  no analytics cookies, and no cross-site tracking.</p>
+  <p>Bilancio uses cookies only to keep you signed in (set by Clerk) and, where our
+  hosting provider needs it, to tell people from automated attacks. If you subscribe on
+  the website, Stripe's checkout page sets its own cookies for payment and fraud
+  prevention, under Stripe's policy. There are no advertising cookies, no analytics
+  cookies, and no cross-site tracking.</p>
 
   <h2>9. Children</h2>
   <p>Bilancio is not intended for anyone under 18 and we do not knowingly collect data
@@ -277,10 +333,14 @@
 
   <h2>11. Changes to this policy</h2>
   <p>If this policy changes we will update the date at the top. For a change that
-  materially affects how we handle your data, we will email you before it takes effect.</p>
+  materially affects how we handle your data, we will tell you — by email or in the
+  app — before it takes effect.</p>
 
   <h2>12. Contact</h2>
-  <p>Questions, requests, or concerns: <strong>privacy@bilanciomoney.com</strong>.</p>
+  <p>Privacy questions, requests, or concerns: <strong>privacy@bilanciomoney.com</strong>.
+  Security reports: <strong>security@bilanciomoney.com</strong>. Help with the app:
+  <strong>support@bilanciomoney.com</strong>.</p>
+  <p>Guardiano del Faro LLC, Texas, United States.</p>
 
 </main>
 
