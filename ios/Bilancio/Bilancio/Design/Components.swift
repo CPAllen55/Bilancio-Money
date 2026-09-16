@@ -345,7 +345,15 @@ struct ProportionBar: View {
     private func mark(at fraction: Double, across width: CGFloat,
                       tint markColour: Color) -> some View {
         RoundedRectangle(cornerRadius: Self.markWidth / 2)
-            .fill(markColour)
+            /* Translucent, so a digit it lands on is still a digit.
+             *
+             * The mark crosses the caption — "-$157 kept of $3,329" is inside
+             * the bar, not above it — and an opaque nub took a character out of
+             * the figure wherever it fell. Letting the glyph through costs the
+             * mark some of its contrast against the fill, which is what the
+             * ring below is for: the edge survives even where the body of the
+             * mark and the bar under it are nearly the same colour. */
+            .fill(markColour.opacity(0.55))
             .overlay(
                 RoundedRectangle(cornerRadius: Self.markWidth / 2)
                     .stroke(Theme.markRing, lineWidth: 1)
