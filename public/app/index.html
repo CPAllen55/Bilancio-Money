@@ -2121,11 +2121,29 @@
   /* Two plans, given equal weight: the same button, the same size, the same
      two lines -- what it costs a month, then how it is billed. Neither is
      pushed; the yearly one simply says what it works out to. */
-  .billing-acts .plan{ flex:1 1 200px; max-width:260px; display:flex; flex-direction:column;
+  .billing-acts .plan{ flex:1 1 240px; max-width:320px; display:flex; flex-direction:column;
                        align-items:flex-start; gap:3px; padding:10px 16px; text-align:left;
                        line-height:1.25; }
   .plan-main{ font-weight:600; }
+  .plan-main, .plan-sub{ white-space:nowrap; }
   .plan-sub{ font-size:12px; opacity:.85; }
+  /* Raised, so they read as something to press: a darker lower edge and a soft
+     shadow, a lift on hover, a press on click, and an arrow that nudges
+     forward -- the next step is Stripe's page. */
+  .billing-acts .plan{ position:relative; padding-right:40px; cursor:pointer;
+    border-bottom:3px solid rgba(0,0,0,.28);
+    box-shadow:0 2px 0 rgba(0,0,0,.06), 0 4px 12px rgba(18,37,63,.16);
+    transition:transform .12s ease, box-shadow .12s ease, background .12s ease; }
+  .billing-acts .plan::after{ content:"→"; position:absolute; right:16px; top:50%;
+    transform:translateY(-50%); font-size:18px; font-weight:600;
+    transition:transform .12s ease; }
+  .billing-acts .plan:hover{ transform:translateY(-2px);
+    box-shadow:0 3px 0 rgba(0,0,0,.06), 0 10px 22px rgba(18,37,63,.24); }
+  .billing-acts .plan:hover::after{ transform:translate(4px, -50%); }
+  .billing-acts .plan:active{ transform:translateY(1px); border-bottom-width:1px;
+    box-shadow:0 1px 3px rgba(18,37,63,.18); }
+  .billing-acts .plan:focus-visible{ outline:2px solid var(--gold, #A07026); outline-offset:3px; }
+  .billing-acts .plan:disabled{ transform:none; opacity:.6; cursor:progress; }
   .billing-note{ flex-basis:100%; margin:4px 0 0; font-size:12.5px; color:var(--muted); }
   .danger-btn{ color:var(--coral); border-color:rgba(255,92,114,.45); }
   .danger-btn:hover{ color:#fff; background:var(--coral); border-color:var(--coral); }
