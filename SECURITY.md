@@ -130,13 +130,16 @@ development compromise cannot decrypt production data.
 verified by an emailed code at sign-up, or Sign in with Apple or Google.
 Automated sign-up is resisted by Clerk's bot protection (CAPTCHA).
 
-**Multi-factor authentication is available but not currently required.** Users
-can enrol an authenticator application (TOTP), SMS one-time codes, and
-single-use backup codes. Clerk's live production configuration reports MFA as
-optional at sign-up. Version 1.0 of this policy stated that it was enforced;
-that is not the configuration in force today, and this version records the
-actual state. Whether to require it again — at the cost of friction at sign-up
-— is an open decision (§14).
+**Multi-factor authentication is optional, and each user controls it.** Any
+user can turn it on or off at any time — on the web under *Profile settings →
+Security* — with an authenticator application (TOTP), SMS one-time codes, and
+single-use backup codes. Once a user has turned it on, Clerk requires the
+second factor at every sign-in for that user.
+
+It is not required for everyone, by decision. Version 1.0 of this policy said it
+was enforced; it was switched off so that Apple's App Review could sign in to
+the demo account, and has been kept optional since. This version records that
+state rather than the earlier one (§14).
 
 None of the available factors is **phishing-resistant**: a convincing fake
 sign-in page can capture a TOTP or SMS code and replay it within its validity
@@ -370,8 +373,8 @@ exists solely on a developer machine.
 
 Stated plainly, because a reviewer will ask and discovering it later is worse:
 
-- **End-user MFA is not required** (§6). It is available to every user but not
-  enforced; requiring it again is an open decision.
+- **End-user MFA is not required** (§6). Each user can turn it on; it is not
+  enforced for everyone.
 - **No phishing-resistant authentication** (passkeys or WebAuthn).
 - **No SOC 2, ISO 27001 or equivalent certification.** Not proportionate at
   current scale.

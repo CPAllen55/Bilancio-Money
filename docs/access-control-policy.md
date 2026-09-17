@@ -71,11 +71,13 @@ handles a password.
   with a one-time code at sign-up, and Clerk's bot protection (CAPTCHA) screens
   automated sign-ups. Sign in with Apple and with Google are offered as
   alternatives to a password.
-- **Multi-factor authentication is available but not required.** Authenticator
-  application (TOTP), SMS one-time code, and single-use backup codes can be
-  enrolled by any user. Clerk's live production configuration reports MFA as
-  optional; version 1.0 of this policy stated otherwise, and was wrong about the
-  configuration now in force. None of the factors is phishing-resistant — see §7.
+- **Multi-factor authentication is optional, and each user controls it.** A user
+  can turn it on or off at any time (web: *Profile settings → Security*) with an
+  authenticator application (TOTP), SMS one-time code, or single-use backup
+  codes; once on, Clerk requires it at every sign-in for that user. It is not
+  required for everyone, by decision: it was switched off so Apple's App Review
+  could sign in to the demo account. Version 1.0 of this policy said it was
+  enforced. None of the factors is phishing-resistant — see §7.
 - Sessions are issued and verified by Clerk; the API verifies the session on
   every request rather than trusting anything the client asserts.
 - **Entitlement is enforced on the server.** Once billing is open, an account
@@ -141,8 +143,8 @@ values that are public by design.
 
 Stated because a policy that hides its weaknesses cannot be relied on.
 
-- **End-user MFA is not required.** It is available to every user; whether to
-  require it again, at the cost of friction at sign-up, is an open decision.
+- **End-user MFA is not required.** Each user can turn it on; it is not
+  enforced for everyone.
 - **End-user MFA is not phishing-resistant.** TOTP and SMS codes can be captured
   and replayed by a convincing fake sign-in page within their validity window.
   Passkeys or WebAuthn would bind the credential to the domain and remove that
