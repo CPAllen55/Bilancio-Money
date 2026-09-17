@@ -11286,7 +11286,7 @@ function drawBankLimit(t) {
   note.hidden = false;
   note.innerHTML = '<b>' + Math.min(bankLimit.used, bankLimit.max) + ' of ' + bankLimit.max +
     '</b> bank connections used during your free trial' +
-    (full ? ' — disconnect one to connect a different bank.' : '.');
+    (full ? ' — subscribe to connect more, with no limit.' : '.');
 }
 
 /* The same invitation wherever a tab would otherwise show a wall of zeroes.
@@ -11602,7 +11602,7 @@ $('link-bank').addEventListener('click', async () => {
   const btn = $('link-bank'), msg = $('bank-msg');
   if (bankLimit && bankLimit.used >= bankLimit.max) {
     say(msg, 'Your free trial includes ' + bankLimit.max + ' bank connections. ' +
-      'To connect a different bank, disconnect one of these first.', 'bad');
+      'Subscribe below to connect more — there is no limit once you do.', 'bad');
     return;
   }
   btn.disabled = true;

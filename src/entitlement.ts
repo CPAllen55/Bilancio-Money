@@ -169,27 +169,24 @@ export function writeRefusal(u: Entitled, env: Env, now: Date = new Date()):
   return why ? { error: "read_only", reason: why } : null;
 }
 
-/** The refusal for a trial that already has as many banks as it may. */
-/* Applied now, before billing opens, unlike the read-only gate.
+/**
+ * The refusal for a trial that already has as many banks as it may.
  *
- * The two are not the same kind of rule. Read-only takes away what somebody
- * already has, and doing that with no way to pay would trap them. The limit only
- * stops a third connection being added -- nothing is lost, and each connection
- * is a monthly Plaid fee whether or not anybody ever pays. What changes with
- * billing is only the way out it offers: subscribe, or until then, swap a bank.
- *
- * TODO(stripe): once Stripe is live, billingOpen is always true in production
- * and the closed-billing sentence below can go. */
-export function trialBankLimit(u: Entitled, openBanks: number, env: Env):
+ * Not gated on billingOpen, unlike the read-only gate. Read-only takes away what
+ * somebody already has; the limit only stops a third connection being added, and
+ * every connection is a monthly Plaid fee whether or not anybody pays. It was
+ * switched on before Stripe for that reason, with a "disconnect one" message
+ * while there was nothing to subscribe to; since Stripe went live the way out it
+ * offers is subscribing.
+ */
+export function trialBankLimit(u: Entitled, openBanks: number):
   { error: "trial_bank_limit"; reason: string; limit: number } | null {
   if (u.plan !== "trial" || openBanks < TRIAL_MAX_BANKS) return null;
   return {
     error: "trial_bank_limit",
     limit: TRIAL_MAX_BANKS,
     reason: `Your free trial includes ${TRIAL_MAX_BANKS} bank connections. ` +
-      (billingOpen(env)
-        ? "Subscribe to connect more — there is no limit once you do."
-        : "To connect a different bank, disconnect one of these first."),
+      "Subscribe to connect more — there is no limit once you do.",
   };
 }
 

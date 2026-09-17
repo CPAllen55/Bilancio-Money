@@ -119,7 +119,7 @@ plaid.post("/link-token", async (c) => {
     const auth = await requireUser(c, db);
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
 
-    const refused = writeRefusal(auth.user, c.env) ?? trialBankLimit(auth.user, await openBanks(db, auth.user.id), c.env);
+    const refused = writeRefusal(auth.user, c.env) ?? trialBankLimit(auth.user, await openBanks(db, auth.user.id));
     if (refused) return c.json(refused, 402);
 
     // The web app posts no body at all, so an unparseable one means "web"
@@ -164,7 +164,7 @@ plaid.post("/exchange", async (c) => {
        billing when the public token is exchanged for an access token, so this
        is the last moment a refusal costs nothing -- and a link token can be
        fetched while the trial has room and used after it does not. */
-    const refused = writeRefusal(auth.user, c.env) ?? trialBankLimit(auth.user, await openBanks(db, auth.user.id), c.env);
+    const refused = writeRefusal(auth.user, c.env) ?? trialBankLimit(auth.user, await openBanks(db, auth.user.id));
     if (refused) return c.json(refused, 402);
 
     const exchanged = await exchangePublicToken(c.env, publicToken);
