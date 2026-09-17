@@ -66,9 +66,16 @@ async function plaidPost<T>(env: Env, path: string, body: Record<string, unknown
  * refused — a new client sending something we do not know about should get a
  * working non-OAuth link, not an error.
  */
-export type Platform = "web" | "ios";
+export type Platform = "web" | "ios" | "android";
 
-export const platformFrom = (value: unknown): Platform => (value === "ios" ? "ios" : "web");
+export const platformFrom = (value: unknown): Platform =>
+  value === "ios" ? "ios" : value === "android" ? "android" : "web";
+
+/* Android does not use a redirect URI at all. Plaid hands an OAuth flow back to
+   the app through the package name registered under Developers -> API ->
+   Allowed Android package names, so the app is named instead of a URL. Public
+   by design -- it is on every copy of the app in the Play Store. */
+export const ANDROID_PACKAGE = "com.bilanciomoney.bilancio";
 
 /**
  * Where the bank sends the browser back to, which is not the same place for
@@ -92,8 +99,13 @@ export const platformFrom = (value: unknown): Platform => (value === "ios" ? "io
  * failure than a hand-off that leaves the user staring at a browser.
  */
 function redirectFor(env: Env, platform: Platform): string | undefined {
+  if (platform === "android") return undefined;   // named by package, see below
   return platform === "ios" ? env.PLAID_REDIRECT_URI_IOS : env.PLAID_REDIRECT_URI;
 }
+
+/** What Link is opened by, for the platforms that are named rather than linked. */
+const openedBy = (platform: Platform) =>
+  platform === "android" ? { android_package_name: ANDROID_PACKAGE } : {};
 
 /**
  * A Link token for repairing an existing connection, not making a new one.
@@ -130,6 +142,7 @@ export function createUpdateLinkToken(
     country_codes: ["US"],
     language: "en",
     ...(redirect ? { redirect_uri: redirect } : {}),
+    ...openedBy(platform),
   });
 }
 
@@ -153,6 +166,7 @@ export function createLinkToken(env: Env, clerkUserId: string, platform: Platfor
     country_codes: ["US"],
     language: "en",
     ...(redirect ? { redirect_uri: redirect } : {}),
+    ...openedBy(platform),
   });
 }
 
