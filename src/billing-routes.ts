@@ -47,6 +47,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "./db/client";
 import { users } from "./db/schema";
 import { requireUser } from "./auth";
+import { trialEnd as trialEndFrom } from "./entitlement";
 import {
   createCustomer, createCheckoutSession, createPortalSession, getPrice, getSubscription,
   verifyWebhook, StripeError,
@@ -124,11 +125,17 @@ billing.post("/billing/checkout", async (c) => {
        trial would have ended, so subscribing on day three does not forfeit
        eleven free days -- which is what made waiting the sensible move.
        Stripe refuses a trial ending within 48 hours; closer than that, billing
-       simply starts today. */
+       simply starts today.
+
+       A trial that has not started yet -- nobody has connected a bank -- is
+       still owed its fourteen days, so it gets them here: the first charge is
+       fourteen days from now. Subscribing first must never cost somebody the
+       trial that connecting a bank first would have given them. */
     const now = Date.now();
-    const trialEnd = auth.user.plan === "trial" && auth.user.planUntil &&
-      auth.user.planUntil.getTime() > now + 48 * 60 * 60 * 1000
-      ? auth.user.planUntil : undefined;
+    const trialEnd = auth.user.plan !== "trial" ? undefined
+      : auth.user.planUntil === null ? trialEndFrom(new Date(now))
+      : auth.user.planUntil.getTime() > now + 48 * 60 * 60 * 1000 ? auth.user.planUntil
+      : undefined;
 
     const price = await getPrice(c.env, priceId);
     const origin = new URL(c.req.url).origin;
