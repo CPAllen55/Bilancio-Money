@@ -8264,7 +8264,9 @@ function bgIncomeWorking(row) {
   }
 
   for (const s of live) {
-    const who = (s.payers || []).map(p => p.name + (p.everyMonth ? '' : ', some months'));
+    const who = (s.payers || []).map(p => p.name +
+      (p.every && p.paycheck ? ', ' + money0(p.paycheck) + ' ' + p.every
+        : p.everyMonth ? '' : ', some months'));
     full.push(s.label + ' — ' + money(s.level) + ' a month' +
       (who.length ? ' (' + who.join('; ') + ')' : ''));
   }
@@ -8284,8 +8286,12 @@ function bgIncomeWorking(row) {
     full.push('Ignored as short, so they could not drag the figure down: ' +
       shortMonths.join(', '));
   }
-  full.push('Planned at the lowest ordinary month of the last six — income ' +
-    'is deliberately under-counted rather than over.');
+  full.push((row.sources || []).some(s => s.method === 'paycheck')
+    ? 'Salary is planned from each paycheck and how many paydays fall in the month — ' +
+      'three in the months that have three. Other income is planned at the lowest ' +
+      'ordinary month of the last six, deliberately under-counted rather than over.'
+    : 'Planned at the lowest ordinary month of the last six — income ' +
+      'is deliberately under-counted rather than over.');
   return { short, full };
 }
 

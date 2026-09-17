@@ -18,6 +18,7 @@ import { shapeBudget, type Shape } from "./budget-shape";
 import {
   planSubcategoryAsOf, planIncomeAsOf, type SubPlan, type MerchantHistory,
 } from "./budget-engine";
+import { planSalaryAsOf, type Deposit } from "./salary";
 
 type Db = ReturnType<typeof getDb>["db"];
 
@@ -149,6 +150,10 @@ export function buildShapedPlan(
      them, so a caller that is not going to show its working can leave them
      out and get merchant keys instead of spellings. */
   names: Map<string, string> = new Map(),
+  /* Salary & Wages deposits, one per transaction (salaryDeposits in
+     summary-routes). When given, salary is planned from paycheques; when not,
+     it falls back to the monthly rule every other income uses. */
+  salaryDeposits?: Deposit[],
 ): Planned {
   const byCategory: Record<string, Record<string, number>> = {};
   const subPlans = new Map<string, SubPlan>();
@@ -191,7 +196,9 @@ export function buildShapedPlan(
      number while the Overview promises another is worse than either. */
   const incomeParts = categories
     .filter((c) => c.kind === "income" && c.parentSlug)
-    .map((c) => planIncomeAsOf(
+    .map((c) => c.slug === "salary" && salaryDeposits
+      ? planSalaryAsOf(salaryDeposits, learn, months)
+      : planIncomeAsOf(
       learn.map((m) => buckets.get(m)?.byIncome?.[c.slug] ?? 0),
       new Map(learn.map((m) => [m, buckets.get(m)?.byIncomeMerchant?.[c.slug] ?? {}])),
       names, learn, months,

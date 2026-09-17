@@ -729,7 +729,11 @@ export interface IncomePlan {
   /** Months ignored as short, so they could not drag the floor down. */
   short: { month: string; amount: number }[];
   /** Who pays it, for the readout. */
-  payers: { name: string; cents: number; months: number; everyMonth: boolean }[];
+  payers: { name: string; cents: number; months: number; everyMonth: boolean;
+            /** Salary only: how often they pay, and one paycheque. */
+            every?: string; paycheck?: number }[];
+  /** "paycheck" when planned from paycheques (Salary & Wages, src/salary.ts). */
+  method?: "paycheck";
   monthsUsed: number;
 }
 

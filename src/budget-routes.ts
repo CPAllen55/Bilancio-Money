@@ -41,8 +41,9 @@ import { budgetPlansV2 } from "./db/schema";
 import { requireUser } from "./auth";
 import { writeRefusal } from "./entitlement";
 import {
-  loadCategories, monthlyBuckets, ownedAccountIds, type MerchantNames,
+  loadCategories, monthlyBuckets, ownedAccountIds, salaryDeposits, type MerchantNames,
 } from "./summary-routes";
+import { depositWindowStart, planSalaryAsOf } from "./salary";
 import { loadOverrides, learnWindow, type Override } from "./plan";
 import { shapeBudget } from "./budget-shape";
 import {
@@ -92,9 +93,11 @@ budget.get("/budget", async (c) => {
        so that a merchant rule can move one shop's rows, and this keeps what it
        was throwing away. */
     const names: MerchantNames = new Map();
-    const [buckets, overrides] = await Promise.all([
+    const [buckets, overrides, deposits] = await Promise.all([
       monthlyBuckets(db, auth.user.id, ids, ctx, learn, names),
       loadOverrides(db, auth.user.id),
+      salaryDeposits(db, auth.user.id, ids, ctx,
+        depositWindowStart(learn, planMonths), today.toISOString().slice(0, 10)),
     ]);
 
     /* Only leaves are planned. A parent's figure is the sum of its children,
@@ -203,10 +206,14 @@ budget.get("/budget", async (c) => {
       const merchants: MerchantHistory = new Map(
         learn.map((m) => [m, buckets.get(m)?.byIncomeMerchant?.[cat.slug] ?? {}]),
       );
-      const got = planIncomeAsOf(totals, merchants, names, learn, planMonths);
+      /* Salary from its paycheques; everything else by the cautious monthly
+         rule. See src/salary.ts for why they differ. */
+      const got = cat.slug === "salary"
+        ? planSalaryAsOf(deposits, learn, planMonths)
+        : planIncomeAsOf(totals, merchants, names, learn, planMonths);
       return {
         slug: cat.slug, label: cat.label, colour: cat.colour,
-        level: got.level, plan: got.plan,
+        level: got.level, plan: got.plan, method: got.method ?? null,
         dropped: got.dropped, short: got.short, payers: got.payers,
         spent: Object.fromEntries(
           learn.filter((m) => planMonths.includes(m))

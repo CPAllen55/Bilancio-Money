@@ -26,6 +26,7 @@ import {
 import { requireUser } from "./auth";
 import { classify, merchantKey, keyContainsRule } from "./categories";
 import { buildShapedPlan, learnWindow, loadOverrides } from "./plan";
+import { depositWindowStart, type Deposit } from "./salary";
 import { judgeAll, type Charge, type Verdict } from "./recurring";
 import { partsOf, type Split } from "./splits";
 
@@ -784,11 +785,12 @@ async function budgetFor(
    * correctly. Four dashboards agreeing is not something that can be
    * maintained by keeping four implementations in step; they have to be one
    * implementation. */
-  const [buckets, overrides] = await Promise.all([
+  const [buckets, overrides, deposits] = await Promise.all([
     monthlyBuckets(db, userId, ids, ctx, [...new Set([...learn, ...months])].sort()),
     loadOverrides(db, userId),
+    salaryDeposits(db, userId, ids, ctx, depositWindowStart(learn, months), ymd(today)),
   ]);
-  const planned = buildShapedPlan(ctx.list, buckets, learn, months, overrides);
+  const planned = buildShapedPlan(ctx.list, buckets, learn, months, overrides, undefined, deposits);
 
   // Summed across the window. The per-month shape is what the charts want and
   // is computed by the same call.
@@ -1589,6 +1591,54 @@ export async function monthlyBuckets(
 
   for (const b of buckets.values()) b.total = b.expense;
   return buckets;
+}
+
+/**
+ * Each deposit that lands in Salary & Wages, one row per transaction, for the
+ * paycheque-based salary plan (src/salary.ts).
+ *
+ * Monthly buckets carry totals and a count, not dates, and a salary is only
+ * predictable at the level of the paycheque: when it lands and what it is. This
+ * is the same resolution every other figure uses -- override, then merchant
+ * rule, then Plaid -- over a window of a few months, so it is a small read.
+ * Split transactions contribute only the parts filed as salary.
+ */
+export async function salaryDeposits(
+  db: ReturnType<typeof getDb>["db"],
+  userId: string,
+  accountIds: string[],
+  ctx: CategoryContext,
+  from: string,
+  to: string,
+): Promise<Deposit[]> {
+  if (!accountIds.length) return [];
+  const where = and(ledgerRows(accountIds, from, to), sql`${transactions.amount} < 0`);
+  const [rows, splits] = await Promise.all([
+    db.select({ ...rowFields, date: transactions.date })
+      .from(transactions)
+      .leftJoin(
+        transactionOverrides,
+        and(
+          eq(transactionOverrides.transactionId, transactions.id),
+          eq(transactionOverrides.userId, userId),
+        ),
+      )
+      .where(where),
+    loadSplits(db, userId, where),
+  ]);
+
+  const out: Deposit[] = [];
+  for (const r of rows) {
+    for (const part of partsFor(r as AmountRow, splits)) {
+      const cents = -Number(part.amount);   // Plaid: negative is money arriving
+      if (!(cents > 0)) continue;
+      const { kind, slug, key } = resolveSlug(part.row, ctx);
+      if (kind === "transfer" || bucketFor(slug, "income", ctx) !== "salary") continue;
+      const name = part.row.merchantName ?? part.row.name ?? key;
+      out.push({ date: String(r.date).slice(0, 10), cents, key: key || merchantKey(null, name), name });
+    }
+  }
+  return out;
 }
 
 export function monthKeys(count: number, today: Date): string[] {

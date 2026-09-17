@@ -18,7 +18,8 @@
 import { Hono } from "hono";
 import { getDb } from "./db/client";
 import { requireUser } from "./auth";
-import { loadCategories, monthlyBuckets, ownedAccountIds, rollUp } from "./summary-routes";
+import { loadCategories, monthlyBuckets, ownedAccountIds, rollUp, salaryDeposits } from "./summary-routes";
+import { depositWindowStart } from "./salary";
 import { buildShapedPlan, learnWindow, loadOverrides } from "./plan";
 
 const forecast = new Hono<{ Bindings: Env }>();
@@ -53,9 +54,11 @@ forecast.get("/forecast", async (c) => {
     const { learn } = learnWindow(today);
     const span = [...new Set([...learn, ...thisYearKeys])].sort();
 
-    const [buckets, overrides] = await Promise.all([
+    const [buckets, overrides, deposits] = await Promise.all([
       monthlyBuckets(db, auth.user.id, ids, ctx, span),
       loadOverrides(db, auth.user.id),
+      salaryDeposits(db, auth.user.id, ids, ctx,
+        depositWindowStart(learn, thisYearKeys), today.toISOString().slice(0, 10)),
     ]);
     const at = (key: string) =>
       buckets.get(key) ?? { income: 0, expense: 0, total: 0, byCategory: {} };
@@ -69,7 +72,7 @@ forecast.get("/forecast", async (c) => {
        still ahead. The months behind are still drawn from what actually
        happened — that has not changed — but the chart now wants to say what
        each of them was budgeted at, and a plan that stops at today cannot. */
-    const planned = buildShapedPlan(ctx.list, buckets, learn, thisYearKeys, overrides);
+    const planned = buildShapedPlan(ctx.list, buckets, learn, thisYearKeys, overrides, undefined, deposits);
 
     // slug -> cents, for one month of the plan.
     const plannedAt = (key: string) => {
