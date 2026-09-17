@@ -2118,16 +2118,14 @@
      for a positive figure, so it does not read as a warning. */
   .pay-btn{ color:var(--on-mint); background:var(--mint-dim); border-color:var(--mint-dim); }
   .pay-btn:hover{ background:var(--mint-hot); border-color:var(--mint-hot); }
-  /* The yearly plan leads: its price is said as the monthly figure it works
-     out to, with the yearly amount and the saving underneath. */
-  .pay-btn.plan{ display:flex; flex-direction:column; align-items:flex-start; gap:2px;
-                 padding:10px 16px; text-align:left; line-height:1.2; }
+  /* Two plans, given equal weight: the same button, the same size, the same
+     two lines -- what it costs a month, then how it is billed. Neither is
+     pushed; the yearly one simply says what it works out to. */
+  .billing-acts .plan{ flex:1 1 200px; max-width:260px; display:flex; flex-direction:column;
+                       align-items:flex-start; gap:3px; padding:10px 16px; text-align:left;
+                       line-height:1.25; }
   .plan-main{ font-weight:600; }
   .plan-sub{ font-size:12px; opacity:.85; }
-  .plan-save{ display:inline-block; margin-left:6px; padding:1px 7px; border-radius:999px;
-              font-size:11px; font-weight:700; letter-spacing:.02em;
-              background:rgba(255,255,255,.22); }
-  .billing-acts .ctl.alt{ align-self:center; }
   .billing-note{ flex-basis:100%; margin:4px 0 0; font-size:12.5px; color:var(--muted); }
   .danger-btn{ color:var(--coral); border-color:rgba(255,92,114,.45); }
   .danger-btn:hover{ color:#fff; background:var(--coral); border-color:var(--coral); }
@@ -11395,14 +11393,16 @@ $('bank-list').addEventListener('click', async (e) => {
     }
     acts.innerHTML = s.plan === 'active'
       ? '<button type="button" class="ctl" data-bill="portal">Manage subscription</button>'
-      /* Yearly first and in the paying colour, said as what it averages out to.
-         $47.90 over twelve months is $3.99 and a fraction -- "$3.99 a month" is
+      /* Monthly then yearly, identical buttons. The yearly price is said as what
+         it averages out to: $47.90 over twelve months is $3.99 and a fraction --
          the rounding the pricing page already uses -- and against $4.99 a month
          ($59.88 a year) it saves $11.98, which is 20%. */
-      : '<button type="button" class="ctl pay-btn plan" data-bill="yearly">' +
-          '<span class="plan-main">Subscribe — $3.99 a month<span class="plan-save">SAVE 20%</span></span>' +
-          '<span class="plan-sub">$47.90 billed once a year</span></button>' +
-        '<button type="button" class="ctl alt" data-bill="monthly">or $4.99 month to month</button>' +
+      : '<button type="button" class="ctl pay-btn plan" data-bill="monthly">' +
+          '<span class="plan-main">Monthly — $4.99 a month</span>' +
+          '<span class="plan-sub">Billed monthly · cancel anytime</span></button>' +
+        '<button type="button" class="ctl pay-btn plan" data-bill="yearly">' +
+          '<span class="plan-main">Yearly — $3.99 a month</span>' +
+          '<span class="plan-sub">$47.90 billed yearly · save 20%</span></button>' +
         (s.plan === 'trial' && (!until || until.getTime() > Date.now() + 48 * 3600 * 1000)
           ? '<p class="billing-note">Either way, nothing is charged until your 14 free days are up.</p>'
           : '');
