@@ -244,7 +244,7 @@ struct BanksView: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("Every bank is disconnected and all of your data is erased. This cannot be undone.")
+            Text("Every bank is disconnected and all of your data is erased. This cannot be undone. If you subscribe through the App Store, cancel it first in Settings > your name > Subscriptions.")
         }
     }
 

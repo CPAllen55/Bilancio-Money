@@ -48,7 +48,7 @@ import { getDb } from "./db/client";
 import { users } from "./db/schema";
 import { requireUser } from "./auth";
 import {
-  createCustomer, createCheckoutSession, createPortalSession, getSubscription,
+  createCustomer, createCheckoutSession, createPortalSession, getPrice, getSubscription,
   verifyWebhook, StripeError,
 } from "./stripe";
 import {
@@ -95,8 +95,8 @@ billing.post("/billing/checkout", async (c) => {
     if (!(plan in PLANS)) {
       return c.json({ error: "bad_request", message: "Unknown plan." }, 400);
     }
-    const price = c.env[PLANS[plan]];
-    if (!price) {
+    const priceId = c.env[PLANS[plan]];
+    if (!priceId) {
       return c.json({ error: "unavailable", message: "That plan is not configured." }, 503);
     }
 
@@ -120,10 +120,22 @@ billing.post("/billing/checkout", async (c) => {
         .where(eq(users.id, auth.user.id));
     }
 
+    /* Still inside the free trial: the subscription starts billing when the
+       trial would have ended, so subscribing on day three does not forfeit
+       eleven free days -- which is what made waiting the sensible move.
+       Stripe refuses a trial ending within 48 hours; closer than that, billing
+       simply starts today. */
+    const now = Date.now();
+    const trialEnd = auth.user.plan === "trial" && auth.user.planUntil &&
+      auth.user.planUntil.getTime() > now + 48 * 60 * 60 * 1000
+      ? auth.user.planUntil : undefined;
+
+    const price = await getPrice(c.env, priceId);
     const origin = new URL(c.req.url).origin;
     const session = await createCheckoutSession(c.env, {
       customer: customerId,
       price,
+      trialEnd,
       userId: auth.user.id,
       /* Back into the app, not onto a Stripe page. The webhook is what
          actually grants access -- these two only decide where the browser

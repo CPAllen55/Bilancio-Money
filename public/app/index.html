@@ -11420,7 +11420,8 @@ $('delete-account').addEventListener('click', async () => {
   if (!confirm('Delete your Bilancio account?\n\n' +
       'Every linked bank will be revoked at Plaid, and all of your accounts, ' +
       'transactions, categories and rules will be deleted. Your sign-in will be ' +
-      'removed too.\n\nThis cannot be undone.')) return;
+      'removed too. A subscription bought on this website is cancelled; one bought ' +
+      'in the iPhone app must be cancelled in your Apple account.\n\nThis cannot be undone.')) return;
 
   const typed = prompt('Type DELETE to confirm.');
   if (typed !== 'DELETE') { say(msg, 'Not deleted.', ''); return; }
@@ -11432,7 +11433,9 @@ $('delete-account').addEventListener('click', async () => {
     const res = await authed('/api/account', { method: 'DELETE' });
     alert('Your account has been deleted' +
       (res.banksRevoked ? ' and ' + res.banksRevoked + ' bank connection' +
-        (res.banksRevoked === 1 ? '' : 's') + ' revoked at Plaid' : '') + '.');
+        (res.banksRevoked === 1 ? '' : 's') + ' revoked at Plaid' : '') + '.' +
+      (res.appleStillActive ? '\n\nYour App Store subscription is still active. Cancel it on your ' +
+        'iPhone: Settings, your name, Subscriptions.' : ''));
     try { await window.Clerk.signOut(); } catch (e) { /* the account is gone either way */ }
     location.href = '/';
   } catch (err) {

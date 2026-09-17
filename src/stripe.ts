@@ -59,7 +59,7 @@ export class StripeError extends Error {
 const API = "https://api.stripe.com/v1";
 
 async function call<T>(
-  env: Env, method: "GET" | "POST", path: string, body?: Record<string, unknown>,
+  env: Env, method: "GET" | "POST" | "DELETE", path: string, body?: Record<string, unknown>,
   /* Stripe deduplicates by this for 24 hours. Passed on any call that creates
      something, so a retry after a timeout cannot make a second customer or a
      second subscription out of one click. */
@@ -116,24 +116,98 @@ export function createCustomer(
   }, `customer:${userId}`);
 }
 
+export interface StripePrice {
+  id: string;
+  unit_amount: number | null;
+  currency: string;
+  recurring: { interval: string; interval_count: number } | null;
+}
+
+export function getPrice(env: Env, id: string): Promise<StripePrice> {
+  return call(env, "GET", `/prices/${id}`);
+}
+
+/** "$4.99 a month", from the price itself rather than a copy of it here. */
+export function describePrice(p: StripePrice): string {
+  const amount = ((p.unit_amount ?? 0) / 100).toLocaleString("en-US", {
+    style: "currency", currency: (p.currency || "usd").toUpperCase(),
+  });
+  const every = p.recurring
+    ? (p.recurring.interval_count > 1 ? `every ${p.recurring.interval_count} ${p.recurring.interval}s` : `a ${p.recurring.interval}`)
+    : "";
+  return `${amount} ${every}`.trim();
+}
+
 /** A hosted checkout page for one subscription. */
 export function createCheckoutSession(
   env: Env,
-  opts: { customer: string; price: string; successUrl: string; cancelUrl: string; userId: string },
+  opts: {
+    customer: string; price: StripePrice; successUrl: string; cancelUrl: string; userId: string;
+    /* When the free trial the person is already in runs out. Billing starts
+       then rather than today, so subscribing early costs nothing. */
+    trialEnd?: Date;
+  },
 ): Promise<StripeSession> {
+  const rate = describePrice(opts.price);
+  const firstCharge = opts.trialEnd
+    ? opts.trialEnd.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" })
+    : null;
   return call(env, "POST", "/checkout/sessions", {
     mode: "subscription",
     customer: opts.customer,
-    line_items: [{ price: opts.price, quantity: 1 }],
+    line_items: [{ price: opts.price.id, quantity: 1 }],
     success_url: opts.successUrl,
     cancel_url: opts.cancelUrl,
-    /* Copied onto the subscription itself, not just the session. The session
-       is gone by the time a renewal three months from now fires a webhook;
-       the subscription is what that webhook carries. */
-    subscription_data: { metadata: { bilancio_user_id: opts.userId } },
-    /* Stripe collects the address it needs for tax; nothing here stores it. */
-    billing_address_collection: "auto",
+    subscription_data: {
+      /* Copied onto the subscription itself, not just the session. The session
+         is gone by the time a renewal three months from now fires a webhook;
+         the subscription is what that webhook carries. */
+      metadata: { bilancio_user_id: opts.userId },
+      trial_end: opts.trialEnd ? Math.floor(opts.trialEnd.getTime() / 1000) : undefined,
+    },
+    /* Sales tax, worked out by Stripe Tax from the address given here, added on
+       top of the price as the Terms say. Where no registration exists it comes
+       to nothing, so this is safe before the Texas registration is in. The
+       address is saved to the Stripe customer -- which automatic tax needs for
+       an existing customer -- and never to our database. */
+    automatic_tax: { enabled: true },
+    billing_address_collection: "required",
+    customer_update: { address: "auto", name: "auto" },
+    /* The terms, agreed to with a tick rather than assumed, and the renewal
+       said in words beside the button. Auto-renewal law asks for both before
+       the first charge: what it costs, that it renews, and how to stop it. */
+    consent_collection: { terms_of_service: "required" },
+    custom_text: {
+      terms_of_service_acceptance: {
+        message: `I agree to the [Terms of Service](https://bilanciomoney.com/terms) and ` +
+          `[Privacy Policy](https://bilanciomoney.com/privacy).`,
+      },
+      submit: {
+        message: (firstCharge
+          ? `Nothing is charged today. Your first payment of ${rate} plus any sales tax is on ${firstCharge}. `
+          : `You'll be charged ${rate} plus any sales tax today. `) +
+          `Bilancio Money renews automatically at ${rate} until you cancel. ` +
+          `Cancel anytime from the Banks page in the app; access continues to the end of the period you've paid for.`,
+      },
+    },
   });
+}
+
+/**
+ * Ends a subscription now, for an account being deleted.
+ *
+ * Immediately rather than at the period's end: there is no account left to
+ * have access to. No refund is issued here -- the Terms do not refund part
+ * periods, and any exception is a decision for a person in the dashboard.
+ */
+export async function cancelSubscription(env: Env, id: string): Promise<void> {
+  try {
+    await call(env, "DELETE", `/subscriptions/${id}`);
+  } catch (err) {
+    // Already cancelled or never existed: the outcome wanted either way.
+    if (err instanceof StripeError && err.code === "resource_missing") return;
+    throw err;
+  }
 }
 
 /** Stripe's own page for changing a card or cancelling. */

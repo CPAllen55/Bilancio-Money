@@ -18,6 +18,7 @@ import { getDb } from "./db/client";
 import { items, users } from "./db/schema";
 import { requireUser } from "./auth";
 import { openToken } from "./crypto";
+import { cancelSubscription } from "./stripe";
 import { removeItem } from "./plaid";
 import { plaidFailure } from "./plaid-routes";
 
@@ -35,6 +36,26 @@ account.delete("/account", async (c) => {
     // the connections would stay live at Plaid with nothing left to close them.
     // If one fails, nothing is deleted and the user is told — better than a
     // cheerful confirmation that their banks are disconnected when they are not.
+    /* A website subscription is cancelled first, before anything else is
+       touched: an account that no longer exists must not go on being charged,
+       and once the row is gone nothing remembers which subscription to stop.
+       If Stripe cannot be reached nothing is deleted and the person is told.
+
+       An App Store subscription cannot be cancelled from here -- Apple allows
+       only the subscriber to do that -- so the answer says it is still live. */
+    if (auth.user.stripeSubscriptionId && c.env.STRIPE_SECRET_KEY) {
+      try {
+        await cancelSubscription(c.env, auth.user.stripeSubscriptionId);
+      } catch (err) {
+        console.error("stripe cancel failed during account delete", err);
+        return c.json({
+          error: "stripe",
+          reason: "Your subscription could not be cancelled, so nothing was deleted. Try again in a moment.",
+        }, 502);
+      }
+    }
+    const appleStillActive = auth.user.billingSource === "apple" && auth.user.plan === "active";
+
     const mine = await db.select().from(items).where(eq(items.userId, auth.user.id));
     for (const item of mine) {
       if (item.closedAt) continue;   // closed at Plaid already, when access ended
@@ -59,7 +80,7 @@ account.delete("/account", async (c) => {
       console.error("clerk user delete failed after local delete", err);
     }
 
-    return c.json({ ok: true, banksRevoked: mine.length });
+    return c.json({ ok: true, banksRevoked: mine.length, appleStillActive });
   } finally {
     c.executionCtx.waitUntil(close());
   }
