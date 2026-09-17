@@ -8,38 +8,49 @@ planned rather than in place it says so — a policy that describes intentions a
 though they were controls is worse than no policy, because it cannot be relied
 on by anybody, including us.
 
-**Version 1.0 — 24 August 2026.** Reviewed at least annually, and whenever the
+**Version 1.1 — 16 September 2026.** Reviewed at least annually, and whenever the
 architecture changes materially. This file is version-controlled: its commit
 history is the review record, so the claim that the policy is maintained is
 checkable rather than asserted.
+
+Changes from 1.0: open sign-up replaces invitation-only; subscriptions through
+Stripe and Apple; push notifications; the 14-day trial and the daily job that
+closes bank connections after access ends; the admin page; account deletion
+cancelling a website subscription; the backup window stated; and end-user MFA
+corrected to what the live configuration actually enforces (§6).
 
 ---
 
 ## 1. Scope and governance
 
-Bilancio Money is a personal finance dashboard. It reads a user's bank account
-balances and transaction history through Plaid, categorises that activity, and
-presents it back to them. It is **read-only**: it holds no ability to move
-money, initiate payments, or alter anything at a financial institution.
+Bilancio Money is a personal finance dashboard, on the web and as a native
+iPhone app. It reads a user's bank account balances and transaction history
+through Plaid, categorises that activity, and presents it back to them. It is
+**read-only**: it holds no ability to move money, initiate payments, or alter
+anything at a financial institution.
 
-The company is a single-member LLC with **one person having system access**.
+The company is a single-member LLC with **one person having system access** —
+the Member, who builds and operates both the web service and the iPhone app.
 That is the central fact about this environment and it cuts both ways: there is
 no risk of over-broad internal access, lateral movement between employees, or
 offboarding failures, and equally there is no separation of duties. Controls
 below are chosen accordingly — they lean on the platform and on automation
 rather than on process that a single person could quietly skip.
 
-**Security contact:** security@bilanciomoney.com — monitored, and the address to
-use for vulnerability reports or security correspondence.
+**Security contact:** security@bilanciomoney.com — delivered to the Member, and
+the address to use for vulnerability reports or security correspondence.
 
 ## 2. Architecture and data flow
 
 | | |
 |---|---|
-| Application | Cloudflare Workers, one Worker serving the site and `/api/*` |
-| Database | Neon PostgreSQL, TLS-only, reached through Cloudflare Hyperdrive |
+| Application | Cloudflare Workers, one Worker serving the site and `/api/*`, plus a daily scheduled job |
+| iPhone app | Native Swift client of the same API; holds no data of its own beyond a session |
+| Database | Neon PostgreSQL (Launch plan), TLS-only, reached through Cloudflare Hyperdrive |
 | Authentication | Clerk (production instance) |
 | Financial data | Plaid — Transactions product only |
+| Payments | Stripe on the web; Apple in-app purchase in the iPhone app |
+| Notifications | Apple Push Notification service, for budget alerts a user turns on |
 | Hosting region | United States |
 
 No part of the system is self-hosted. There are no servers to patch, no SSH
@@ -51,11 +62,19 @@ access, and no long-lived compute; Workers are ephemeral per request.
   amounts, dates, merchant names and institution names.
 - A user's email address and authentication identity, held by Clerk.
 - Plaid access tokens, encrypted (§4).
-- Category assignments and budget figures the user has set themselves.
+- Category assignments, rules, splits, budget figures and precious-metal
+  holdings the user has set themselves.
+- The state of the account: trial dates, plan, and the **identifiers** Stripe
+  or Apple assign to a subscription. Never a card number.
+- For users who turn on budget alerts: the Apple push token for that install,
+  and which categories they chose.
+- Email addresses from the former waitlist (sign-up is now open; no new ones
+  are collected).
 
 We do **not** hold bank credentials at any point. Credentials are entered by the
 user inside Plaid Link and are never transmitted to, seen by, or stored by
-Bilancio. We do not hold card numbers, government identifiers, or date of birth.
+Bilancio. We do not hold card numbers — those are entered with Stripe or held by
+Apple — government identifiers, or date of birth.
 
 **No analytics, advertising, or third-party tracking of any kind** is present in
 the application. This is deliberate, is stated in the published privacy policy,
@@ -64,8 +83,8 @@ and adding any would make that policy false.
 ## 4. Encryption
 
 **In transit.** TLS everywhere. The public site and API are served over HTTPS by
-Cloudflare. The database connection is TLS-enforced by Neon. Calls to Plaid and
-Clerk are HTTPS to their published endpoints.
+Cloudflare. The database connection is TLS-enforced by Neon. Calls to Plaid,
+Clerk, Stripe and Apple are HTTPS to their published endpoints.
 
 **At rest.** Neon encrypts stored data at the platform level.
 
@@ -86,32 +105,47 @@ No plaintext access token is ever written to the database.
 ## 5. Secrets management
 
 All credentials — the Plaid secret, the Clerk secret key, the token encryption
-key, and database connection strings — are stored as **Cloudflare Worker
-secrets** or in local files excluded from source control (`.env`, `.dev.vars`,
-both in `.gitignore`).
+key, the Stripe API key and webhook signing secret, the App Store Connect and
+Apple Push keys, and database connection strings — are stored as **Cloudflare
+Worker secrets** or in local files excluded from source control (`.env`,
+`.dev.vars`, both in `.gitignore`). Private keys downloaded from Apple are kept
+in a password manager, not on disk in the repository.
+
+The Stripe key is a **restricted key** limited to the five resources the
+application uses (customers, checkout sessions, the customer portal,
+subscriptions, and reading prices), so a leaked key cannot issue refunds, move
+balances or read unrelated data.
 
 Nothing secret is committed. Configuration that *is* committed
 (`wrangler.jsonc`) carries only values that are public by design, such as the
-Clerk publishable key, with comments recording why each one is safe to publish.
+Clerk publishable key and the Apple team id, with comments recording why each
+one is safe to publish.
 
 Separate encryption keys are used for development and production, so a
 development compromise cannot decrypt production data.
 
 ## 6. Access control
 
-**End users** authenticate through Clerk. The production instance has **Require
-multi-factor authentication enabled**, so a second factor is enforced after sign-in
-and sign-up rather than offered. The available factors are an authenticator
-application (TOTP), SMS one-time code, and single-use backup codes.
+**End users** authenticate through Clerk: email and password with the address
+verified by an emailed code at sign-up, or Sign in with Apple or Google.
+Automated sign-up is resisted by Clerk's bot protection (CAPTCHA).
 
-These are strong but **not phishing-resistant**: a convincing fake sign-in page can
-capture a TOTP or SMS code and replay it within its validity window. Only
-WebAuthn, passkeys or hardware keys bind a credential to the domain, and none is
-in use today. This is recorded rather than glossed, and passkeys are the intended
-next step.
+**Multi-factor authentication is available but not currently required.** Users
+can enrol an authenticator application (TOTP), SMS one-time codes, and
+single-use backup codes. Clerk's live production configuration reports MFA as
+optional at sign-up. Version 1.0 of this policy stated that it was enforced;
+that is not the configuration in force today, and this version records the
+actual state. Whether to require it again — at the cost of friction at sign-up
+— is an open decision (§14).
 
-Sign-up is **invitation-only** — Clerk access mode is set to invite-only, so there
-is no open registration.
+None of the available factors is **phishing-resistant**: a convincing fake
+sign-in page can capture a TOTP or SMS code and replay it within its validity
+window. Only WebAuthn, passkeys or hardware keys bind a credential to the
+domain, and none is in use today.
+
+**Sign-up is open to the public.** A new account starts a 14-day free trial when
+its first bank is connected, limited to two bank connections until it
+subscribes.
 
 **Application access to data** is scoped per user on every query. Ownership is
 proved by joining through the account and item tables to the authenticated user
@@ -119,7 +153,12 @@ rather than by trusting an identifier supplied in a request — an id belonging 
 someone else matches no rows rather than returning their data.
 
 **Administrative access** is limited to the single Member, protected by
-multi-factor authentication on Cloudflare, Neon, Clerk, Plaid and GitHub.
+multi-factor authentication on Cloudflare, Neon, Clerk, Plaid, Stripe, Apple
+and GitHub. Inside the application there is one **admin page**, reachable only
+by the one Clerk user id held in the `ADMIN_CLERK_USER_ID` secret; every other
+caller gets a 404. It shows the former waitlist and each account's email
+address, plan and number of bank connections, and can change a plan. It
+**cannot** read anybody's transactions, balances or budgets.
 
 **Database roles.** The application connects as a dedicated role created for it
 rather than as the database owner. Schema migrations are run separately, from a
@@ -137,13 +176,15 @@ could not drop a table.
 - All changes are version-controlled in Git with a written rationale in each
   commit message.
 - **Four runtime dependencies** (`@clerk/backend`, `drizzle-orm`, `hono`, `pg`).
-  A deliberately small surface: every dependency is a supply-chain risk, and the
-  application is written to need as few as possible.
+  Stripe, Plaid and Apple are called over plain HTTPS rather than through their
+  SDKs. A deliberately small surface: every dependency is a supply-chain risk.
 - TypeScript with strict checking; the build fails on a type error.
 - Development runs against a **separate Neon branch** and against **Plaid's
   sandbox**, so no local work can touch production data or a real bank account.
 - Deployment is automated from the `main` branch; there is no manual upload path
-  and no way to ship code that is not in version control.
+  and no way to ship code that is not in version control. The iPhone app is
+  built on the Member's Mac and distributed only through TestFlight and the App
+  Store.
 
 ## 7a. Vulnerability management
 
@@ -171,10 +212,11 @@ persistent host, and Neon patches the database platform. Host-level
 vulnerability management is therefore the providers’, and is covered by their
 own published programmes.
 
-**Endpoint scanning** is not performed. There is one machine, belonging to the
-sole Member, kept current with operating-system updates and platform
-antimalware. A managed endpoint programme is not proportionate to a
-single-person company and is recorded here rather than claimed.
+**Endpoint scanning** is not performed. There are two machines, both belonging to
+the sole Member — a Windows PC for the web service and a Mac for the iPhone app
+— kept current with operating-system updates and platform antimalware. A managed
+endpoint programme is not proportionate to a single-person company and is
+recorded here rather than claimed.
 
 **End-of-life software.** The dependency surface is four packages and a managed
 runtime, all currently supported. Versions are reviewed alongside the quarterly
@@ -185,14 +227,15 @@ access review.
 | Provider | Purpose | Handles |
 |---|---|---|
 | Plaid | Bank connectivity | Bank credentials (never seen by us), transactions |
-| Clerk | Authentication | Email address, authentication factors |
-| Cloudflare | Hosting, TLS, DNS, email routing | Traffic in transit |
+| Clerk | Authentication | Email address, authentication factors, sign-up bot protection |
+| Cloudflare | Hosting, TLS, DNS, email routing, request logs | Traffic in transit |
 | Neon | Database | Stored application data |
+| Stripe | Web subscriptions and sales tax | Card details and billing address (never seen by us) |
+| Apple | In-app subscriptions; push notification delivery; Sign in with Apple | Payment for App Store purchases; alert text in transit |
 | Google | Optional sign-in, for users who choose it | Email address and basic profile |
 
-Google appears here only for users who sign in with a Google account. It is a
-first factor and not a replacement for the second one, which Clerk still
-requires. A user who signs in with a password never involves Google at all.
+Google and Apple sign-in appear only for users who choose them. A user who signs
+in with a password involves neither.
 
 All of them are established providers with published security programmes. We rely
 on their platform controls for physical security, host patching, and
@@ -201,9 +244,19 @@ perform better itself.
 
 ## 9. Webhooks and input handling
 
-Plaid webhooks are **cryptographically verified** against Plaid's published
-verification key before the payload is acted upon. An unverified request is
-rejected, so an attacker cannot forge instructions by posting to the endpoint.
+Every inbound call from a provider is authenticated before it is acted upon:
+
+- **Plaid** webhooks are cryptographically verified against Plaid's published
+  verification key.
+- **Stripe** webhooks are verified against the endpoint's signing secret, over
+  the raw request bytes, with a constant-time comparison.
+- **Apple** subscription notifications are not trusted as sent. The payload is
+  used only to learn which subscription changed; its current state is then
+  fetched from Apple's App Store Server API over TLS, with a request signed by
+  our own key, and only that answer is believed.
+
+An unverified request is rejected, so an attacker cannot forge instructions by
+posting to an endpoint.
 
 Request bodies are validated for type and range before use. Values that reach
 the database go through parameterised queries via the ORM; no SQL is assembled
@@ -212,8 +265,8 @@ by string concatenation from user input.
 ## 10. Data retention and deletion
 
 Expanded in [docs/data-retention-and-disposal-policy.md](docs/data-retention-and-disposal-policy.md),
-which covers disposal on managed infrastructure and the point-in-time recovery
-window. Summarised here.
+which covers disposal on managed infrastructure and the backup window.
+Summarised here.
 
 ### Retention
 
@@ -226,57 +279,79 @@ product is built around.
 |---|---|
 | Transactions, balances, accounts | While the account exists; deleted with it |
 | Plaid access tokens | While the bank is connected; destroyed on disconnect |
-| Categories, rules, budget settings | While the account exists |
+| Categories, rules, budget settings, metal holdings | While the account exists |
 | Authentication identity | While the account exists, held by Clerk |
-| Waitlist email addresses | Until the person is invited or asks to be removed |
-| Request and error logs | The retention window of the platform, currently days |
+| Plan and subscription identifiers | While the account exists |
+| Push tokens | Until alerts are turned off on that phone, Apple reports the token dead, or the account is deleted |
+| Former waitlist email addresses | Until removal is requested or the list is deleted |
+| Request and error logs | The platform window, currently days |
+| Database restore history | Up to 7 days |
+| Payment records | Held by Stripe or Apple under their own obligations |
 
 **Disconnecting a bank deletes its data immediately** — the item, its accounts
 and every transaction under it, by cascade — without waiting for the account to
 be closed. Categories and merchant rules survive, because they are the user’s
 own work rather than the bank’s data, and will be there if they reconnect.
 
+**When access ends, connections are closed but history is kept.** Once billing
+is open, an account whose trial or subscription has ended becomes view-only,
+and seven days later a daily scheduled job removes its bank connections at
+Plaid and marks them closed. The accounts and transactions stay, so a returning
+subscriber still has their history; connecting the same bank again replaces the
+closed connection and its copy. Nothing is deleted by this job.
+
 There is no archive, no cold storage and no analytics copy. When a row is
-deleted there is no second copy of it anywhere in our systems.
+deleted there is no second copy of it anywhere in our systems beyond the
+database restore window.
 
 ### Deletion
 
-Users can **delete their account from inside the application**. Deletion:
+Users can **delete their account from inside the application**, on the web or
+in the iPhone app. Deletion:
 
-1. Revokes every bank connection at Plaid first, so no connection is left live
+1. Cancels a subscription bought on the website, at Stripe, first — so a deleted
+   account is not charged again;
+2. Revokes every open bank connection at Plaid, so no connection is left live
    with no way to reach it;
-2. Erases the user's accounts, transactions, categories, rules and overrides by
-   cascade;
-3. Removes the authentication identity from Clerk.
+3. Erases the user's accounts, transactions, categories, rules, overrides,
+   budget settings, metal holdings and push tokens by cascade;
+4. Removes the authentication identity from Clerk.
 
-This is a hard delete, not a flag. If revocation at Plaid fails, nothing is
-deleted and the user is told, rather than being given a false confirmation.
+This is a hard delete, not a flag. If cancellation at Stripe or revocation at
+Plaid fails, nothing is deleted and the user is told, rather than being given a
+false confirmation. A subscription bought in the iPhone app cannot be cancelled
+by us — Apple allows only the subscriber to do that — so both apps tell the user
+to cancel it with Apple.
 
 This section is reviewed annually with the rest of this policy, and whenever the
 data model changes. Its adequacy under applicable state privacy law is part of
-the outside legal review of the published privacy policy and terms, which is in
-progress at the time of writing.
+the outside legal review of the published privacy policy and terms, which has
+not yet been completed.
 
 ## 11. Logging and monitoring
 
 Cloudflare Workers observability is enabled, providing request logs, error
-traces and metrics. Application errors are logged with enough context to
-diagnose them and deliberately without financial detail or access tokens.
+traces and metrics, including the output of the daily scheduled job.
+Application errors are logged with enough context to diagnose them and
+deliberately without financial detail, card data or access tokens.
 
-Neon provides database-level monitoring and point-in-time recovery within the
-retention window of the current plan.
+Neon provides database-level monitoring and point-in-time recovery within a
+restore window of up to seven days.
 
 ## 12. Incident response
 
 The Member is the responder. In the event of a suspected compromise:
 
 1. **Contain.** Rotate the affected credential — Worker secrets can be replaced
-   and redeployed in minutes. If the token encryption key is implicated,
-   affected Plaid items are revoked rather than re-encrypted.
-2. **Assess.** Determine what data was reachable, using Cloudflare and Neon
-   logs.
-3. **Notify.** Affected users, and Plaid, without undue delay; and any
-   regulator to the extent required by applicable law.
+   and redeployed in minutes; a Stripe restricted key or Apple key is revoked in
+   the provider's dashboard. If the token encryption key is implicated, affected
+   Plaid items are revoked rather than re-encrypted.
+2. **Assess.** Determine what data was reachable, using Cloudflare, Neon, Stripe
+   and Clerk logs.
+3. **Notify.** Affected users, and Plaid, without undue delay; and regulators to
+   the extent required by applicable law — under Texas law, individuals within
+   60 days of determining a breach, and the Texas Attorney General where 250 or
+   more Texas residents are affected.
 4. **Remediate and record.** Fix the cause, write down what happened and what
    changed.
 
@@ -287,17 +362,21 @@ acknowledged within three business days.
 
 Source code is held in GitHub and is fully reproducible from it — the
 application has no state outside the database. The database is managed by Neon
-with automated backups and point-in-time recovery. No data exists solely on a
-developer machine.
+with automated backups and point-in-time recovery. Subscription state is held by
+Stripe and Apple as well as locally, and can be re-derived from them. No data
+exists solely on a developer machine.
 
 ## 14. What is not in place
 
 Stated plainly, because a reviewer will ask and discovering it later is worse:
 
+- **End-user MFA is not required** (§6). It is available to every user but not
+  enforced; requiring it again is an open decision.
+- **No phishing-resistant authentication** (passkeys or WebAuthn).
 - **No SOC 2, ISO 27001 or equivalent certification.** Not proportionate at
   current scale.
 - **No third-party penetration test** has been performed to date.
-- **No endpoint vulnerability scanning** on the single developer machine (§7a).
+- **No endpoint vulnerability scanning** on the two developer machines (§7a).
 - **No formal security awareness training programme** — with one person and no
   employees, there is nobody to train.
 - **No separation of duties**, for the same reason.
