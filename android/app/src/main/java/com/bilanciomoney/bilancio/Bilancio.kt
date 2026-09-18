@@ -105,6 +105,17 @@ object Bilancio {
 
     suspend fun banks(): Banks = Banks.from(request("GET", "/api/plaid/items"))
 
+    suspend fun trend(months: Int): Trend = Trend.from(request("GET", "/api/trend?months=$months"))
+
+    suspend fun budget(): Budget = Budget.from(request("GET", "/api/budget"))
+
+    /** Parents and their children, for screens whose own response carries only
+        the leaves. */
+    suspend fun categories(): List<Category> = Category.list(request("GET", "/api/categories").optJSONArray("categories"))
+
+    suspend fun calendar(month: YearMonth): CalendarMonth =
+        CalendarMonth.from(request("GET", "/api/calendar?month=$month"))
+
     suspend fun linkToken(): String =
         request("POST", "/api/plaid/link-token", JSONObject().put("platform", "android"))
             .getString("linkToken")

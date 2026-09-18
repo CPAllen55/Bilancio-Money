@@ -21,6 +21,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.bilanciomoney.bilancio.ui.BanksScreen
+import com.bilanciomoney.bilancio.ui.BudgetingScreen
+import com.bilanciomoney.bilancio.ui.CalendarScreen
+import com.bilanciomoney.bilancio.ui.SubPage
+import com.bilanciomoney.bilancio.ui.TrendScreen
 import com.bilanciomoney.bilancio.ui.Bucket
 import com.bilanciomoney.bilancio.ui.MoreScreen
 import com.bilanciomoney.bilancio.ui.OverviewScreen
@@ -45,9 +49,13 @@ class MainActivity : ComponentActivity() {
 
 private enum class AuthState { Loading, SignedIn, SignedOut }
 
+/* The iPhone's five, in the iPhone's order. Calendar and Banks live under
+   More there too: both are visited, not watched. */
 private enum class Tab(val label: String) {
-    Overview("Overview"), Transactions("Transactions"), Banks("Banks"), More("More")
+    Overview("Overview"), Trend("Trend"), Budgeting("Budget"), Transactions("Transactions"), More("More")
 }
+
+private enum class MorePage { Calendar, Banks }
 
 /**
  * Signed out shows Clerk's own screen, which signs in and creates accounts
@@ -83,6 +91,7 @@ private fun SignedIn() {
        the month the ledger opens on -- the same agreement the web app keeps. */
     var period by remember { mutableStateOf(Period()) }
     var bucket by remember { mutableStateOf<Bucket?>(null) }
+    var morePage by remember { mutableStateOf<MorePage?>(null) }
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -91,7 +100,11 @@ private fun SignedIn() {
                         selected = tab == t,
                         /* Choosing the ledger from the bar means all of it; a
                            category filter only arrives by tapping a category. */
-                        onClick = { if (t == Tab.Transactions) bucket = null; tab = t },
+                        onClick = {
+                            if (t == Tab.Transactions) bucket = null
+                            if (t == Tab.More) morePage = null
+                            tab = t
+                        },
                         icon = {},
                         label = { Text(t.label) },
                     )
@@ -112,8 +125,18 @@ private fun SignedIn() {
                     bucket = bucket,
                     onClearBucket = { bucket = null },
                 )
-                Tab.Banks -> BanksScreen()
-                Tab.More -> MoreScreen()
+                Tab.Trend -> TrendScreen(onCategory = { slug, label, month ->
+                    period = Period(month, 1); bucket = Bucket(slug, label); tab = Tab.Transactions
+                })
+                Tab.Budgeting -> BudgetingScreen()
+                Tab.More -> when (morePage) {
+                    null -> MoreScreen(
+                        onCalendar = { morePage = MorePage.Calendar },
+                        onBanks = { morePage = MorePage.Banks },
+                    )
+                    MorePage.Calendar -> SubPage("Calendar", onBack = { morePage = null }) { CalendarScreen() }
+                    MorePage.Banks -> SubPage("Banks", onBack = { morePage = null }) { BanksScreen() }
+                }
             }
         }
     }

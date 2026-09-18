@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
  * checkout.
  */
 @Composable
-fun MoreScreen() {
+fun MoreScreen(onCalendar: () -> Unit, onBanks: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var billing by remember { mutableStateOf<Billing?>(null) }
@@ -57,6 +57,14 @@ fun MoreScreen() {
     fun open(url: String) = context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Card(Modifier.fillMaxWidth()) {
+            Column {
+                Link("Calendar  ›", onClick = onCalendar)
+                HorizontalDivider()
+                Link("Banks  ›", onClick = onBanks)
+            }
+        }
+
         SectionTitle("Subscription")
         Card(Modifier.fillMaxWidth()) {
             Text(

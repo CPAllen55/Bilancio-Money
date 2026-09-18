@@ -242,6 +242,19 @@ private fun MarkAt(fraction: Float, colour: Color) {
     }
 }
 
+/** A page opened from More, with the way back at the top. */
+@Composable
+fun SubPage(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
+    androidx.activity.compose.BackHandler(onBack = onBack)
+    Column(Modifier.fillMaxSize()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("‹ More") }
+            Text(title, style = MaterialTheme.typography.titleMedium)
+        }
+        content()
+    }
+}
+
 @Composable
 fun SectionTitle(text: String) {
     Text(
