@@ -1,58 +1,52 @@
 package com.bilanciomoney.bilancio.ui.theme
 
-import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
+private val Light = lightColorScheme(
+    primary = Gold,
     onPrimary = Color.White,
+    secondary = Navy,
     onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    background = Paper,
+    onBackground = Navy,
+    surface = Color.White,
+    onSurface = Navy,
+    surfaceVariant = Color(0xFFEDE6D6),
+    onSurfaceVariant = Color(0xFF55606F),
 )
 
+private val Dark = darkColorScheme(
+    primary = GoldPale,
+    onPrimary = Navy,
+    secondary = GoldPale,
+    background = Night,
+    onBackground = Color(0xFFE9E4D8),
+    surface = NightCard,
+    onSurface = Color(0xFFE9E4D8),
+    surfaceVariant = Color(0xFF223049),
+    onSurfaceVariant = Color(0xFFAAB3C2),
+)
+
+/**
+ * Bilancio's own colours, not the phone's wallpaper.
+ *
+ * The template turned on dynamic colour, which repaints the app in whatever the
+ * user's wallpaper suggests. Right for a launcher; wrong for an app whose green
+ * and red mean money in and money out, and whose gold is the brand.
+ */
 @Composable
 fun BilancioTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = if (darkTheme) Dark else Light,
         typography = Typography,
-        content = content
+        content = content,
     )
 }

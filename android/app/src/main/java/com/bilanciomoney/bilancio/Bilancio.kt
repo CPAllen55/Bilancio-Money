@@ -9,6 +9,9 @@ import org.json.JSONObject
 import java.io.BufferedReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
+import java.time.LocalDate
+import java.time.YearMonth
 
 /**
  * The one client for the Bilancio API.
@@ -18,9 +21,9 @@ import java.net.URL
  * session is proved on every request rather than trusted from the client.
  *
  * Deliberately plain: HttpURLConnection and org.json, both in the platform. The
- * responses this app reads are shallow, and two more dependencies on the
- * critical path of somebody's bank data is a worse trade than a little parsing
- * by hand. See SECURITY.md on keeping the dependency surface small.
+ * responses this app reads are shallow, and more dependencies on the critical
+ * path of somebody's bank data is a worse trade than a little parsing by hand.
+ * See SECURITY.md on keeping the dependency surface small.
  */
 object Bilancio {
     const val BASE_URL = "https://bilanciomoney.com"
@@ -69,9 +72,8 @@ object Bilancio {
 
         if (status !in 200..299) {
             /* The Worker explains itself in `reason`, then `message`, then the
-               bare `error` slug — a 402 says why access ended, a 400 says what
-               was wrong with the request. Throwing the slug away is how "The
-               server returned 502" happened on iOS. */
+               bare `error` slug -- a 402 says why access ended, a 400 says what
+               was wrong with the request. */
             val why = json.optString("reason").ifBlank {
                 json.optString("message").ifBlank { json.optString("error") }
             }
@@ -80,12 +82,17 @@ object Bilancio {
         json
     }
 
-    suspend fun summary(range: String = "this-month"): Summary =
-        Summary.from(request("GET", "/api/summary?range=$range"))
+    private fun q(s: String) = URLEncoder.encode(s, "UTF-8")
 
-    suspend fun transactions(range: String = "this-month", limit: Int = 50): List<Transaction> =
-        request("GET", "/api/transactions?range=$range&limit=$limit")
-            .optJSONArray("transactions").orEmpty().map(Transaction::from)
+    suspend fun summary(range: String): Summary =
+        Summary.from(request("GET", "/api/summary?range=${q(range)}"))
+
+    suspend fun transactions(range: String, bucket: String? = null, offset: Int = 0, limit: Int = 50): TransactionPage {
+        val filter = if (bucket != null) "&bucket=${q(bucket)}" else ""
+        return TransactionPage.from(
+            request("GET", "/api/transactions?range=${q(range)}$filter&limit=$limit&offset=$offset"),
+        )
+    }
 
     suspend fun banks(): Banks = Banks.from(request("GET", "/api/plaid/items"))
 
@@ -97,15 +104,81 @@ object Bilancio {
         request("POST", "/api/plaid/exchange", JSONObject().put("publicToken", publicToken))
     }
 
-    /** One round. The server writes a bounded number of rows and says whether
-        more is waiting, so a two-year backfill arrives over several calls. */
-    suspend fun sync(): SyncResult = SyncResult.from(request("POST", "/api/plaid/sync"))
+    /** Syncs to the end. The server writes a bounded number of rows per call and
+        says whether more is waiting, so a two-year backfill takes several; the
+        cap is a backstop in case it somehow never says it is done. */
+    suspend fun syncAll(onProgress: (Int) -> Unit = {}): SyncResult {
+        var added = 0
+        var last: SyncResult
+        var rounds = 0
+        do {
+            last = SyncResult.from(request("POST", "/api/plaid/sync"))
+            added += last.added
+            onProgress(added)
+            rounds++
+        } while (last.more && rounds < 40)
+        return last.copy(added = added)
+    }
 
+    suspend fun disconnect(itemId: String) {
+        request("DELETE", "/api/plaid/items/${q(itemId)}")
+    }
+
+    suspend fun billing(): Billing = Billing.from(request("GET", "/api/billing/status"))
+
+    /** True when an App Store subscription is still live and must be cancelled
+        with Apple -- which cannot happen from here or from the server. */
     suspend fun deleteAccount(): Boolean =
         request("DELETE", "/api/account").optBoolean("appleStillActive", false)
 }
 
+/* ------------------------------------------------------------ date ranges -- */
+
+/**
+ * The range keys the server understands, for a month and a trailing count.
+ * A single month asks for one month rather than a one-month span, because the
+ * named forms know whether the month is still running (see spanRange in the
+ * web app, which learned this the hard way).
+ */
+object Ranges {
+    fun key(month: YearMonth, trailing: Int): String {
+        if (trailing <= 1) {
+            return if (month == YearMonth.now()) "this-month" else "month:$month"
+        }
+        return "span:${month.minusMonths((trailing - 1).toLong())}..$month"
+    }
+
+    /** The last twelve months, newest first. */
+    fun recent(): List<YearMonth> = (0 until 12).map { YearMonth.now().minusMonths(it.toLong()) }
+
+    fun label(m: YearMonth): String =
+        m.month.name.lowercase().replaceFirstChar { it.uppercase() } + " " + m.year
+}
+
 /* ------------------------------------------------------------------ shapes -- */
+
+data class Category(
+    val slug: String,
+    val label: String,
+    val colour: Long,
+    val parentSlug: String?,
+    val kind: String,
+) {
+    companion object {
+        fun from(o: JSONObject) = Category(
+            slug = o.optString("slug"),
+            label = o.optString("label"),
+            colour = parseColour(o.optString("colour")),
+            parentSlug = if (o.isNull("parentSlug")) null else o.optString("parentSlug").ifBlank { null },
+            kind = o.optString("kind", "spend"),
+        )
+
+        fun list(a: JSONArray?) = a.orEmpty().map(::from)
+
+        private fun parseColour(hex: String): Long =
+            runCatching { 0xFF000000 or hex.removePrefix("#").toLong(16) }.getOrDefault(0xFF888888)
+    }
+}
 
 data class Summary(
     val label: String,
@@ -115,8 +188,15 @@ data class Summary(
     val accountsCounted: Int,
     val budgetIncome: Long?,
     val budgetExpense: Long?,
+    val budgetNet: Long?,
     val perDay: Long?,
     val daysLeft: Int?,
+    /** Spending by parent category, and what each was planned at. */
+    val byParent: Map<String, Long>,
+    val budgetByParent: Map<String, Long>,
+    val previousExpense: Long?,
+    val comparison: String,
+    val categories: List<Category>,
 ) {
     companion object {
         fun from(o: JSONObject): Summary {
@@ -129,14 +209,19 @@ data class Summary(
                 income = totals.optLong("income"),
                 expense = totals.optLong("expense"),
                 /* Not safeToSpend.remaining: that is floored at zero, so a month
-                   that spent more than it earned reads as nothing left rather
-                   than as a loss. */
+                   that spent more than it earned reads as nothing left. */
                 net = totals.optLong("net"),
                 accountsCounted = o.optInt("accountsCounted"),
-                budgetIncome = if (available) budget.optLong("income") else null,
-                budgetExpense = if (available) budget.optLong("expense") else null,
+                budgetIncome = if (available) budget!!.optLong("income") else null,
+                budgetExpense = if (available) budget!!.optLong("expense") else null,
+                budgetNet = if (available) budget!!.optLong("net") else null,
                 perDay = safe?.optLong("perDay"),
                 daysLeft = safe?.optInt("daysLeft"),
+                byParent = totals.optJSONObject("byParent").cents(),
+                budgetByParent = if (available) budget!!.optJSONObject("byParent").cents() else emptyMap(),
+                previousExpense = o.optJSONObject("previous")?.optLong("expense"),
+                comparison = o.optJSONObject("comparison")?.optString("label").orEmpty(),
+                categories = Category.list(o.optJSONArray("categories")),
             )
         }
     }
@@ -144,7 +229,7 @@ data class Summary(
 
 data class Transaction(
     val id: String,
-    val date: String,
+    val date: LocalDate,
     val name: String,
     val amount: Long,
     val pending: Boolean,
@@ -153,12 +238,33 @@ data class Transaction(
     companion object {
         fun from(o: JSONObject) = Transaction(
             id = o.optString("id"),
-            date = o.optString("date"),
+            date = runCatching { LocalDate.parse(o.optString("date")) }.getOrDefault(LocalDate.now()),
             name = o.optString("name"),
             amount = o.optLong("amount"),
             pending = o.optBoolean("pending"),
             category = o.optString("category"),
         )
+    }
+}
+
+data class TransactionPage(
+    val total: Int,
+    val rows: List<Transaction>,
+    val moneyIn: Long,
+    val moneyOut: Long,
+    val categories: List<Category>,
+) {
+    companion object {
+        fun from(o: JSONObject): TransactionPage {
+            val sum = o.optJSONObject("sum") ?: JSONObject()
+            return TransactionPage(
+                total = o.optInt("total"),
+                rows = o.optJSONArray("transactions").orEmpty().map(Transaction::from),
+                moneyIn = sum.optLong("in"),
+                moneyOut = sum.optLong("out"),
+                categories = Category.list(o.optJSONArray("categories")),
+            )
+        }
     }
 }
 
@@ -201,26 +307,41 @@ data class Banks(val items: List<BankItem>, val trialUsed: Int?, val trialMax: I
     }
 }
 
-data class SyncResult(val added: Int, val more: Boolean, val readOnly: Boolean) {
+data class SyncResult(val added: Int, val more: Boolean, val readOnly: Boolean, val pending: List<String>) {
     companion object {
         fun from(o: JSONObject) = SyncResult(
             added = o.optInt("added"),
             more = o.optBoolean("more"),
             readOnly = o.optBoolean("readOnly"),
+            pending = o.optJSONArray("pending")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(),
+        )
+    }
+}
+
+data class Billing(val plan: String, val planUntil: String?, val manageAt: String) {
+    companion object {
+        fun from(o: JSONObject) = Billing(
+            plan = o.optString("plan"),
+            planUntil = if (o.isNull("planUntil")) null else o.optString("planUntil").ifBlank { null },
+            manageAt = o.optString("manageAt"),
         )
     }
 }
 
 /* JSONArray is not iterable, and every list here is read the same way. */
-private fun JSONArray?.orEmpty(): List<JSONObject> =
+internal fun JSONArray?.orEmpty(): List<JSONObject> =
     if (this == null) emptyList() else (0 until length()).map { getJSONObject(it) }
 
+/* A {slug: cents} object, as a map. */
+private fun JSONObject?.cents(): Map<String, Long> =
+    if (this == null) emptyMap() else keys().asSequence().associateWith { optLong(it) }
+
 /** Cents, as money. The API never sends anything else. */
-fun Long.asMoney(): String {
+fun Long.asMoney(withCents: Boolean = true): String {
     val negative = this < 0
     val cents = kotlin.math.abs(this)
-    val whole = cents / 100
-    val part = (cents % 100).toString().padStart(2, '0')
+    val whole = if (withCents) cents / 100 else (cents + 50) / 100
     val grouped = whole.toString().reversed().chunked(3).joinToString(",").reversed()
-    return (if (negative) "-$" else "$") + grouped + "." + part
+    val tail = if (withCents) "." + (cents % 100).toString().padStart(2, '0') else ""
+    return (if (negative) "-$" else "$") + grouped + tail
 }
