@@ -7,7 +7,16 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -54,8 +63,12 @@ private enum class AuthState { Loading, SignedIn, SignedOut }
 
 /* The iPhone's five, in the iPhone's order. Calendar and Banks live under
    More there too: both are visited, not watched. */
-private enum class Tab(val label: String) {
-    Overview("Overview"), Trend("Trend"), Budgeting("Budget"), Transactions("Transactions"), More("More")
+private enum class Tab(val label: String, val icon: Int) {
+    Overview("Overview", R.drawable.ic_tab_overview),
+    Trend("Trend", R.drawable.ic_tab_trend),
+    Budgeting("Budget", R.drawable.ic_tab_budget),
+    Transactions("Transactions", R.drawable.ic_tab_transactions),
+    More("More", R.drawable.ic_tab_more),
 }
 
 private enum class MorePage(val title: String) {
@@ -89,6 +102,7 @@ private fun Root() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SignedIn() {
     var tab by remember { mutableStateOf(Tab.Overview) }
@@ -98,6 +112,25 @@ private fun SignedIn() {
     var bucket by remember { mutableStateOf<Bucket?>(null) }
     var morePage by remember { mutableStateOf<MorePage?>(null) }
     Scaffold(
+        /* The screen's name with the owl beside it, as on the iPhone; on a page
+           opened from More, a way back instead of the owl. */
+        topBar = {
+            val page = if (tab == Tab.More) morePage else null
+            TopAppBar(
+                title = { Text(page?.title ?: tab.label) },
+                navigationIcon = {
+                    if (page != null) {
+                        IconButton(onClick = { morePage = null }) { Text("‹", style = MaterialTheme.typography.headlineMedium) }
+                    } else {
+                        Image(
+                            painterResource(R.mipmap.ic_launcher_foreground),
+                            contentDescription = null,
+                            modifier = Modifier.padding(start = 4.dp).size(44.dp),
+                        )
+                    }
+                },
+            )
+        },
         bottomBar = {
             NavigationBar {
                 Tab.entries.forEach { t ->
@@ -110,7 +143,7 @@ private fun SignedIn() {
                             if (t == Tab.More) morePage = null
                             tab = t
                         },
-                        icon = {},
+                        icon = { Icon(painterResource(t.icon), contentDescription = null) },
                         label = { Text(t.label) },
                     )
                 }
@@ -135,7 +168,7 @@ private fun SignedIn() {
                 Tab.Budgeting -> BudgetingScreen()
                 Tab.More -> when (morePage) {
                     null -> MoreScreen(onOpen = { morePage = MorePage.valueOf(it) })
-                    else -> SubPage(morePage!!.title, onBack = { morePage = null }) {
+                    else -> SubPage(onBack = { morePage = null }) {
                         when (morePage!!) {
                             MorePage.Calendar -> CalendarScreen()
                             MorePage.Banks -> BanksScreen()

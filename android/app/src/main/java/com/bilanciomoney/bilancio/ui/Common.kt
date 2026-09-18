@@ -242,17 +242,12 @@ private fun MarkAt(fraction: Float, colour: Color) {
     }
 }
 
-/** A page opened from More, with the way back at the top. */
+/** A page opened from More: the title bar names it and holds the way back;
+    this makes the system Back gesture go to More too. */
 @Composable
-fun SubPage(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
+fun SubPage(onBack: () -> Unit, content: @Composable () -> Unit) {
     androidx.activity.compose.BackHandler(onBack = onBack)
-    Column(Modifier.fillMaxSize()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("‹ More") }
-            Text(title, style = MaterialTheme.typography.titleMedium)
-        }
-        content()
-    }
+    content()
 }
 
 @Composable

@@ -153,6 +153,13 @@ object Bilancio {
         )
     }
 
+    /** Replaces the parts carved out of a transaction; an empty list unsplits it. */
+    suspend fun setSplits(transactionId: String, parts: List<Pair<String, Long>>) {
+        val arr = org.json.JSONArray()
+        parts.forEach { (id, cents) -> arr.put(JSONObject().put("categoryId", id).put("amount", cents)) }
+        request("PUT", "/api/transactions/${q(transactionId)}/splits", JSONObject().put("splits", arr))
+    }
+
     /** A link token that repairs an existing connection rather than making one. */
     suspend fun repairToken(itemId: String): String =
         request("POST", "/api/plaid/link-token/update", JSONObject().put("itemId", itemId).put("platform", "android"))
@@ -314,6 +321,10 @@ data class Transaction(
     val category: String,
     /** A filename for /api/logo, never a URL; null when Plaid has no art. */
     val logo: String?,
+    /** When this row is only the part of a split filed here: the whole amount. */
+    val partOf: Long? = null,
+    /** Parts carved out to other categories, by category id, same sign as amount. */
+    val splits: List<Pair<String, Long>> = emptyList(),
 ) {
     companion object {
         fun from(o: JSONObject) = Transaction(
@@ -324,6 +335,8 @@ data class Transaction(
             pending = o.optBoolean("pending"),
             category = o.optString("category"),
             logo = if (o.isNull("logo")) null else o.optString("logo").ifBlank { null },
+            partOf = if (o.isNull("partOf") || !o.has("partOf")) null else o.optLong("partOf"),
+            splits = o.optJSONArray("splits").orEmpty().map { it.optString("categoryId") to it.optLong("amount") },
         )
     }
 }

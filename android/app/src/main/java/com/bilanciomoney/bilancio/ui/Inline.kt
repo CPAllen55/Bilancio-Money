@@ -11,7 +11,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -124,6 +133,7 @@ fun TransactionSheet(tx: Transaction, categories: List<Category>, onDone: (chang
     var always by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var splitting by remember { mutableStateOf(false) }
     val current = categories.firstOrNull { it.slug == tx.category }
     val side = if (tx.amount > 0) "income" else "spend"
     val parents = categories.filter { it.parentSlug == null && (it.kind == side || it.kind == "transfer") }
@@ -146,6 +156,21 @@ fun TransactionSheet(tx: Transaction, categories: List<Category>, onDone: (chang
             }
             Spacer(Modifier.height(12.dp))
             Text("Filed under " + (current?.label ?: "Uncategorised"), style = MaterialTheme.typography.bodyMedium)
+            if (tx.partOf != null) {
+                Text(
+                    "Part of a ${tx.partOf.asMoney()} transaction that is split between categories.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (splitting) {
+                SplitEditor(tx, categories, parents, current, onCancel = { splitting = false }, onSaved = { onDone(true) })
+                Spacer(Modifier.height(32.dp))
+                return@Column
+            }
+            TextButton(onClick = { splitting = true }, enabled = !saving, contentPadding = PaddingValues(0.dp)) {
+                Text(if (tx.splits.isNotEmpty() || tx.partOf != null) "Edit split" else "Split between categories")
+            }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { always = !always }) {
                 Checkbox(checked = always, onCheckedChange = { always = it })
                 Text("Always file ${tx.name} here", style = MaterialTheme.typography.bodyMedium)
@@ -180,6 +205,122 @@ fun TransactionSheet(tx: Transaction, categories: List<Category>, onDone: (chang
                 }
             }
             Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+/**
+ * One transaction divided between categories -- the web's and the iPhone's
+ * split. Only the parts carved out are stored; whatever is left over stays
+ * where the transaction is filed, so the parts can never add up to anything
+ * but the whole. Amounts are typed as plain dollars and given the
+ * transaction's own direction here; the server refuses parts that exceed it.
+ */
+@Composable
+private fun SplitEditor(
+    tx: Transaction,
+    categories: List<Category>,
+    parents: List<Category>,
+    current: Category?,
+    onCancel: () -> Unit,
+    onSaved: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val whole = tx.partOf ?: tx.amount
+    val sign = if (whole < 0) -1 else 1
+    val choices = parents.flatMap { p ->
+        val kids = categories.filter { it.parentSlug == p.slug }
+        if (kids.isEmpty()) listOf(p) else kids
+    }.filter { it.slug != current?.slug }
+    val rows = remember {
+        androidx.compose.runtime.mutableStateListOf<Pair<Category?, String>>().apply {
+            tx.splits.forEach { (id, cents) ->
+                add(categories.firstOrNull { it.id == id } to "%.2f".format(kotlin.math.abs(cents) / 100.0))
+            }
+            if (isEmpty()) add(null to "")
+        }
+    }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun cents(s: String): Long? =
+        if (s.isBlank()) 0L else s.trim().removePrefix("$").toBigDecimalOrNull()
+            ?.movePointRight(2)?.setScale(0, java.math.RoundingMode.HALF_UP)?.toLong()
+
+    val parsed = rows.map { cents(it.second) }
+    val carved = parsed.sumOf { it ?: 0L }
+    val left = kotlin.math.abs(whole) - carved
+
+    SectionTitle("Split ${whole.asMoney()}")
+    rows.forEachIndexed { i, (cat, amount) ->
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            var menu by remember { mutableStateOf(false) }
+            Column(Modifier.weight(1f)) {
+                OutlinedButton(onClick = { menu = true }, modifier = Modifier.fillMaxWidth()) {
+                    if (cat != null) { Dot(Color(cat.colour)); Spacer(Modifier.width(6.dp)) }
+                    Text(cat?.label ?: "Choose a category", maxLines = 1)
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    choices.forEach { c ->
+                        DropdownMenuItem(
+                            text = { Text(c.label) },
+                            leadingIcon = { Dot(Color(c.colour)) },
+                            onClick = { rows[i] = c to amount; menu = false },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            OutlinedTextField(
+                value = amount,
+                onValueChange = { v -> rows[i] = cat to v.filter { it.isDigit() || it == '.' }.take(10) },
+                modifier = Modifier.width(110.dp),
+                singleLine = true,
+                prefix = { Text("$") },
+                isError = parsed[i] == null,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            )
+            TextButton(onClick = { rows.removeAt(i); if (rows.isEmpty()) rows.add(null to "") }) { Text("✕") }
+        }
+    }
+    TextButton(onClick = { rows.add(null to "") }, contentPadding = PaddingValues(0.dp)) { Text("+ Another part") }
+    Text(
+        if (left >= 0) (sign * left).asMoney() + " stays in " + (current?.label ?: "its category")
+        else "The parts are " + (-left).asMoney() + " more than the transaction",
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (left < 0) Negative else MaterialTheme.colorScheme.onSurface,
+    )
+    error?.let { Text(it, color = Negative, style = MaterialTheme.typography.bodySmall) }
+    Spacer(Modifier.height(8.dp))
+    Row {
+        Button(
+            enabled = !saving && left >= 0 && parsed.all { it != null } &&
+                rows.all { (c, a) -> c != null || cents(a) == 0L },
+            onClick = {
+                saving = true; error = null
+                val parts = rows.mapNotNull { (c, a) ->
+                    val n = cents(a) ?: 0L
+                    if (c == null || n == 0L) null else c.id to sign * n
+                }
+                scope.launch {
+                    runCatching { Bilancio.setSplits(tx.id, parts) }
+                        .onSuccess { onSaved() }
+                        .onFailure { error = it.message; saving = false }
+                }
+            },
+        ) { Text("Save split") }
+        Spacer(Modifier.width(8.dp))
+        TextButton(onClick = onCancel, enabled = !saving) { Text("Cancel") }
+        if (tx.splits.isNotEmpty() || tx.partOf != null) {
+            Spacer(Modifier.weight(1f))
+            TextButton(enabled = !saving, onClick = {
+                saving = true; error = null
+                scope.launch {
+                    runCatching { Bilancio.setSplits(tx.id, emptyList()) }
+                        .onSuccess { onSaved() }
+                        .onFailure { error = it.message; saving = false }
+                }
+            }) { Text("Unsplit", color = Negative) }
         }
     }
 }
