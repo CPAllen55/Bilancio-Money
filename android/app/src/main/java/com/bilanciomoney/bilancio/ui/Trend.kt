@@ -39,6 +39,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bilanciomoney.bilancio.Category
+import com.bilanciomoney.bilancio.Ranges
 import com.bilanciomoney.bilancio.Bilancio
 import com.bilanciomoney.bilancio.Trend
 import com.bilanciomoney.bilancio.TrendMonth
@@ -203,7 +204,7 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
                         },
                     )
                     if (open && kids.isEmpty()) {
-                        MonthTransactions(c.slug, m.month, Color(c.colour))
+                        InlineTransactions(Ranges.key(m.month, 1), c.slug, Color(c.colour))
                     }
                     if (open && kids.isNotEmpty()) {
                         kids.sortedByDescending { m.byCategory[it.slug] ?: 0L }
@@ -216,71 +217,13 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
                                     toggle = kidOpen, indent = true,
                                     onClick = { listing = if (kidOpen) null else k.slug },
                                 )
-                                if (kidOpen) MonthTransactions(k.slug, m.month, Color(k.colour))
+                                if (kidOpen) InlineTransactions(Ranges.key(m.month, 1), k.slug, Color(k.colour), indent = 52.dp)
                             }
                     }
                 }
             }
         }
         Spacer(Modifier.height(24.dp))
-    }
-}
-
-/**
- * One category's transactions for one month, listed where it was opened -- the
- * iPhone's drill-down, which keeps the reader on the Trend rather than moving
- * them to another tab to answer "what was that?".
- *
- * A month holds a few dozen at most for one subcategory; the first fifty are
- * shown, and the rest is counted rather than hidden.
- */
-@Composable
-private fun MonthTransactions(slug: String, month: YearMonth, tint: Color) {
-    val range = com.bilanciomoney.bilancio.Ranges.key(month, 1)
-    Column(Modifier.fillMaxWidth().padding(start = 34.dp, end = 12.dp, bottom = 8.dp)) {
-        Loader(slug to month, { Bilancio.transactions(range, bucket = slug, limit = 50) }) {
-            page: com.bilanciomoney.bilancio.TransactionPage, _ ->
-            if (page.rows.isEmpty()) {
-                Text("No transactions.", Modifier.padding(8.dp), style = MaterialTheme.typography.bodySmall)
-                return@Loader
-            }
-            Column {
-                page.rows.forEach { tx ->
-                    Row(
-                        Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                        Arrangement.SpaceBetween,
-                        Alignment.CenterVertically,
-                    ) {
-                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                            MerchantLogo(tx.logo, tx.name, tint, size = 26.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Column {
-                                Text(tx.name, maxLines = 1, style = MaterialTheme.typography.bodyMedium)
-                                Text(
-                                    tx.date.format(java.time.format.DateTimeFormatter.ofPattern("MMM d")) +
-                                        if (tx.pending) " · pending" else "",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        Text(
-                            tx.amount.asMoney(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (tx.amount > 0) Positive else MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-                if (page.total > page.rows.size) {
-                    Text(
-                        "${page.total - page.rows.size} more this month",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                }
-            }
-        }
     }
 }
 

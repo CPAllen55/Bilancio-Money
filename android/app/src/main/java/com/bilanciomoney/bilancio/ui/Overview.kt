@@ -16,6 +16,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,8 +41,10 @@ import java.time.LocalDate
 fun OverviewScreen(
     period: Period,
     onPeriod: (Period) -> Unit,
-    onCategory: (slug: String, label: String) -> Unit,
 ) = Loader(period.key, { Bilancio.summary(period.key) }) { s: Summary, _ ->
+    /* The category open, and the subcategory whose transactions are listed. */
+    var openParent by remember(s) { mutableStateOf<String?>(null) }
+    var openLeaf by remember(s) { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         PeriodBar(period, onPeriod)
         Spacer(Modifier.height(12.dp))
@@ -75,14 +81,20 @@ fun OverviewScreen(
                 parents.forEach { (cat, v) ->
                     val (spent, plan) = v
                     val over = plan != null && spent > plan
+                    val kids = s.categories.filter { it.parentSlug == cat.slug }
+                    val open = openParent == cat.slug
                     Column(
                         Modifier.fillMaxWidth()
-                            .clickable { onCategory(cat.slug, cat.label) }
+                            .clickable {
+                                openParent = if (open) null else cat.slug
+                                openLeaf = null
+                            }
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                     ) {
                         LabelledRow(
                             left = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(if (open) "−" else "+", Modifier.width(18.dp), fontWeight = FontWeight.Bold)
                                     Dot(Color(cat.colour))
                                     Spacer(Modifier.width(8.dp))
                                     Text(cat.label)
@@ -98,6 +110,44 @@ fun OverviewScreen(
                         )
                         Spacer(Modifier.height(6.dp))
                         PlanBar(spent, plan, Color(cat.colour))
+                    }
+                    if (open && kids.isEmpty()) {
+                        InlineTransactions(period.key, cat.slug, Color(cat.colour))
+                    }
+                    if (open && kids.isNotEmpty()) {
+                        kids.map { it to ((s.byCategory[it.slug] ?: 0L) to s.budgetByCategory[it.slug]) }
+                            .filter { (_, kv) -> kv.first > 0 || (kv.second ?: 0L) > 0 }
+                            .sortedByDescending { (_, kv) -> maxOf(kv.first, kv.second ?: 0L) }
+                            .forEach { (k, kv) ->
+                                val (ks, kp) = kv
+                                val leafOpen = openLeaf == k.slug
+                                Column(
+                                    Modifier.fillMaxWidth()
+                                        .clickable { openLeaf = if (leafOpen) null else k.slug }
+                                        .padding(start = 34.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                                ) {
+                                    LabelledRow(
+                                        left = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(if (leafOpen) "−" else "+", Modifier.width(18.dp),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Dot(Color(k.colour)); Spacer(Modifier.width(8.dp))
+                                                Text(k.label, style = MaterialTheme.typography.bodyMedium)
+                                            }
+                                        },
+                                        right = {
+                                            Text(
+                                                ks.asMoney(false) + (kp?.let { " of ${it.asMoney(false)}" } ?: ""),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (kp != null && ks > kp) Negative else MaterialTheme.colorScheme.onSurface,
+                                            )
+                                        },
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    PlanBar(ks, kp, Color(k.colour))
+                                }
+                                if (leafOpen) InlineTransactions(period.key, k.slug, Color(k.colour), indent = 52.dp)
+                            }
                     }
                 }
             }

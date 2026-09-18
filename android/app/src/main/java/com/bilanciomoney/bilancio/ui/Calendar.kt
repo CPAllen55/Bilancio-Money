@@ -156,30 +156,19 @@ private fun DayDetail(d: CalendarDay) {
         Text("Nothing spent on this day.", style = MaterialTheme.typography.bodyMedium)
         return
     }
-    Loader(d.date, { Bilancio.transactions("day:${d.date}", limit = 100) }) { page: TransactionPage, _ ->
+    var refresh by remember(d) { mutableStateOf(0) }
+    var open by remember(d) { mutableStateOf<com.bilanciomoney.bilancio.Transaction?>(null) }
+    Loader(d.date to refresh, { Bilancio.transactions("day:${d.date}", limit = 100) }) { page: TransactionPage, _ ->
         val cats = page.categories.associateBy { it.slug }
         Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(vertical = 4.dp)) {
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                 page.rows.forEach { t ->
-                    val cat = cats[t.category]
-                    Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                        Arrangement.SpaceBetween,
-                        Alignment.CenterVertically,
-                    ) {
-                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                            MerchantLogo(t.logo, t.name, Color(cat?.colour ?: 0xFF888888), size = 28.dp)
-                            Spacer(Modifier.padding(start = 10.dp))
-                            Column {
-                                Text(t.name, maxLines = 1)
-                                Text(cat?.label ?: "", style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                        Text(t.amount.asMoney(), fontWeight = FontWeight.Medium)
-                    }
+                    CompactRow(t, Color(cats[t.category]?.colour ?: 0xFF888888)) { open = t }
                 }
             }
+        }
+        open?.let { t ->
+            TransactionSheet(t, page.categories) { changed -> open = null; if (changed) refresh++ }
         }
     }
 }

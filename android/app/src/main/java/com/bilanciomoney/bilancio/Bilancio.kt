@@ -124,6 +124,40 @@ object Bilancio {
         the leaves. */
     suspend fun categories(): List<Category> = Category.list(request("GET", "/api/categories").optJSONArray("categories"))
 
+    suspend fun forecast(): Forecast = Forecast.from(request("GET", "/api/forecast"))
+
+    suspend fun netWorth(months: Int): NetWorth = NetWorth.from(request("GET", "/api/assets?months=$months"))
+
+    suspend fun rules(): List<Rule> = request("GET", "/api/rules").optJSONArray("rules").orEmpty().map(Rule::from)
+
+    suspend fun deleteRule(id: String) {
+        request("DELETE", "/api/rules/${q(id)}")
+    }
+
+    /** A new subcategory under a parent. */
+    suspend fun createCategory(label: String, parentSlug: String) {
+        request("POST", "/api/categories", JSONObject().put("label", label).put("parent", parentSlug))
+    }
+
+    /** Refused with a reason while anything is still filed under it. */
+    suspend fun deleteCategory(id: String) {
+        request("DELETE", "/api/categories/${q(id)}")
+    }
+
+    /** This transaction, and with applyToMerchant every one from its merchant
+        from now on (a merchant rule). */
+    suspend fun recategorise(transactionId: String, categoryId: String, applyToMerchant: Boolean) {
+        request(
+            "POST", "/api/transactions/${q(transactionId)}/category",
+            JSONObject().put("categoryId", categoryId).put("applyToMerchant", applyToMerchant),
+        )
+    }
+
+    /** A link token that repairs an existing connection rather than making one. */
+    suspend fun repairToken(itemId: String): String =
+        request("POST", "/api/plaid/link-token/update", JSONObject().put("itemId", itemId).put("platform", "android"))
+            .getString("linkToken")
+
     suspend fun calendar(month: YearMonth): CalendarMonth =
         CalendarMonth.from(request("GET", "/api/calendar?month=$month"))
 
@@ -189,6 +223,7 @@ object Ranges {
 /* ------------------------------------------------------------------ shapes -- */
 
 data class Category(
+    val id: String,
     val slug: String,
     val label: String,
     val colour: Long,
@@ -197,6 +232,7 @@ data class Category(
 ) {
     companion object {
         fun from(o: JSONObject) = Category(
+            id = o.optString("id"),
             slug = o.optString("slug"),
             label = o.optString("label"),
             colour = parseColour(o.optString("colour")),
@@ -227,6 +263,9 @@ data class Summary(
     /** Spending by parent category, and what each was planned at. */
     val byParent: Map<String, Long>,
     val budgetByParent: Map<String, Long>,
+    /** The same, by subcategory, for a category opened on the Overview. */
+    val byCategory: Map<String, Long>,
+    val budgetByCategory: Map<String, Long>,
     val previousExpense: Long?,
     val comparison: String,
     val categories: List<Category>,
@@ -253,6 +292,8 @@ data class Summary(
                 daysLeft = safe?.optInt("daysLeft"),
                 byParent = totals.optJSONObject("byParent").cents(),
                 budgetByParent = if (available) budget!!.optJSONObject("byParent").cents() else emptyMap(),
+                byCategory = totals.optJSONObject("byCategory").cents(),
+                budgetByCategory = if (available) budget!!.optJSONObject("byCategory").cents() else emptyMap(),
                 previousExpense = o.optJSONObject("previous")?.optLong("expense"),
                 comparison = o.optJSONObject("comparison")?.optString("label").orEmpty(),
                 categories = Category.list(o.optJSONArray("categories")),

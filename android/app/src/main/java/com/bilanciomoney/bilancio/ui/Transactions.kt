@@ -1,5 +1,6 @@
 package com.bilanciomoney.bilancio.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -89,8 +90,9 @@ fun TransactionsScreen(
 private fun Ledger(period: Period, bucket: Bucket?, search: String) = Loader(
     Triple(period.key, bucket, search),
     { Bilancio.transactions(period.key, bucket?.slug, merchant = search) },
-) { first: TransactionPage, _ ->
+) { first: TransactionPage, reload ->
     var rows by remember(first) { mutableStateOf(first.rows) }
+    var open by remember(first) { mutableStateOf<Transaction?>(null) }
     var loading by remember(first) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val categories = remember(first) { first.categories.associateBy { it.slug } }
@@ -125,7 +127,7 @@ private fun Ledger(period: Period, bucket: Bucket?, search: String) = Loader(
                     modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 4.dp),
                 )
             }
-            items(dayRows, key = { it.id }) { t -> TransactionRow(t, categories[t.category]) }
+            items(dayRows, key = { it.id }) { t -> TransactionRow(t, categories[t.category]) { open = t } }
         }
 
         if (rows.size < first.total) {
@@ -145,12 +147,15 @@ private fun Ledger(period: Period, bucket: Bucket?, search: String) = Loader(
             }
         }
     }
+    open?.let { t ->
+        TransactionSheet(t, first.categories) { changed -> open = null; if (changed) reload() }
+    }
 }
 
 @Composable
-private fun TransactionRow(t: Transaction, category: com.bilanciomoney.bilancio.Category?) {
+private fun TransactionRow(t: Transaction, category: com.bilanciomoney.bilancio.Category?, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
         Arrangement.SpaceBetween,
         Alignment.CenterVertically,
     ) {

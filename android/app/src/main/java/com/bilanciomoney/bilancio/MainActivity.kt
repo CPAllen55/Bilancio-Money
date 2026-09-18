@@ -117,7 +117,6 @@ private fun SignedIn() {
                 Tab.Overview -> OverviewScreen(
                     period = period,
                     onPeriod = { period = it },
-                    onCategory = { slug, label -> bucket = Bucket(slug, label); tab = Tab.Transactions },
                 )
                 Tab.Transactions -> TransactionsScreen(
                     period = period,
