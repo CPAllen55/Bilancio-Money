@@ -198,6 +198,11 @@ object Bilancio {
 
     suspend fun billing(): Billing = Billing.from(request("GET", "/api/billing/status"))
 
+    /** Hands a Play purchase to the server, which asks Google about it. */
+    suspend fun googlePurchase(purchaseToken: String) {
+        request("POST", "/api/billing/google", JSONObject().put("purchaseToken", purchaseToken))
+    }
+
     /** True when an App Store subscription is still live and must be cancelled
         with Apple -- which cannot happen from here or from the server. */
     suspend fun deleteAccount(): Boolean =
@@ -412,12 +417,22 @@ data class SyncResult(val added: Int, val more: Boolean, val readOnly: Boolean, 
     }
 }
 
-data class Billing(val plan: String, val planUntil: String?, val manageAt: String) {
+data class Billing(
+    val plan: String,
+    val planUntil: String?,
+    val manageAt: String,
+    /** Whether Google Play billing is switched on, for this app, on the server. */
+    val canSubscribeHere: Boolean = false,
+    /** The user id, attached to a Play purchase so Google can say whose it is. */
+    val accountToken: String = "",
+) {
     companion object {
         fun from(o: JSONObject) = Billing(
             plan = o.optString("plan"),
             planUntil = if (o.isNull("planUntil")) null else o.optString("planUntil").ifBlank { null },
             manageAt = o.optString("manageAt"),
+            canSubscribeHere = o.optBoolean("canSubscribeHere", false),
+            accountToken = o.optString("accountToken"),
         )
     }
 }

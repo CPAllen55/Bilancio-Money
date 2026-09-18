@@ -10,6 +10,7 @@ kotlin = "2.4.20"
 composeBom = "2026.02.01"
 clerk = "1.1.7"
 plaid = "6.2.1"
+billing = "9.1.0"
 lifecycleViewmodelCompose = "2.9.2"
 
 [libraries]
@@ -31,6 +32,7 @@ androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "l
 clerk-android-api = { group = "com.clerk", name = "clerk-android-api", version.ref = "clerk" }
 clerk-android-ui = { group = "com.clerk", name = "clerk-android-ui", version.ref = "clerk" }
 plaid-link = { group = "com.plaid.link", name = "sdk-core", version.ref = "plaid" }
+play-billing = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "billing" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

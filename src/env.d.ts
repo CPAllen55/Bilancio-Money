@@ -79,6 +79,15 @@ declare global {
     /** com.bilanciomoney.Bilancio. Not a secret; it scopes the token. */
     APPLE_BUNDLE_ID?: string;
 
+    /* ── Google Play, for subscriptions bought in the Android app ────────
+     *
+     * The whole JSON key file of a Google Cloud service account that has been
+     * invited into Play Console with the "View financial data" and "Manage
+     * orders and subscriptions" permissions. Secret. Unset, /api/billing/google
+     * answers 503 and the Android app shows nothing to buy. See google.ts.
+     */
+    GOOGLE_PLAY_SERVICE_ACCOUNT?: string;
+
     /* ── APNs, for budget alerts ─────────────────────────────────────────
      *
      * An APNs key: Certificates, Identifiers & Profiles → Keys → Apple Push

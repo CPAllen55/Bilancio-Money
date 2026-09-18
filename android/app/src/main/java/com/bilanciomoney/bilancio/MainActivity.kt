@@ -111,6 +111,10 @@ private fun SignedIn() {
     var period by remember { mutableStateOf(Period()) }
     var bucket by remember { mutableStateOf<Bucket?>(null) }
     var morePage by remember { mutableStateOf<MorePage?>(null) }
+    /* Catches up any Play purchase -- a renewal, a plan change, one whose
+       hand-over was interrupted -- each time the app opens. */
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(Unit) { PlayStore.sync(context) }
     Scaffold(
         /* The screen's name with the owl beside it, as on the iPhone; on a page
            opened from More, a way back instead of the owl. */

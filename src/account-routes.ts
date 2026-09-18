@@ -19,6 +19,7 @@ import { items, users } from "./db/schema";
 import { requireUser } from "./auth";
 import { openToken } from "./crypto";
 import { cancelSubscription } from "./stripe";
+import { cancel as cancelGoogle, configured as googleConfigured } from "./google";
 import { removeItem } from "./plaid";
 import { plaidFailure } from "./plaid-routes";
 
@@ -51,6 +52,20 @@ account.delete("/account", async (c) => {
         return c.json({
           error: "stripe",
           reason: "Your subscription could not be cancelled, so nothing was deleted. Try again in a moment.",
+        }, 502);
+      }
+    }
+    /* A Google Play subscription, unlike Apple's, can be cancelled by the
+       developer, and is -- for the same reason as Stripe's, and with the same
+       refusal to carry on if it cannot be. */
+    if (auth.user.googlePurchaseToken && googleConfigured(c.env)) {
+      try {
+        await cancelGoogle(c.env, auth.user.googlePurchaseToken);
+      } catch (err) {
+        console.error("google cancel failed during account delete", err);
+        return c.json({
+          error: "google",
+          reason: "Your Google Play subscription could not be cancelled, so nothing was deleted. Try again in a moment.",
         }, 502);
       }
     }

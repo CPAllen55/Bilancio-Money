@@ -50,6 +50,8 @@ dependencies {
     implementation(libs.clerk.android.ui)
     // Connecting a bank. The link token comes from our own server.
     implementation(libs.plaid.link)
+    // Subscriptions sold in the app. Verified by our server, never trusted here.
+    implementation(libs.play.billing)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

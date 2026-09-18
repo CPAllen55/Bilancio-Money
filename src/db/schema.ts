@@ -78,6 +78,10 @@ export const users = pgTable("users", {
      across every renewal, upgrade and restore. The per-transaction ids change
      every month and are no use for finding somebody again. */
   appleOriginalTransactionId: text("apple_original_transaction_id"),
+  /* The Google Play purchase token. Unlike Apple's id it changes when the
+     plan is switched or the subscription restarted; Google then names the old
+     one as linkedPurchaseToken, and the newest is what is kept here. */
+  googlePurchaseToken: text("google_purchase_token"),
 }, (t) => [
   /* One Stripe customer is one user. A unique index rather than a convention,
      because the webhook finds a user BY customer id and two rows sharing one
@@ -87,6 +91,8 @@ export const users = pgTable("users", {
     .where(sql`${t.stripeCustomerId} is not null`),
   uniqueIndex("users_apple_original_txn_idx").on(t.appleOriginalTransactionId)
     .where(sql`${t.appleOriginalTransactionId} is not null`),
+  uniqueIndex("users_google_purchase_token_idx").on(t.googlePurchaseToken)
+    .where(sql`${t.googlePurchaseToken} is not null`),
 ]);
 
 // 1b. Waitlist - people who left an email on the landing page, before any

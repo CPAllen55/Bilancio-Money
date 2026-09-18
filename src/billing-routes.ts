@@ -56,6 +56,11 @@ import {
   configured as appleConfigured, isPaid as applePaid, peek, subscriptionStatus,
   AppleError, type AppleNotification, type AppleSubscription,
 } from "./apple";
+import {
+  configured as googleConfigured, subscription as googleSubscription, isPaid as googlePaid,
+  acknowledge as googleAcknowledge, GoogleError, PRODUCT_ID as GOOGLE_PRODUCT,
+  type GoogleSubscription,
+} from "./google";
 
 const billing = new Hono<{ Bindings: Env }>();
 
@@ -289,10 +294,11 @@ billing.post("/billing/stripe-webhook", async (c) => {
       return c.json({ ok: true, ignored: "comped account" });
     }
 
-    /* Nor may Stripe touch somebody whose subscription lives at Apple. */
-    if (user.billingSource === "apple" && user.plan === "active") {
-      console.warn("stripe webhook ignored for Apple subscriber", user.id);
-      return c.json({ ok: true, ignored: "subscribed through Apple" });
+    /* Nor may Stripe touch somebody whose subscription lives at Apple or
+       Google. */
+    if ((user.billingSource === "apple" || user.billingSource === "google") && user.plan === "active") {
+      console.warn(`stripe webhook ignored for ${user.billingSource} subscriber`, user.id);
+      return c.json({ ok: true, ignored: `subscribed through ${user.billingSource}` });
     }
 
     const paid = kind !== "customer.subscription.deleted" && PAID.has(String(sub.status));
@@ -344,8 +350,10 @@ billing.get("/billing/status", async (c) => {
      * The header is a hint from the caller and is treated as one. Nothing is
      * granted by it; the worst a lie achieves is being shown the wrong thing
      * to buy, and the purchase itself is verified either way. */
-    const onApple = c.req.header("x-bilancio-client") === "ios";
-    const sellable = onApple ? appleConfigured(c.env) : !!c.env.STRIPE_SECRET_KEY;
+    const client = c.req.header("x-bilancio-client");
+    const sellable = client === "ios" ? appleConfigured(c.env)
+      : client === "android" ? googleConfigured(c.env)
+      : !!c.env.STRIPE_SECRET_KEY;
 
     return c.json({
       ok: true,
@@ -357,7 +365,8 @@ billing.get("/billing/status", async (c) => {
          subscription screen showing a plan and offering nothing -- rather
          than offering products that App Store Connect does not yet have. */
       canSubscribeHere: sellable,
-      manageAt: auth.user.billingSource === "apple" ? "apple" : "stripe",
+      manageAt: auth.user.billingSource === "apple" ? "apple"
+        : auth.user.billingSource === "google" ? "google" : "stripe",
       configured: sellable,
       /* Handed to StoreKit as the purchase's appAccountToken, so that Apple
          itself will later tell us which account bought it. It is the user id
@@ -632,6 +641,172 @@ billing.post("/billing/apple-notifications", async (c) => {
     await db.update(users).set(set).where(eq(users.id, user.id));
 
     console.log(`apple notification ${kind} -> ${paid ? "active" : "lapsed"}`);
+    return c.json({ ok: true, plan: set.plan });
+  } finally {
+    c.executionCtx.waitUntil(close());
+  }
+});
+
+/* ----------------------------------------------------------------- google -- */
+
+/** Google's answer, as the two columns. The same shape as applyApple. */
+function applyGoogle(
+  user: { billingSource: string | null },
+  sub: GoogleSubscription,
+  token: string,
+) {
+  const paid = googlePaid(sub);
+  return {
+    paid,
+    set: {
+      plan: paid ? "active" as const : "lapsed" as const,
+      planUntil: paid ? sub.expiry : new Date(),
+      billingSource: paid ? "google" : user.billingSource,
+      googlePurchaseToken: token,
+      planNote: paid ? "google" : "google:ended",
+    },
+  };
+}
+
+/**
+ * POST /api/billing/google      { purchaseToken: "<from Play Billing>" }
+ *
+ * The Android app finishes a purchase -- or finds one on opening -- and hands
+ * the token over. The token is put to Google; Google's answer is written.
+ */
+billing.post("/billing/google", async (c) => {
+  const { db, ready, close } = getDb(c.env);
+  try {
+    await ready;
+    const auth = await requireUser(c, db);
+    if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
+
+    if (!googleConfigured(c.env)) {
+      return c.json({ error: "unavailable", message: "Google Play billing is not configured yet." }, 503);
+    }
+
+    let body: { purchaseToken?: unknown };
+    try { body = await c.req.json(); }
+    catch { return c.json({ error: "bad_request", message: "Body must be JSON." }, 400); }
+    const token = body.purchaseToken;
+    if (typeof token !== "string" || !token || token.length > 2048) {
+      return c.json({ error: "bad_request", message: "purchaseToken is required." }, 400);
+    }
+
+    let sub: GoogleSubscription | null;
+    try { sub = await googleSubscription(c.env, token); }
+    catch (err) {
+      if (err instanceof GoogleError) return c.json({ error: "google", message: err.message }, err.status as 502);
+      throw err;
+    }
+    if (!sub) return c.json({ error: "not_found", message: "Google Play has no record of that purchase." }, 404);
+    if (sub.productId && sub.productId !== GOOGLE_PRODUCT) {
+      return c.json({ error: "bad_request", message: "That purchase is for something else." }, 400);
+    }
+
+    /* Google's own word on who bought it, where there is one; first claim
+       wins where there is not. */
+    if (sub.accountId && sub.accountId.toLowerCase() !== auth.user.id.toLowerCase()) {
+      console.warn("google purchase claimed by the wrong account", auth.user.id);
+      return c.json({
+        error: "conflict",
+        message: "That subscription belongs to a different Bilancio account. " +
+                 "Sign in with the account it was bought on.",
+      }, 409);
+    }
+    if (!sub.accountId) {
+      const [held] = await db.select().from(users)
+        .where(eq(users.googlePurchaseToken, token)).limit(1);
+      if (held && held.id !== auth.user.id) {
+        return c.json({ error: "conflict", message: "That subscription is already on another Bilancio account." }, 409);
+      }
+    }
+
+    const { paid, set } = applyGoogle(auth.user, sub, token);
+    if (paid) await googleAcknowledge(c.env, sub, token);
+
+    if (auth.user.plan === "free") {
+      await db.update(users).set({ googlePurchaseToken: token }).where(eq(users.id, auth.user.id));
+      return c.json({ ok: true, plan: "free", planUntil: auth.user.planUntil });
+    }
+
+    /* An ended purchase may only end the subscription it belongs to -- the
+       app re-sends every purchase it finds on opening, and an old one must not
+       knock anybody out of a trial or a Stripe subscription. */
+    const mine = auth.user.googlePurchaseToken === token ||
+      auth.user.googlePurchaseToken === sub.linkedPurchaseToken;
+    if (!paid && !mine) {
+      return c.json({ ok: true, plan: auth.user.plan, planUntil: auth.user.planUntil });
+    }
+
+    if (paid && auth.user.billingSource === "stripe" && auth.user.plan === "active") {
+      console.warn("google purchase by an active Stripe subscriber", auth.user.id);
+    }
+
+    await db.update(users).set(set).where(eq(users.id, auth.user.id));
+    console.log(`google ${sub.test ? "test" : "live"} ${paid ? "active" : "ended"}`);
+    return c.json({ ok: true, plan: set.plan, planUntil: set.planUntil });
+  } finally {
+    c.executionCtx.waitUntil(close());
+  }
+});
+
+/**
+ * POST /api/billing/google-notifications
+ *
+ * Google Play's real-time developer notifications, delivered by a Pub/Sub push
+ * subscription: renewals, cancellations, holds, expiries. Unauthenticated, and
+ * safe for the reason the Apple one is: the token inside is put to Google and
+ * only Google's answer is written.
+ */
+billing.post("/billing/google-notifications", async (c) => {
+  let envelope: any;
+  try { envelope = await c.req.json(); }
+  catch { return c.json({ error: "bad_request" }, 400); }
+
+  let note: any = null;
+  try { note = JSON.parse(atob(String(envelope?.message?.data ?? ""))); }
+  catch { return c.json({ ok: true, ignored: "unreadable" }); }
+
+  if (note?.testNotification) return c.json({ ok: true, test: true });
+  const token = note?.subscriptionNotification?.purchaseToken;
+  if (typeof token !== "string" || !token) return c.json({ ok: true, ignored: "not a subscription" });
+  if (!googleConfigured(c.env)) return c.json({ ok: true, ignored: "not configured" });
+
+  let sub: GoogleSubscription | null;
+  try { sub = await googleSubscription(c.env, token); }
+  catch (err) {
+    // 500 so Pub/Sub retries: Google being unreachable passes on its own.
+    if (err instanceof GoogleError) return c.json({ error: "google", message: err.message }, 500);
+    throw err;
+  }
+  if (!sub) return c.json({ ok: true, ignored: "unknown to Google" });
+
+  const { db, ready, close } = getDb(c.env);
+  try {
+    await ready;
+    /* By the account Google says bought it, then by the token, then by the
+       token it replaced -- a plan change arrives under a new token. */
+    const [byAccount] = sub.accountId
+      ? await db.select().from(users).where(eq(users.id, sub.accountId)).limit(1).catch(() => [])
+      : [];
+    const [byToken] = !byAccount
+      ? await db.select().from(users).where(eq(users.googlePurchaseToken, token)).limit(1)
+      : [];
+    const [byLinked] = !byAccount && !byToken && sub.linkedPurchaseToken
+      ? await db.select().from(users).where(eq(users.googlePurchaseToken, sub.linkedPurchaseToken)).limit(1)
+      : [];
+    const user = byAccount ?? byToken ?? byLinked;
+    if (!user) return c.json({ ok: true, ignored: "unknown subscription" });
+    if (user.plan === "free") return c.json({ ok: true, ignored: "comped account" });
+
+    const { paid, set } = applyGoogle(user, sub, token);
+    /* A notice that some other purchase ended must not end a subscription held
+       elsewhere. */
+    if (!paid && user.billingSource !== "google") return c.json({ ok: true, ignored: "not a Google subscriber" });
+    if (paid) await googleAcknowledge(c.env, sub, token);
+
+    await db.update(users).set(set).where(eq(users.id, user.id));
     return c.json({ ok: true, plan: set.plan });
   } finally {
     c.executionCtx.waitUntil(close());

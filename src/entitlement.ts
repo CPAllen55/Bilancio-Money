@@ -33,6 +33,7 @@
  */
 
 import { configured as appleConfigured } from "./apple";
+import { configured as googleConfigured } from "./google";
 
 export type Plan = "trial" | "active" | "free" | "lapsed";
 
@@ -47,7 +48,7 @@ export type Plan = "trial" | "active" | "free" | "lapsed";
  * or the Apple bindings) switches enforcement on with it.
  */
 export function billingOpen(env: Env): boolean {
-  return !!env.STRIPE_SECRET_KEY || appleConfigured(env);
+  return !!env.STRIPE_SECRET_KEY || appleConfigured(env) || googleConfigured(env);
 }
 
 export interface Entitled {
