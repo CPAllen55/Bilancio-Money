@@ -87,8 +87,17 @@ object Bilancio {
     suspend fun summary(range: String): Summary =
         Summary.from(request("GET", "/api/summary?range=${q(range)}"))
 
-    suspend fun transactions(range: String, bucket: String? = null, offset: Int = 0, limit: Int = 50): TransactionPage {
-        val filter = if (bucket != null) "&bucket=${q(bucket)}" else ""
+    suspend fun transactions(
+        range: String,
+        bucket: String? = null,
+        offset: Int = 0,
+        limit: Int = 50,
+        merchant: String? = null,
+    ): TransactionPage {
+        /* merchant matches the name as the reader sees it: the merchant name
+           where Plaid has one, the bank's own description otherwise. */
+        val filter = (if (bucket != null) "&bucket=${q(bucket)}" else "") +
+            (if (!merchant.isNullOrBlank()) "&merchant=${q(merchant.trim())}" else "")
         return TransactionPage.from(
             request("GET", "/api/transactions?range=${q(range)}$filter&limit=$limit&offset=$offset"),
         )
@@ -234,6 +243,8 @@ data class Transaction(
     val amount: Long,
     val pending: Boolean,
     val category: String,
+    /** A filename for /api/logo, never a URL; null when Plaid has no art. */
+    val logo: String?,
 ) {
     companion object {
         fun from(o: JSONObject) = Transaction(
@@ -243,6 +254,7 @@ data class Transaction(
             amount = o.optLong("amount"),
             pending = o.optBoolean("pending"),
             category = o.optString("category"),
+            logo = if (o.isNull("logo")) null else o.optString("logo").ifBlank { null },
         )
     }
 }

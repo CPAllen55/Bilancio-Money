@@ -14,9 +14,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +35,7 @@ import com.bilanciomoney.bilancio.Transaction
 import com.bilanciomoney.bilancio.TransactionPage
 import com.bilanciomoney.bilancio.asMoney
 import com.bilanciomoney.bilancio.ui.theme.Positive
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
 
@@ -52,7 +55,41 @@ fun TransactionsScreen(
     onPeriod: (Period) -> Unit,
     bucket: Bucket?,
     onClearBucket: () -> Unit,
-) = Loader(period.key to bucket, { Bilancio.transactions(period.key, bucket?.slug) }) { first: TransactionPage, _ ->
+) {
+    var typed by remember { mutableStateOf("") }
+    var search by remember { mutableStateOf("") }
+    /* Searched after a pause in typing, not on every keystroke: each search is
+       a query over the whole period's ledger. */
+    LaunchedEffect(typed) { delay(350); search = typed.trim() }
+
+    Column(Modifier.fillMaxSize()) {
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
+            PeriodBar(period, onPeriod)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = typed,
+                onValueChange = { typed = it },
+                placeholder = { Text("Search merchants") },
+                singleLine = true,
+                trailingIcon = {
+                    if (typed.isNotEmpty()) TextButton(onClick = { typed = "" }) { Text("✕") }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (bucket != null) {
+                Spacer(Modifier.height(8.dp))
+                AssistChip(onClick = onClearBucket, label = { Text("${bucket.label}  ✕") })
+            }
+        }
+        Ledger(period, bucket, search)
+    }
+}
+
+@Composable
+private fun Ledger(period: Period, bucket: Bucket?, search: String) = Loader(
+    Triple(period.key, bucket, search),
+    { Bilancio.transactions(period.key, bucket?.slug, merchant = search) },
+) { first: TransactionPage, _ ->
     var rows by remember(first) { mutableStateOf(first.rows) }
     var loading by remember(first) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -60,13 +97,7 @@ fun TransactionsScreen(
 
     LazyColumn(Modifier.fillMaxSize()) {
         item {
-            Column(Modifier.padding(16.dp)) {
-                PeriodBar(period, onPeriod)
-                if (bucket != null) {
-                    Spacer(Modifier.height(8.dp))
-                    AssistChip(onClick = onClearBucket, label = { Text("${bucket.label}  ✕") })
-                }
-                Spacer(Modifier.height(8.dp))
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(
                     "${first.total} transactions · in ${first.moneyIn.asMoney(false)} · out ${first.moneyOut.asMoney(false)}",
                     style = MaterialTheme.typography.bodySmall,
@@ -76,7 +107,13 @@ fun TransactionsScreen(
         }
 
         if (rows.isEmpty()) {
-            item { Text("Nothing here yet.", Modifier.padding(16.dp)) }
+            item {
+                Text(
+                    if (search.isNotEmpty()) "Nothing matching “$search” in this period. Try a shorter word, or a wider period."
+                    else "Nothing here yet.",
+                    Modifier.padding(16.dp),
+                )
+            }
         }
 
         rows.groupBy { it.date }.forEach { (date, dayRows) ->
@@ -98,7 +135,7 @@ fun TransactionsScreen(
                     onClick = {
                         loading = true
                         scope.launch {
-                            runCatching { Bilancio.transactions(period.key, bucket?.slug, offset = rows.size) }
+                            runCatching { Bilancio.transactions(period.key, bucket?.slug, offset = rows.size, merchant = search) }
                                 .onSuccess { rows = rows + it.rows }
                             loading = false
                         }
@@ -118,8 +155,8 @@ private fun TransactionRow(t: Transaction, category: com.bilanciomoney.bilancio.
         Alignment.CenterVertically,
     ) {
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Dot(Color(category?.colour ?: 0xFF888888))
-            Spacer(Modifier.width(10.dp))
+            MerchantLogo(t.logo, t.name, Color(category?.colour ?: 0xFF888888))
+            Spacer(Modifier.width(12.dp))
             Column {
                 Text(t.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
@@ -139,5 +176,5 @@ private fun TransactionRow(t: Transaction, category: com.bilanciomoney.bilancio.
             color = if (t.amount > 0) Positive else MaterialTheme.colorScheme.onSurface,
         )
     }
-    HorizontalDivider(Modifier.padding(start = 36.dp))
+    HorizontalDivider(Modifier.padding(start = 60.dp))
 }
