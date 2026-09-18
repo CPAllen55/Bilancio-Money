@@ -62,6 +62,8 @@ data class BudgetRow(
     val pinned: Map<String, Long>,
     /** A figure typed for every month, or null when history decides. */
     val baselineOverride: Long?,
+    /** month -> cents spent in the same month a year earlier. */
+    val priorSpent: Map<String, Long>,
 )
 
 data class Budget(
@@ -88,6 +90,7 @@ data class Budget(
                         computed = r.optJSONObject("computed").centsMap(),
                         pinned = r.optJSONObject("pinned").centsMap(),
                         baselineOverride = if (r.isNull("baselineOverride")) null else r.optLong("baselineOverride"),
+                        priorSpent = r.optJSONObject("priorSpent").centsMap(),
                     )
                 },
                 incomePlan = income?.optJSONObject("plan").centsMap(),

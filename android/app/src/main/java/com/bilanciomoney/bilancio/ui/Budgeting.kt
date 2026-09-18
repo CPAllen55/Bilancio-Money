@@ -1,6 +1,13 @@
 package com.bilanciomoney.bilancio.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -179,7 +186,7 @@ fun BudgetingScreen() = Loader(Unit, { Bilancio.budget() to Bilancio.categories(
     }
 
     editing?.let { row ->
-        EditPlan(row, month, onDone = { changed -> editing = null; if (changed) reload() })
+        EditPlan(row, b.months, b.currentMonth, month, onDone = { changed -> editing = null; if (changed) reload() })
     }
 }
 
@@ -188,11 +195,16 @@ fun BudgetingScreen() = Loader(Unit, { Bilancio.budget() to Bilancio.categories(
  * what history suggests. The same three edits the web's Budgeting makes, sent
  * to the same endpoint, so a change here is the change everywhere.
  *
+ * With the year beside the box, as on the iPhone: a figure typed alone says
+ * nothing about whether it is generous or impossible, and twelve bars say both
+ * at a glance. Tapping a bar moves the edit to that month.
+ *
  * Whole dollars, as on the web: a budget is not kept to the cent.
  */
 @Composable
-private fun EditPlan(row: BudgetRow, month: String, onDone: (changed: Boolean) -> Unit) {
+private fun EditPlan(row: BudgetRow, months: List<String>, currentMonth: String, startMonth: String, onDone: (changed: Boolean) -> Unit) {
     val scope = rememberCoroutineScope()
+    var month by remember(row) { mutableStateOf(startMonth) }
     val now = row.plan[month] ?: 0L
     val suggested = row.computed[month] ?: 0L
     var typed by remember(row, month) { mutableStateOf((now / 100).toString()) }
@@ -215,7 +227,9 @@ private fun EditPlan(row: BudgetRow, month: String, onDone: (changed: Boolean) -
         onDismissRequest = { if (!saving) onDone(false) },
         title = { Text(row.label) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                PlanHistoryChart(row, months, currentMonth, month, onPick = { month = it })
+                Spacer(Modifier.height(12.dp))
                 Text("Your history suggests ${suggested.asMoney(false)} for $label.",
                     style = MaterialTheme.typography.bodyMedium)
                 if (row.baselineOverride != null) {
@@ -227,7 +241,7 @@ private fun EditPlan(row: BudgetRow, month: String, onDone: (changed: Boolean) -
                 OutlinedTextField(
                     value = typed,
                     onValueChange = { typed = it.filter { c -> c.isDigit() }.take(7) },
-                    label = { Text("New plan, in dollars") },
+                    label = { Text("Plan for $label, in dollars") },
                     prefix = { Text("$") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -267,6 +281,102 @@ private fun EditPlan(row: BudgetRow, month: String, onDone: (changed: Boolean) -
         confirmButton = {},
         dismissButton = { TextButton(onClick = { onDone(false) }, enabled = !saving) { Text("Cancel") } },
     )
+}
+
+/**
+ * The year for one subcategory: what each finished month cost, faded, and what
+ * each month to come is planned at, solid -- the iPhone's PlanHistoryChart.
+ * Weight means planned, because this is where a plan is set: the months already
+ * spent are the evidence behind it.
+ *
+ * A dashed line marks the average of the months already spent, which is the
+ * figure most people budget against, and the same months a year earlier are
+ * totalled beneath when there is a record of them.
+ */
+@Composable
+private fun PlanHistoryChart(
+    row: BudgetRow,
+    months: List<String>,
+    currentMonth: String,
+    picked: String,
+    onPick: (String) -> Unit,
+) {
+    val colour = Color(row.colour)
+    val spentMonths = months.filter { it < currentMonth && it in row.spent }
+    val amounts = months.map { m -> if (m < currentMonth && m in row.spent) row.spent[m] ?: 0L else row.plan[m] ?: 0L }
+    val average = spentMonths.map { row.spent[it] ?: 0L }.let { if (it.isEmpty()) null else it.sum() / it.size }
+    val top = maxOf(amounts.maxOrNull() ?: 0L, average ?: 0L, 1L).toFloat()
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    val ink = MaterialTheme.colorScheme.onSurfaceVariant
+
+    val i = months.indexOf(picked).coerceAtLeast(0)
+    val pickedDone = picked < currentMonth && picked in row.spent
+    Text(
+        YearMonth.parse(picked).month.getDisplayName(TextStyle.SHORT, Locale.getDefault()) + ": " +
+            (amounts.getOrNull(i) ?: 0L).asMoney(false) + if (pickedDone) " spent" else " planned",
+        style = MaterialTheme.typography.labelLarge,
+        color = colour,
+    )
+    Spacer(Modifier.height(4.dp))
+    Canvas(
+        Modifier.fillMaxWidth().height(140.dp).pointerInput(months) {
+            detectTapGestures { pos ->
+                val band = size.width / months.size
+                onPick(months[(pos.x / band).toInt().coerceIn(0, months.lastIndex)])
+            }
+        },
+    ) {
+        val band = size.width / months.size
+        val barW = band * 0.62f
+        amounts.forEachIndexed { k, v ->
+            val m = months[k]
+            if (m == picked) {
+                drawRoundRect(track, Offset(k * band, 0f), Size(band, size.height), CornerRadius(6f))
+            }
+            val h = size.height * (v / top)
+            val done = m < currentMonth && m in row.spent
+            drawRoundRect(
+                colour.copy(alpha = if (done) 0.35f else 1f),
+                Offset(k * band + (band - barW) / 2, size.height - h),
+                Size(barW, h),
+                CornerRadius(3f),
+            )
+        }
+        if (average != null && average > 0) {
+            val y = size.height - size.height * (average / top)
+            drawLine(
+                ink, Offset(0f, y), Offset(size.width, y), strokeWidth = 2f,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f)),
+            )
+        }
+    }
+    Row(Modifier.fillMaxWidth()) {
+        months.forEach { m ->
+            Text(
+                YearMonth.parse(m).month.getDisplayName(TextStyle.NARROW, Locale.getDefault()),
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (m == picked) colour else ink,
+            )
+        }
+    }
+    Spacer(Modifier.height(4.dp))
+    Text(
+        "Faded is what was spent; solid is the plan. Tap a month to plan it." +
+            (average?.let { " Dashed line: ${it.asMoney(false)} average spent so far this year." } ?: ""),
+        style = MaterialTheme.typography.bodySmall,
+        color = ink,
+    )
+    /* Absent rather than zero when history does not reach back: a year-ago
+       total of $0 built from months with no record reads as spending nothing. */
+    val prior = row.priorSpent.values.sum()
+    if (prior > 0) {
+        Text(
+            "${prior.asMoney(false)} in the same months a year ago.",
+            style = MaterialTheme.typography.bodySmall,
+            color = ink,
+        )
+    }
 }
 
 @Composable
