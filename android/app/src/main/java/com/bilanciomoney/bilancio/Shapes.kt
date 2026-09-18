@@ -20,6 +20,8 @@ data class TrendMonth(
     /** Spending by parent category. Nine stacked segments read as a shape;
         twenty-two read as noise, which is why the server rolls them up. */
     val byParent: Map<String, Long>,
+    /** The same spending by subcategory, for a category that has been opened. */
+    val byCategory: Map<String, Long>,
 ) {
     companion object {
         fun from(o: JSONObject) = TrendMonth(
@@ -27,6 +29,7 @@ data class TrendMonth(
             income = o.optLong("income"),
             expense = o.optLong("expense"),
             byParent = o.optJSONObject("byParent").centsMap(),
+            byCategory = o.optJSONObject("byCategory").centsMap(),
         )
     }
 }

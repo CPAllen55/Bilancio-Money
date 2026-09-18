@@ -1,5 +1,6 @@
 package com.bilanciomoney.bilancio.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -14,12 +15,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -35,23 +38,28 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.bilanciomoney.bilancio.Category
 import com.bilanciomoney.bilancio.Bilancio
 import com.bilanciomoney.bilancio.Trend
+import com.bilanciomoney.bilancio.TrendMonth
 import com.bilanciomoney.bilancio.asMoney
 import com.bilanciomoney.bilancio.ui.theme.Negative
 import com.bilanciomoney.bilancio.ui.theme.Positive
+import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
 /**
  * Spending month by month, stacked by category, with the month a year earlier
- * under each column's figures -- the comparison the web Trend and the iPhone
- * make, because "is this a lot?" is only answered against a like month.
+ * under each figure -- the comparison the web Trend and the iPhone make,
+ * because "is this a lot?" is only answered against a like month.
  *
- * Tapping a column picks it; the card beneath breaks that month down.
+ * Tapping a column picks a month. Tapping a category opens it: the bars then
+ * stack its subcategories, and the breakdown lists them, which is the web's
+ * drill-down. Back, or "All categories", closes it again.
  */
 @Composable
-fun TrendScreen(onCategory: (slug: String, label: String, month: java.time.YearMonth) -> Unit) {
+fun TrendScreen(onCategory: (slug: String, label: String, month: YearMonth) -> Unit) {
     var months by remember { mutableIntStateOf(12) }
     Column(Modifier.fillMaxSize()) {
         val options = listOf(6, 12, 24)
@@ -69,24 +77,42 @@ fun TrendScreen(onCategory: (slug: String, label: String, month: java.time.YearM
 }
 
 @Composable
-private fun TrendContent(t: Trend, onCategory: (String, String, java.time.YearMonth) -> Unit) {
+private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Unit) {
     if (t.series.isEmpty()) {
         Text("Nothing to chart yet.", Modifier.padding(16.dp)); return
     }
     var picked by remember(t) { mutableIntStateOf(t.series.lastIndex) }
-    val parents = remember(t) {
-        t.categories.filter { it.parentSlug == null && it.kind == "spend" }.associateBy { it.slug }
+    /* The category that has been opened, or null for all of them. */
+    var focus by remember(t) { mutableStateOf<Category?>(null) }
+    BackHandler(enabled = focus != null) { focus = null }
+
+    val bySlug = remember(t) { t.categories.associateBy { it.slug } }
+    val parents = remember(t) { t.categories.filter { it.parentSlug == null && it.kind == "spend" } }
+
+    /* What is stacked: the parents, or the opened category's subcategories. */
+    val slices: List<Category> = focus?.let { f -> t.categories.filter { it.parentSlug == f.slug } } ?: parents
+    val valueOf: (TrendMonth?, String) -> Long = { m, slug ->
+        if (m == null) 0L else if (focus == null) m.byParent[slug] ?: 0L else m.byCategory[slug] ?: 0L
     }
-    /* The same order in every column, largest overall first, so a category
-       sits in the same place month after month and a change in its height is
-       the thing that stands out. */
-    val order = remember(t) {
-        parents.keys.sortedByDescending { slug -> t.series.sumOf { it.byParent[slug] ?: 0L } }
-    }
-    val top = maxOf(t.series.maxOf { it.expense }, 1L).toFloat()
+    /* One fixed order in every column, largest overall first, so a slice sits
+       in the same place month after month and a change in height stands out. */
+    val order = slices.sortedByDescending { c -> t.series.sumOf { valueOf(it, c.slug) } }
+    val columnTotal: (TrendMonth) -> Long = { m -> order.sumOf { valueOf(m, it.slug) } }
+    val top = maxOf(t.series.maxOf(columnTotal), 1L).toFloat()
     val track = MaterialTheme.colorScheme.surfaceVariant
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+        focus?.let { f ->
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                AssistChip(onClick = { focus = null }, label = { Text("‹ All categories") })
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Dot(Color(f.colour)); Spacer(Modifier.width(6.dp))
+                    Text(f.label, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+        }
+
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp)) {
                 Canvas(
@@ -105,12 +131,12 @@ private fun TrendContent(t: Trend, onCategory: (String, String, java.time.YearMo
                             drawRoundRect(track, Offset(i * band, 0f), Size(band, size.height), CornerRadius(6f))
                         }
                         var y = size.height
-                        order.forEach { slug ->
-                            val v = m.byParent[slug] ?: 0L
+                        order.forEach { c ->
+                            val v = valueOf(m, c.slug)
                             if (v <= 0) return@forEach
                             val h = size.height * (v / top)
                             y -= h
-                            drawRect(Color(parents[slug]!!.colour), Offset(x, y), Size(barW, h))
+                            drawRect(Color(c.colour), Offset(x, y), Size(barW, h))
                         }
                     }
                 }
@@ -135,35 +161,52 @@ private fun TrendContent(t: Trend, onCategory: (String, String, java.time.YearMo
         SectionTitle(m.month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()) + " " + m.month.year)
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
-                Figure("Spent", m.expense, before?.expense)
-                Figure("Came in", m.income, before?.income)
-                val net = m.income - m.expense
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp), Arrangement.SpaceBetween) {
-                    Text("Net")
-                    Text(net.asMoney(false), fontWeight = FontWeight.SemiBold, color = if (net < 0) Negative else Positive)
+                val f = focus
+                if (f != null) {
+                    Figure("${f.label} spent", columnTotal(m), before?.let(columnTotal))
+                    TextButton(onClick = { onCategory(f.slug, f.label, m.month) }) {
+                        Text("See its transactions this month ›")
+                    }
+                } else {
+                    Figure("Spent", m.expense, before?.expense)
+                    Figure("Came in", m.income, before?.income)
+                    val net = m.income - m.expense
+                    Row(Modifier.fillMaxWidth().padding(top = 6.dp), Arrangement.SpaceBetween) {
+                        Text("Net")
+                        Text(net.asMoney(false), fontWeight = FontWeight.SemiBold, color = if (net < 0) Negative else Positive)
+                    }
                 }
             }
         }
 
-        SectionTitle("By category")
+        SectionTitle(if (focus == null) "By category — tap one to open it" else "By subcategory")
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(vertical = 4.dp)) {
-                order.filter { (m.byParent[it] ?: 0L) > 0 }.forEach { slug ->
-                    val cat = parents[slug]!!
-                    val v = m.byParent[slug] ?: 0L
-                    val was = before?.byParent?.get(slug)
+                val shown = order.filter { valueOf(m, it.slug) > 0 || valueOf(before, it.slug) > 0 }
+                if (shown.isEmpty()) {
+                    Text("Nothing spent here this month.", Modifier.padding(16.dp))
+                }
+                shown.forEach { c ->
+                    val v = valueOf(m, c.slug)
+                    val was = valueOf(before, c.slug)
+                    val opensSubcategories = focus == null && t.categories.any { it.parentSlug == c.slug }
                     Row(
-                        Modifier.fillMaxWidth().clickable { onCategory(slug, cat.label, m.month) }
+                        Modifier.fillMaxWidth()
+                            .clickable {
+                                if (opensSubcategories) focus = c
+                                else onCategory(c.slug, c.label, m.month)
+                            }
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         Arrangement.SpaceBetween,
                         Alignment.CenterVertically,
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Dot(Color(cat.colour)); Spacer(Modifier.width(8.dp)); Text(cat.label)
+                            Dot(Color(c.colour)); Spacer(Modifier.width(8.dp))
+                            Text(c.label + if (opensSubcategories) "  ›" else "")
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text(v.asMoney(false), fontWeight = FontWeight.Medium)
-                            if (was != null && was > 0) {
+                            if (was > 0) {
                                 Text(
                                     "${was.asMoney(false)} a year ago",
                                     style = MaterialTheme.typography.bodySmall,
