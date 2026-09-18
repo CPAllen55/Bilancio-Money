@@ -54,9 +54,9 @@ import java.util.Locale
  * under each figure -- the comparison the web Trend and the iPhone make,
  * because "is this a lot?" is only answered against a like month.
  *
- * Tapping a column picks a month. Tapping a category opens it: the bars then
- * stack its subcategories, and the breakdown lists them, which is the web's
- * drill-down. Back, or "All categories", closes it again.
+ * Tapping a column picks a month. Tapping a category expands it in place (+/-)
+ * to show its subcategories, and the chart follows, stacking those instead;
+ * tapping it again, or Back, closes it. A subcategory opens its transactions.
  */
 @Composable
 fun TrendScreen(onCategory: (slug: String, label: String, month: YearMonth) -> Unit) {
@@ -104,7 +104,7 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         focus?.let { f ->
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                AssistChip(onClick = { focus = null }, label = { Text("‹ All categories") })
+                AssistChip(onClick = { focus = null }, label = { Text("Show all categories") })
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Dot(Color(f.colour)); Spacer(Modifier.width(6.dp))
                     Text(f.label, fontWeight = FontWeight.SemiBold)
@@ -164,9 +164,6 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
                 val f = focus
                 if (f != null) {
                     Figure("${f.label} spent", columnTotal(m), before?.let(columnTotal))
-                    TextButton(onClick = { onCategory(f.slug, f.label, m.month) }) {
-                        Text("See its transactions this month ›")
-                    }
                 } else {
                     Figure("Spent", m.expense, before?.expense)
                     Figure("Came in", m.income, before?.income)
@@ -179,46 +176,89 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
             }
         }
 
-        SectionTitle(if (focus == null) "By category — tap one to open it" else "By subcategory")
+        SectionTitle("By category")
+        /* Every category, always, in the chart's order; the open one shows its
+           subcategories beneath it, as Budget and the web's +/- rows do. */
+        val parentOrder = parents.sortedByDescending { c -> t.series.sumOf { it.byParent[c.slug] ?: 0L } }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(vertical = 4.dp)) {
-                val shown = order.filter { valueOf(m, it.slug) > 0 || valueOf(before, it.slug) > 0 }
+                val shown = parentOrder.filter { (m.byParent[it.slug] ?: 0L) > 0 || (before?.byParent?.get(it.slug) ?: 0L) > 0 }
                 if (shown.isEmpty()) {
-                    Text("Nothing spent here this month.", Modifier.padding(16.dp))
+                    Text("Nothing spent this month.", Modifier.padding(16.dp))
                 }
                 shown.forEach { c ->
-                    val v = valueOf(m, c.slug)
-                    val was = valueOf(before, c.slug)
-                    val opensSubcategories = focus == null && t.categories.any { it.parentSlug == c.slug }
-                    Row(
-                        Modifier.fillMaxWidth()
-                            .clickable {
-                                if (opensSubcategories) focus = c
-                                else onCategory(c.slug, c.label, m.month)
-                            }
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        Arrangement.SpaceBetween,
-                        Alignment.CenterVertically,
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Dot(Color(c.colour)); Spacer(Modifier.width(8.dp))
-                            Text(c.label + if (opensSubcategories) "  ›" else "")
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(v.asMoney(false), fontWeight = FontWeight.Medium)
-                            if (was > 0) {
-                                Text(
-                                    "${was.asMoney(false)} a year ago",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    val kids = t.categories.filter { it.parentSlug == c.slug }
+                    val open = focus?.slug == c.slug
+                    BreakdownRow(
+                        label = c.label, colour = Color(c.colour),
+                        now = m.byParent[c.slug] ?: 0L, yearAgo = before?.byParent?.get(c.slug) ?: 0L,
+                        toggle = if (kids.isEmpty()) null else open,
+                        indent = false,
+                        onClick = {
+                            if (kids.isEmpty()) onCategory(c.slug, c.label, m.month)
+                            else focus = if (open) null else c
+                        },
+                    )
+                    if (open) {
+                        kids.sortedByDescending { m.byCategory[it.slug] ?: 0L }
+                            .filter { (m.byCategory[it.slug] ?: 0L) > 0 || (before?.byCategory?.get(it.slug) ?: 0L) > 0 }
+                            .forEach { k ->
+                                BreakdownRow(
+                                    label = k.label, colour = Color(k.colour),
+                                    now = m.byCategory[k.slug] ?: 0L, yearAgo = before?.byCategory?.get(k.slug) ?: 0L,
+                                    toggle = null, indent = true,
+                                    onClick = { onCategory(k.slug, k.label, m.month) },
                                 )
                             }
-                        }
+                        TextButton(
+                            onClick = { onCategory(c.slug, c.label, m.month) },
+                            modifier = Modifier.padding(start = 36.dp),
+                        ) { Text("All ${c.label} transactions this month ›") }
                     }
                 }
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun BreakdownRow(
+    label: String,
+    colour: Color,
+    now: Long,
+    yearAgo: Long,
+    toggle: Boolean?,
+    indent: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick)
+            .padding(start = if (indent) 44.dp else 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+        Arrangement.SpaceBetween,
+        Alignment.CenterVertically,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (!indent) {
+                Text(
+                    when (toggle) { true -> "−"; false -> "+"; null -> "" },
+                    Modifier.width(18.dp),
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Dot(colour); Spacer(Modifier.width(8.dp))
+            Text(label, style = if (indent) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge)
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(now.asMoney(false), fontWeight = if (indent) FontWeight.Normal else FontWeight.Medium)
+            if (yearAgo > 0) {
+                Text(
+                    "${yearAgo.asMoney(false)} a year ago",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
