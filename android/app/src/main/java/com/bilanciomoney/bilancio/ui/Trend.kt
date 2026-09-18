@@ -84,6 +84,7 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
     var picked by remember(t) { mutableIntStateOf(t.series.lastIndex) }
     /* The category that has been opened, or null for all of them. */
     var focus by remember(t) { mutableStateOf<Category?>(null) }
+    var listing by remember(t) { mutableStateOf<String?>(null) }
     BackHandler(enabled = focus != null) { focus = null }
 
     val bySlug = remember(t) { t.categories.associateBy { it.slug } }
@@ -188,37 +189,98 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
                 }
                 shown.forEach { c ->
                     val kids = t.categories.filter { it.parentSlug == c.slug }
-                    val open = focus?.slug == c.slug
+                    val open = if (kids.isEmpty()) listing == c.slug else focus?.slug == c.slug
                     BreakdownRow(
                         label = c.label, colour = Color(c.colour),
                         now = m.byParent[c.slug] ?: 0L, yearAgo = before?.byParent?.get(c.slug) ?: 0L,
-                        toggle = if (kids.isEmpty()) null else open,
+                        toggle = open,
                         indent = false,
                         onClick = {
-                            if (kids.isEmpty()) onCategory(c.slug, c.label, m.month)
-                            else focus = if (open) null else c
+                            /* A category with no subcategories opens straight to its
+                               transactions; one with them opens its subcategories. */
+                            if (kids.isEmpty()) listing = if (open) null else c.slug
+                            else { focus = if (open) null else c; listing = null }
                         },
                     )
-                    if (open) {
+                    if (open && kids.isEmpty()) {
+                        MonthTransactions(c.slug, m.month, Color(c.colour))
+                    }
+                    if (open && kids.isNotEmpty()) {
                         kids.sortedByDescending { m.byCategory[it.slug] ?: 0L }
                             .filter { (m.byCategory[it.slug] ?: 0L) > 0 || (before?.byCategory?.get(it.slug) ?: 0L) > 0 }
                             .forEach { k ->
+                                val kidOpen = listing == k.slug
                                 BreakdownRow(
                                     label = k.label, colour = Color(k.colour),
                                     now = m.byCategory[k.slug] ?: 0L, yearAgo = before?.byCategory?.get(k.slug) ?: 0L,
-                                    toggle = null, indent = true,
-                                    onClick = { onCategory(k.slug, k.label, m.month) },
+                                    toggle = kidOpen, indent = true,
+                                    onClick = { listing = if (kidOpen) null else k.slug },
                                 )
+                                if (kidOpen) MonthTransactions(k.slug, m.month, Color(k.colour))
                             }
-                        TextButton(
-                            onClick = { onCategory(c.slug, c.label, m.month) },
-                            modifier = Modifier.padding(start = 36.dp),
-                        ) { Text("All ${c.label} transactions this month ›") }
                     }
                 }
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+/**
+ * One category's transactions for one month, listed where it was opened -- the
+ * iPhone's drill-down, which keeps the reader on the Trend rather than moving
+ * them to another tab to answer "what was that?".
+ *
+ * A month holds a few dozen at most for one subcategory; the first fifty are
+ * shown, and the rest is counted rather than hidden.
+ */
+@Composable
+private fun MonthTransactions(slug: String, month: YearMonth, tint: Color) {
+    val range = com.bilanciomoney.bilancio.Ranges.key(month, 1)
+    Column(Modifier.fillMaxWidth().padding(start = 34.dp, end = 12.dp, bottom = 8.dp)) {
+        Loader(slug to month, { Bilancio.transactions(range, bucket = slug, limit = 50) }) {
+            page: com.bilanciomoney.bilancio.TransactionPage, _ ->
+            if (page.rows.isEmpty()) {
+                Text("No transactions.", Modifier.padding(8.dp), style = MaterialTheme.typography.bodySmall)
+                return@Loader
+            }
+            Column {
+                page.rows.forEach { tx ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        Arrangement.SpaceBetween,
+                        Alignment.CenterVertically,
+                    ) {
+                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                            MerchantLogo(tx.logo, tx.name, tint, size = 26.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(tx.name, maxLines = 1, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    tx.date.format(java.time.format.DateTimeFormatter.ofPattern("MMM d")) +
+                                        if (tx.pending) " · pending" else "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        Text(
+                            tx.amount.asMoney(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (tx.amount > 0) Positive else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+                if (page.total > page.rows.size) {
+                    Text(
+                        "${page.total - page.rows.size} more this month",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -234,18 +296,17 @@ private fun BreakdownRow(
 ) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick)
-            .padding(start = if (indent) 44.dp else 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+            .padding(start = if (indent) 34.dp else 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
         Arrangement.SpaceBetween,
         Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!indent) {
-                Text(
-                    when (toggle) { true -> "−"; false -> "+"; null -> "" },
-                    Modifier.width(18.dp),
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            Text(
+                when (toggle) { true -> "−"; false -> "+"; null -> "" },
+                Modifier.width(18.dp),
+                fontWeight = FontWeight.Bold,
+                color = if (indent) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            )
             Dot(colour); Spacer(Modifier.width(8.dp))
             Text(label, style = if (indent) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge)
         }
