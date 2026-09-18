@@ -23,6 +23,9 @@ import androidx.compose.ui.Modifier
 import com.bilanciomoney.bilancio.ui.BanksScreen
 import com.bilanciomoney.bilancio.ui.BudgetingScreen
 import com.bilanciomoney.bilancio.ui.CalendarScreen
+import com.bilanciomoney.bilancio.ui.CategoriesScreen
+import com.bilanciomoney.bilancio.ui.ForecastScreen
+import com.bilanciomoney.bilancio.ui.NetWorthScreen
 import com.bilanciomoney.bilancio.ui.SubPage
 import com.bilanciomoney.bilancio.ui.TrendScreen
 import com.bilanciomoney.bilancio.ui.Bucket
@@ -55,7 +58,9 @@ private enum class Tab(val label: String) {
     Overview("Overview"), Trend("Trend"), Budgeting("Budget"), Transactions("Transactions"), More("More")
 }
 
-private enum class MorePage { Calendar, Banks }
+private enum class MorePage(val title: String) {
+    Calendar("Calendar"), Banks("Banks"), Forecast("Year ahead"), NetWorth("Net worth"), Categories("Categories")
+}
 
 /**
  * Signed out shows Clerk's own screen, which signs in and creates accounts
@@ -129,12 +134,16 @@ private fun SignedIn() {
                 })
                 Tab.Budgeting -> BudgetingScreen()
                 Tab.More -> when (morePage) {
-                    null -> MoreScreen(
-                        onCalendar = { morePage = MorePage.Calendar },
-                        onBanks = { morePage = MorePage.Banks },
-                    )
-                    MorePage.Calendar -> SubPage("Calendar", onBack = { morePage = null }) { CalendarScreen() }
-                    MorePage.Banks -> SubPage("Banks", onBack = { morePage = null }) { BanksScreen() }
+                    null -> MoreScreen(onOpen = { morePage = MorePage.valueOf(it) })
+                    else -> SubPage(morePage!!.title, onBack = { morePage = null }) {
+                        when (morePage!!) {
+                            MorePage.Calendar -> CalendarScreen()
+                            MorePage.Banks -> BanksScreen()
+                            MorePage.Forecast -> ForecastScreen()
+                            MorePage.NetWorth -> NetWorthScreen()
+                            MorePage.Categories -> CategoriesScreen()
+                        }
+                    }
                 }
             }
         }

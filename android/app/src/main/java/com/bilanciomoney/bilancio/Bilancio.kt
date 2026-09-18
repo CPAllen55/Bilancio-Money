@@ -229,6 +229,8 @@ data class Category(
     val colour: Long,
     val parentSlug: String?,
     val kind: String,
+    /** Bilancio's own, rather than one the user made; only theirs can be removed. */
+    val isSystem: Boolean = true,
 ) {
     companion object {
         fun from(o: JSONObject) = Category(
@@ -238,6 +240,7 @@ data class Category(
             colour = parseColour(o.optString("colour")),
             parentSlug = if (o.isNull("parentSlug")) null else o.optString("parentSlug").ifBlank { null },
             kind = o.optString("kind", "spend"),
+            isSystem = o.optBoolean("isSystem", true),
         )
 
         fun list(a: JSONArray?) = a.orEmpty().map(::from)

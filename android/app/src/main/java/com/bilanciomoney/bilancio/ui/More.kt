@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
  * checkout.
  */
 @Composable
-fun MoreScreen(onCalendar: () -> Unit, onBanks: () -> Unit) {
+fun MoreScreen(onOpen: (page: String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var billing by remember { mutableStateOf<Billing?>(null) }
@@ -59,9 +59,17 @@ fun MoreScreen(onCalendar: () -> Unit, onBanks: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Card(Modifier.fillMaxWidth()) {
             Column {
-                Link("Calendar  ›", onClick = onCalendar)
+                /* The iPhone's More, in its order: the places visited rather
+                   than watched. */
+                Link("Calendar  ›") { onOpen("Calendar") }
                 HorizontalDivider()
-                Link("Banks  ›", onClick = onBanks)
+                Link("Year ahead  ›") { onOpen("Forecast") }
+                HorizontalDivider()
+                Link("Net worth  ›") { onOpen("NetWorth") }
+                HorizontalDivider()
+                Link("Categories & rules  ›") { onOpen("Categories") }
+                HorizontalDivider()
+                Link("Banks  ›") { onOpen("Banks") }
             }
         }
 

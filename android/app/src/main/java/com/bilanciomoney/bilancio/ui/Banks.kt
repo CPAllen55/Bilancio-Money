@@ -65,6 +65,11 @@ private fun BanksContent(banks: Banks, onChanged: () -> Unit) {
     var message by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf<BankItem?>(null) }
+    /* Set while Link is open to repair a connection rather than make one. In
+       update mode the connection already exists and its token is still ours,
+       so the public token Link returns is NOT exchanged -- exchanging would
+       mint a second connection to the same bank. */
+    var repairing by remember { mutableStateOf<BankItem?>(null) }
 
     /* Link hands back a public token; the server swaps it for the real access
        token, then the history is pulled in rounds until the server says done. */
@@ -72,10 +77,14 @@ private fun BanksContent(banks: Banks, onChanged: () -> Unit) {
         when (result) {
             is LinkSuccess -> scope.launch {
                 busy = true
-                message = "Storing the connection…"
+                val repaired = repairing
+                repairing = null
+                message = if (repaired != null) "Signed back in. Catching up…" else "Storing the connection…"
                 runCatching {
-                    Bilancio.exchange(result.publicToken)
-                    message = "Linked. Pulling transactions…"
+                    if (repaired == null) {
+                        Bilancio.exchange(result.publicToken)
+                        message = "Linked. Pulling transactions…"
+                    }
                     Bilancio.syncAll { n -> message = "Pulling transactions… $n so far" }
                 }.onSuccess { r ->
                     message = if (r.pending.isNotEmpty())
@@ -85,7 +94,7 @@ private fun BanksContent(banks: Banks, onChanged: () -> Unit) {
                 }.onFailure { message = it.message }
                 busy = false
             }
-            is LinkExit -> message = result.error?.displayMessage ?: "Link closed."
+            is LinkExit -> { repairing = null; message = result.error?.displayMessage ?: "Link closed." }
         }
     }
 
@@ -114,12 +123,35 @@ private fun BanksContent(banks: Banks, onChanged: () -> Unit) {
                     }
                     val note = when {
                         item.closed -> "Closed — history kept, not syncing"
-                        item.needsSignIn -> "Needs you to sign in again (use the website for now)"
+                        item.needsSignIn -> "Needs you to sign in again"
                         item.awaitingFirstSync -> "Waiting for transactions"
                         else -> null
                     }
                     if (note != null) {
                         Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (item.needsSignIn && !item.closed) {
+                        /* Offered before Disconnect, and as the primary of the two:
+                           a bank asking for a fresh sign-in is repaired by signing
+                           in, not by throwing two years of history away. */
+                        Button(
+                            enabled = !busy,
+                            onClick = {
+                                scope.launch {
+                                    busy = true
+                                    message = "Opening ${item.institution}…"
+                                    runCatching { Bilancio.repairToken(item.id) }
+                                        .onSuccess { token ->
+                                            message = null
+                                            repairing = item
+                                            link.launch(Plaid.createPlaidLinkSession(context, linkTokenConfiguration { this.token = token }))
+                                        }
+                                        .onFailure { message = it.message }
+                                    busy = false
+                                }
+                            },
+                            modifier = Modifier.padding(top = 8.dp),
+                        ) { Text("Sign in again") }
                     }
                     item.accounts.forEach { a ->
                         Row(Modifier.fillMaxWidth().padding(top = 8.dp), Arrangement.SpaceBetween) {
