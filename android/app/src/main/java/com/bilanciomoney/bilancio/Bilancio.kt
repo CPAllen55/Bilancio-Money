@@ -109,6 +109,17 @@ object Bilancio {
 
     suspend fun budget(): Budget = Budget.from(request("GET", "/api/budget"))
 
+    /** One month set by hand, or put back to what history says (null). */
+    suspend fun pinMonth(slug: String, month: String, cents: Long?) {
+        request("PUT", "/api/budget", JSONObject().put("slug", slug).put("month", month)
+            .put("amount", cents ?: JSONObject.NULL))
+    }
+
+    /** Every month at one figure, or back to what history says (null). */
+    suspend fun setBaseline(slug: String, cents: Long?) {
+        request("PUT", "/api/budget", JSONObject().put("slug", slug).put("baseline", cents ?: JSONObject.NULL))
+    }
+
     /** Parents and their children, for screens whose own response carries only
         the leaves. */
     suspend fun categories(): List<Category> = Category.list(request("GET", "/api/categories").optJSONArray("categories"))

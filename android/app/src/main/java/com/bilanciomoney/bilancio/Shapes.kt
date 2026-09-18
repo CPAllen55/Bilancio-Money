@@ -56,6 +56,12 @@ data class BudgetRow(
     val plan: Map<String, Long>,
     /** month -> cents, for months already complete. */
     val spent: Map<String, Long>,
+    /** month -> cents: what history suggests, with nobody's hand on it. */
+    val computed: Map<String, Long>,
+    /** month -> cents, for months set by hand. */
+    val pinned: Map<String, Long>,
+    /** A figure typed for every month, or null when history decides. */
+    val baselineOverride: Long?,
 )
 
 data class Budget(
@@ -79,6 +85,9 @@ data class Budget(
                         slug = c.slug, label = c.label, colour = c.colour, parentSlug = c.parentSlug,
                         plan = r.optJSONObject("plan").centsMap(),
                         spent = r.optJSONObject("spent").centsMap(),
+                        computed = r.optJSONObject("computed").centsMap(),
+                        pinned = r.optJSONObject("pinned").centsMap(),
+                        baselineOverride = if (r.isNull("baselineOverride")) null else r.optLong("baselineOverride"),
                     )
                 },
                 incomePlan = income?.optJSONObject("plan").centsMap(),

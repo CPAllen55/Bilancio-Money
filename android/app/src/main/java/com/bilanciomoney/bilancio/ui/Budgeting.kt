@@ -13,7 +13,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.input.KeyboardType
+import kotlinx.coroutines.launch
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bilanciomoney.bilancio.Bilancio
 import com.bilanciomoney.bilancio.Budget
+import com.bilanciomoney.bilancio.BudgetRow
 import com.bilanciomoney.bilancio.Category
 import com.bilanciomoney.bilancio.asMoney
 import com.bilanciomoney.bilancio.ui.theme.Negative
@@ -46,11 +56,12 @@ import java.util.Locale
  * A month already over shows what was actually spent beside what was planned,
  * as the web's Budgeting does by default; a month still to come shows the plan.
  *
- * Read-only for now. Changing a plan is done on the website, which has the
- * whole editor -- baselines, single months, and putting a month back.
+ * Tapping a subcategory changes its plan -- one month, every month, or back to
+ * what history suggests -- through the same endpoint the web editor uses.
  */
 @Composable
-fun BudgetingScreen() = Loader(Unit, { Bilancio.budget() to Bilancio.categories() }) { (b, cats): Pair<Budget, List<Category>>, _ ->
+fun BudgetingScreen() = Loader(Unit, { Bilancio.budget() to Bilancio.categories() }) { (b, cats): Pair<Budget, List<Category>>, reload ->
+    var editing by remember { mutableStateOf<BudgetRow?>(null) }
     var month by remember(b) { mutableStateOf(b.currentMonth.takeIf { it in b.months } ?: b.months.lastOrNull().orEmpty()) }
     var open by remember { mutableStateOf(setOf<String>()) }
     val parents = remember(cats) { cats.filter { it.parentSlug == null && it.kind == "spend" } }
@@ -104,7 +115,9 @@ fun BudgetingScreen() = Loader(Unit, { Bilancio.budget() to Bilancio.categories(
                     val kids = b.rows.filter { it.parentSlug == p.slug }
                     val plan = kids.sumOf { it.plan[month] ?: 0L }
                     val spent = kids.sumOf { it.spent[month] ?: 0L }
-                    if (plan <= 0 && spent <= 0) return@forEach
+                    /* Kept even at nothing planned: a category with no plan yet is
+                       still somewhere a first plan can be set. */
+                    if (kids.isEmpty()) return@forEach
                     val expanded = p.slug in open
                     Column(
                         Modifier.fillMaxWidth()
@@ -127,16 +140,21 @@ fun BudgetingScreen() = Loader(Unit, { Bilancio.budget() to Bilancio.categories(
                         }
                     }
                     if (expanded) {
-                        kids.filter { (it.plan[month] ?: 0L) > 0 || (it.spent[month] ?: 0L) > 0 }.forEach { k ->
+                        /* Every subcategory, not only the ones with a figure: a plan of
+                           nothing is still somewhere a plan can be set. */
+                        kids.forEach { k ->
                             val kp = k.plan[month] ?: 0L
                             val ks = k.spent[month] ?: 0L
+                            val byHand = month in k.pinned || k.baselineOverride != null
                             Row(
-                                Modifier.fillMaxWidth().padding(start = 44.dp, end = 16.dp, top = 6.dp, bottom = 6.dp),
+                                Modifier.fillMaxWidth().clickable { editing = k }
+                                    .padding(start = 44.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
                                 Arrangement.SpaceBetween,
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Dot(Color(k.colour)); Spacer(Modifier.width(8.dp))
-                                    Text(k.label, style = MaterialTheme.typography.bodyMedium)
+                                    Text(k.label + (if (byHand) " · set by you" else "") + "  ✎",
+                                        style = MaterialTheme.typography.bodyMedium)
                                 }
                                 Text(
                                     if (done) "${ks.asMoney(false)} of ${kp.asMoney(false)}" else kp.asMoney(false),
@@ -153,12 +171,102 @@ fun BudgetingScreen() = Loader(Unit, { Bilancio.budget() to Bilancio.categories(
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            "To change a plan, use Budgeting on bilanciomoney.com. Changes there show here straight away.",
+            "Tap a subcategory to change its plan. Changes show on the website and the iPhone straight away.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(24.dp))
     }
+
+    editing?.let { row ->
+        EditPlan(row, month, onDone = { changed -> editing = null; if (changed) reload() })
+    }
+}
+
+/**
+ * Changing one subcategory's plan: this month only, every month, or back to
+ * what history suggests. The same three edits the web's Budgeting makes, sent
+ * to the same endpoint, so a change here is the change everywhere.
+ *
+ * Whole dollars, as on the web: a budget is not kept to the cent.
+ */
+@Composable
+private fun EditPlan(row: BudgetRow, month: String, onDone: (changed: Boolean) -> Unit) {
+    val scope = rememberCoroutineScope()
+    val now = row.plan[month] ?: 0L
+    val suggested = row.computed[month] ?: 0L
+    var typed by remember(row, month) { mutableStateOf((now / 100).toString()) }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val cents = typed.filter { it.isDigit() }.toLongOrNull()?.times(100)
+    val label = YearMonth.parse(month).month.getDisplayName(TextStyle.FULL, Locale.getDefault())
+    val byHand = month in row.pinned || row.baselineOverride != null
+
+    fun save(action: suspend () -> Unit) {
+        saving = true; error = null
+        scope.launch {
+            runCatching { action() }
+                .onSuccess { onDone(true) }
+                .onFailure { error = it.message; saving = false }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDone(false) },
+        title = { Text(row.label) },
+        text = {
+            Column {
+                Text("Your history suggests ${suggested.asMoney(false)} for $label.",
+                    style = MaterialTheme.typography.bodyMedium)
+                if (row.baselineOverride != null) {
+                    Text("You set every month to ${row.baselineOverride.asMoney(false)}.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = typed,
+                    onValueChange = { typed = it.filter { c -> c.isDigit() }.take(7) },
+                    label = { Text("New plan, in dollars") },
+                    prefix = { Text("$") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    enabled = !saving && cents != null,
+                    onClick = { save { Bilancio.pinMonth(row.slug, month, cents) } },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Set $label only") }
+                OutlinedButton(
+                    enabled = !saving && cents != null && cents > 0,
+                    onClick = { save { Bilancio.setBaseline(row.slug, cents) } },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Set every month") }
+                if (byHand) {
+                    TextButton(
+                        enabled = !saving,
+                        onClick = {
+                            save {
+                                if (month in row.pinned) Bilancio.pinMonth(row.slug, month, null)
+                                else Bilancio.setBaseline(row.slug, null)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (month in row.pinned) "Put $label back to ${suggested.asMoney(false)}"
+                             else "Put every month back to what history says")
+                    }
+                }
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = Negative, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = { onDone(false) }, enabled = !saving) { Text("Cancel") } },
+    )
 }
 
 @Composable
