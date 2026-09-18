@@ -26,6 +26,7 @@ import com.bilanciomoney.bilancio.Summary
 import com.bilanciomoney.bilancio.asMoney
 import com.bilanciomoney.bilancio.ui.theme.Negative
 import com.bilanciomoney.bilancio.ui.theme.Positive
+import java.time.LocalDate
 
 /**
  * Where the period stands: income, spending and net against the plan, then each
@@ -58,39 +59,7 @@ fun OverviewScreen(
             return@Loader
         }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                Text(s.label, style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(12.dp))
-                Standing("Income", s.income, s.budgetIncome, Positive)
-                Standing("Expenses", s.expense, s.budgetExpense, Negative)
-                /* Net can go below zero; the bar shows its size, and the colour
-                   says which side of zero it is on. */
-                Standing(
-                    "Net balance",
-                    s.net,
-                    s.budgetNet?.takeIf { it > 0 },
-                    if (s.net < 0) Negative else Positive,
-                    signed = true,
-                )
-                if (s.perDay != null && (s.daysLeft ?: 0) > 0) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "${s.perDay.asMoney(false)} a day for the ${s.daysLeft} days left.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-                if (s.previousExpense != null && s.comparison.isNotBlank()) {
-                    val diff = s.expense - s.previousExpense
-                    Text(
-                        (if (diff >= 0) "${diff.asMoney(false)} more" else "${(-diff).asMoney(false)} less") +
-                            " spent than ${s.comparison}.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
+        StandingCard(s)
 
         SectionTitle("Against the plan")
         val parents = s.categories.filter { it.parentSlug == null && it.kind == "spend" }
@@ -137,25 +106,76 @@ fun OverviewScreen(
     }
 }
 
+/**
+ * The answer first: what was kept, or what was overspent, then the two figures
+ * it is worked out from. The iPhone's StandingCard and the web Overview card,
+ * line for line: the net against its plan as a bar, the net itself large, a
+ * sentence about the days left, income and expenses as captioned bars, and
+ * where spending stands against its budget.
+ */
 @Composable
-private fun Standing(label: String, amount: Long, plan: Long?, colour: Color, signed: Boolean = false) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-            Text(label)
+private fun StandingCard(s: Summary) {
+    val net = s.net
+    val overspent = net < 0
+    /* 0 is "no plan", as the Worker treats it: a budget of zero is the absence
+       of the information, not a plan to earn or spend nothing. */
+    val plannedIncome = maxOf(0L, s.budgetIncome ?: 0L)
+    val plannedExpense = maxOf(0L, s.budgetExpense ?: 0L)
+    val plannedNet = if (plannedIncome > 0 || plannedExpense > 0) s.budgetNet else null
+    val noPlanScale = maxOf(s.income, s.expense)
+
+    /* From the range's own end date rather than a day count: a span reports
+       no days left by construction, even one ending in the running month. */
+    val ended = s.rangeEnd.isNotBlank() && s.rangeEnd < LocalDate.now().toString()
+    val daysLeft = s.daysLeft ?: 0
+    val plural = if (daysLeft == 1) "" else "s"
+    val subline = when {
+        ended -> "This period is complete."
+        daysLeft <= 0 -> if (overspent) "${(-net).asMoney(false)} more out than in so far." else "${net.asMoney(false)} kept so far."
+        overspent -> "${(-net).asMoney(false)} more out than in, with $daysLeft day$plural still to go."
+        else -> "About ${(s.perDay ?: 0).asMoney(false)} a day for the $daysLeft day$plural left."
+    }
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text(s.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(6.dp))
+            ProportionBar(
+                label = null, amount = net, planned = plannedNet ?: 0, fallbackScale = noPlanScale,
+                tint = if (overspent) Negative else Positive, verb = "kept", incomeSide = true,
+            )
+            Spacer(Modifier.height(6.dp))
             Text(
-                amount.asMoney(false),
+                net.asMoney(false),
+                style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.SemiBold,
-                color = if (signed && amount < 0) Negative else MaterialTheme.colorScheme.onSurface,
+                color = if (overspent) Negative else Positive,
+                maxLines = 1,
             )
-        }
-        Spacer(Modifier.height(4.dp))
-        PlanBar(kotlin.math.abs(amount), plan, colour)
-        if (plan != null) {
-            Text(
-                "Budget ${plan.asMoney(false)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Text(subline, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(14.dp))
+            ProportionBar(
+                label = "Income", amount = s.income, planned = plannedIncome, fallbackScale = noPlanScale,
+                tint = Positive, verb = "earned", incomeSide = true,
             )
+            Spacer(Modifier.height(12.dp))
+            ProportionBar(
+                label = "Expenses", amount = s.expense, planned = plannedExpense, fallbackScale = noPlanScale,
+                tint = Negative, verb = "spent", incomeSide = false,
+            )
+            /* Against the budget, not against elapsed days: rent clears on the
+               1st, and a pace indicator that cries wolf for a week every month
+               teaches people to ignore it. */
+            if (plannedExpense > 0) {
+                val over = s.expense - plannedExpense
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    if (over > 0) "⚠  ${over.asMoney(false)} over budget"
+                    else "✓  ${(-over).asMoney(false)} left in budget to spend",
+                    color = if (over > 0) Negative else Positive,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
     }
 }

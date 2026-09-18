@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -37,8 +38,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.bilanciomoney.bilancio.Ranges
+import com.bilanciomoney.bilancio.asMoney
 import java.time.YearMonth
 
 /** The period every money screen shows: a month, and how many months back. */
@@ -159,6 +162,82 @@ private fun TickAt(fraction: Float) {
         Box(
             Modifier.offset(x = x).width(3.dp).fillMaxHeight()
                 .background(MaterialTheme.colorScheme.onSurface),
+        )
+    }
+}
+
+/**
+ * A thick bar with its figure written inside it -- "$5,200 earned of $7,000" --
+ * and the plan marked by a tick that overhangs the bar, green on the income side
+ * and red on the spending side, as the web draws them.
+ *
+ * The caption is drawn twice, once over the track and once over the fill,
+ * clipped to the fill, so it stays readable wherever the fill ends.
+ *
+ * Net can be negative: in deficit the fill is the size of the loss against the
+ * plan, in red.
+ */
+@Composable
+fun ProportionBar(
+    label: String?,
+    amount: Long,
+    planned: Long,
+    fallbackScale: Long,
+    tint: Color,
+    verb: String,
+    incomeSide: Boolean,
+) {
+    val magnitude = kotlin.math.abs(amount)
+    val scale = maxOf(if (planned > 0) maxOf(magnitude, planned) else fallbackScale, 1L).toFloat()
+    val fill = (magnitude / scale).coerceIn(0f, 1f)
+    val mark = if (planned > 0) (planned / scale).coerceIn(0f, 1f) else null
+    val caption = if (planned > 0) "${amount.asMoney(false)} $verb of ${planned.asMoney(false)}"
+        else "${amount.asMoney(false)} $verb"
+    val markColour = if (incomeSide) Color(0xFF3FE08F) else Color(0xFFFF7F93)
+
+    Column(Modifier.fillMaxWidth()) {
+        if (label != null) {
+            Text(
+                label.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
+        }
+        Box(Modifier.fillMaxWidth().height(32.dp)) {
+            val shape = RoundedCornerShape(7.dp)
+            Box(
+                Modifier.fillMaxWidth().height(26.dp).align(Alignment.Center)
+                    .clip(shape).background(tint.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(caption, Modifier.padding(horizontal = 10.dp), maxLines = 1,
+                    style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            }
+            Box(
+                Modifier.fillMaxWidth(fill).height(26.dp).align(Alignment.CenterStart)
+                    .clip(shape).background(tint),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(caption, Modifier.padding(horizontal = 10.dp).wrapContentWidth(Alignment.Start, unbounded = true),
+                    color = Color.White, maxLines = 1, softWrap = false,
+                    style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            }
+            if (mark != null) MarkAt(mark, markColour)
+        }
+    }
+}
+
+@Composable
+private fun MarkAt(fraction: Float, colour: Color) {
+    var width by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    Box(Modifier.fillMaxWidth().fillMaxHeight().onSizeChanged { width = it.width }) {
+        val x = with(density) { (width * fraction).toDp() - 2.dp }
+        Box(
+            Modifier.offset(x = x).width(4.dp).fillMaxHeight()
+                .clip(RoundedCornerShape(2.dp))
+                .background(colour),
         )
     }
 }

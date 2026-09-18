@@ -191,6 +191,8 @@ data class Category(
 
 data class Summary(
     val label: String,
+    /** YYYY-MM-DD; a period whose end is before today is complete. */
+    val rangeEnd: String,
     val income: Long,
     val expense: Long,
     val net: Long,
@@ -215,6 +217,7 @@ data class Summary(
             val available = budget?.optBoolean("available") == true
             return Summary(
                 label = o.optJSONObject("range")?.optString("label").orEmpty(),
+                rangeEnd = o.optJSONObject("range")?.optString("end").orEmpty(),
                 income = totals.optLong("income"),
                 expense = totals.optLong("expense"),
                 /* Not safeToSpend.remaining: that is floored at zero, so a month
