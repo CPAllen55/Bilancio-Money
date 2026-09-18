@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The flat gold around the owl in the icon art, so the art and its ground meet without a seam. -->
+    <color name="ic_launcher_background">#F8BE42</color>
+</resources>
