@@ -115,6 +115,8 @@ fun BudgetingScreen() = Loader(Unit, { Bilancio.budget() to Bilancio.categories(
             }
         }
 
+        MoneyOverTime(b)
+
         SectionTitle("By category")
         Card(Modifier.fillMaxWidth()) {
             Column {

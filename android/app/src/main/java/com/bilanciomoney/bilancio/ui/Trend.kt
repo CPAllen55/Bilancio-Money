@@ -116,7 +116,7 @@ private fun TrendContent(t: Trend, range: @Composable () -> Unit, onCategory: (S
     var listing by remember(t) { mutableStateOf<String?>(null) }
     /* The segment touched on the chart: its category slug, in month `picked`. */
     var hit by remember(t, focus) { mutableStateOf<String?>(null) }
-    var showLastYear by rememberSaveable { mutableStateOf(false) }
+    var showLastYear by LastYear
     BackHandler(enabled = focus != null) { focus = null }
 
     val bySlug = remember(t) { t.categories.associateBy { it.slug } }
@@ -316,8 +316,12 @@ private fun Legend(items: List<Category>, picked: String?, onTap: (String) -> Un
 
 /* ------------------------------------------------------------ shared bits -- */
 
+/** One Last year switch for every chart that can draw it, as on the iPhone:
+    somebody who wants the comparison wants it wherever they are reading. */
+val LastYear = mutableStateOf(false)
+
 @Composable
-private fun LastYearToggle(on: Boolean, available: Boolean, onChange: (Boolean) -> Unit) {
+fun LastYearToggle(on: Boolean, available: Boolean, onChange: (Boolean) -> Unit) {
     /* Hidden rather than disabled when there is no year to compare with: a
        switch that does nothing is a question about what is broken. */
     if (!available) return
@@ -557,7 +561,7 @@ private fun YearAgoCard(t: Trend) {
  * screen for anything that opens below the charts.
  */
 @Composable
-private fun Maximisable(title: String, height: Dp, content: @Composable (chartHeight: Dp, close: () -> Unit) -> Unit) {
+fun Maximisable(title: String, height: Dp, content: @Composable (chartHeight: Dp, close: () -> Unit) -> Unit) {
     var big by rememberSaveable { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
         SectionTitle(title)
