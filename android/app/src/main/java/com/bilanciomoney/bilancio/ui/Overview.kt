@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.bilanciomoney.bilancio.Bilancio
 import com.bilanciomoney.bilancio.Summary
 import com.bilanciomoney.bilancio.asMoney
+import com.bilanciomoney.bilancio.ui.theme.Caution
 import com.bilanciomoney.bilancio.ui.theme.Negative
 import com.bilanciomoney.bilancio.ui.theme.Positive
 import java.time.LocalDate
@@ -68,19 +69,92 @@ fun OverviewScreen(
         StandingCard(s)
 
         SectionTitle("Against the plan")
+        /* Ordered by what it cost, because the question here is where the
+           money went -- not by what it was planned at. */
         val parents = s.categories.filter { it.parentSlug == null && it.kind == "spend" }
             .map { it to ((s.byParent[it.slug] ?: 0L) to s.budgetByParent[it.slug]) }
             .filter { (_, v) -> v.first > 0 || (v.second ?: 0) > 0 }
-            .sortedByDescending { (_, v) -> maxOf(v.first, v.second ?: 0) }
+            .sortedByDescending { (_, v) -> v.first }
 
-        if (parents.isEmpty()) {
+        if (parents.isEmpty() && s.income == 0L) {
             Text("Nothing spent in this period.", style = MaterialTheme.typography.bodyMedium)
         }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(vertical = 4.dp)) {
+                /* Income first, and fixed there. A list of what every category
+                   cost says nothing about the other half of the plan: a month
+                   can be inside every spending budget it has and still be a bad
+                   month. Pinned rather than sorted in, so it does not move
+                   about as the months change. */
+                if (s.income > 0 || (s.budgetIncome ?: 0L) > 0) {
+                    val open = openParent == "income"
+                    Column(
+                        Modifier.fillMaxWidth()
+                            .clickable { openParent = if (open) null else "income"; openLeaf = null }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                    ) {
+                        LabelledRow(
+                            left = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(if (open) "−" else "+", Modifier.width(18.dp), fontWeight = FontWeight.Bold)
+                                    /* Named from the tree: Income is a category
+                                       like any other, and the name shown here is
+                                       the one it is called everywhere else. */
+                                    Text(
+                                        s.categories.firstOrNull { it.slug == "income" }?.label ?: "Income",
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                }
+                            },
+                            right = {
+                                Text(
+                                    s.income.asMoney(false) + (s.budgetIncome?.let { " of ${it.asMoney(false)}" } ?: ""),
+                                    /* Arriving is the point of income, so more
+                                       than expected is the good case and never
+                                       a warning. */
+                                    color = if ((s.budgetIncome ?: 0L) > 0 && s.income >= s.budgetIncome!!) Positive
+                                        else MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            },
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        PlanBar(s.income, s.budgetIncome, Positive)
+                    }
+                    if (open) {
+                        /* Its sources carry no budget of their own: income is
+                           planned as one monthly figure, and these are shares
+                           of what came in. */
+                        s.byIncomeParent.entries.filter { it.value > 0 }.sortedByDescending { it.value }
+                            .forEach { (slug, cents) ->
+                                val label = s.categories.firstOrNull { it.slug == slug }?.label ?: slug
+                                val leafOpen = openLeaf == slug
+                                Column(
+                                    Modifier.fillMaxWidth()
+                                        .clickable { openLeaf = if (leafOpen) null else slug }
+                                        .padding(start = 34.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                                ) {
+                                    LabelledRow(
+                                        left = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(if (leafOpen) "−" else "+", Modifier.width(18.dp),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text(label, style = MaterialTheme.typography.bodyMedium)
+                                            }
+                                        },
+                                        right = {
+                                            Text(cents.asMoney(false), style = MaterialTheme.typography.bodySmall,
+                                                color = Positive)
+                                        },
+                                    )
+                                }
+                                if (leafOpen) InlineTransactions(period.key, slug, Positive, indent = 52.dp)
+                            }
+                    }
+                }
                 parents.forEach { (cat, v) ->
                     val (spent, plan) = v
-                    val over = plan != null && spent > plan
+                    val tone = planTone(spent, plan)
                     val kids = s.categories.filter { it.parentSlug == cat.slug }
                     val open = openParent == cat.slug
                     Column(
@@ -95,29 +169,27 @@ fun OverviewScreen(
                             left = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(if (open) "−" else "+", Modifier.width(18.dp), fontWeight = FontWeight.Bold)
-                                    Dot(Color(cat.colour))
-                                    Spacer(Modifier.width(8.dp))
                                     Text(cat.label)
                                 }
                             },
                             right = {
                                 Text(
                                     spent.asMoney(false) + (plan?.let { " of ${it.asMoney(false)}" } ?: ""),
-                                    color = if (over) Negative else MaterialTheme.colorScheme.onSurface,
+                                    color = tone ?: MaterialTheme.colorScheme.onSurface,
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
                             },
                         )
                         Spacer(Modifier.height(6.dp))
-                        PlanBar(spent, plan, Color(cat.colour))
+                        PlanBar(spent, plan, tone ?: Positive)
                     }
                     if (open && kids.isEmpty()) {
-                        InlineTransactions(period.key, cat.slug, Color(cat.colour))
+                        InlineTransactions(period.key, cat.slug, tone ?: Positive)
                     }
                     if (open && kids.isNotEmpty()) {
                         kids.map { it to ((s.byCategory[it.slug] ?: 0L) to s.budgetByCategory[it.slug]) }
                             .filter { (_, kv) -> kv.first > 0 || (kv.second ?: 0L) > 0 }
-                            .sortedByDescending { (_, kv) -> maxOf(kv.first, kv.second ?: 0L) }
+                            .sortedByDescending { (_, kv) -> kv.first }
                             .forEach { (k, kv) ->
                                 val (ks, kp) = kv
                                 val leafOpen = openLeaf == k.slug
@@ -131,7 +203,6 @@ fun OverviewScreen(
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text(if (leafOpen) "−" else "+", Modifier.width(18.dp),
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                Dot(Color(k.colour)); Spacer(Modifier.width(8.dp))
                                                 Text(k.label, style = MaterialTheme.typography.bodyMedium)
                                             }
                                         },
@@ -139,14 +210,16 @@ fun OverviewScreen(
                                             Text(
                                                 ks.asMoney(false) + (kp?.let { " of ${it.asMoney(false)}" } ?: ""),
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = if (kp != null && ks > kp) Negative else MaterialTheme.colorScheme.onSurface,
+                                                color = planTone(ks, kp) ?: MaterialTheme.colorScheme.onSurface,
                                             )
                                         },
                                     )
                                     Spacer(Modifier.height(4.dp))
-                                    PlanBar(ks, kp, Color(k.colour))
+                                    PlanBar(ks, kp, planTone(ks, kp) ?: Positive)
                                 }
-                                if (leafOpen) InlineTransactions(period.key, k.slug, Color(k.colour), indent = 52.dp)
+                                if (leafOpen) {
+                                    InlineTransactions(period.key, k.slug, planTone(ks, kp) ?: Positive, indent = 52.dp)
+                                }
                             }
                     }
                 }
@@ -228,4 +301,20 @@ private fun StandingCard(s: Summary) {
             }
         }
     }
+}
+
+/**
+ * How a spending line stands against its budget, as a colour: green inside it,
+ * amber in its last twentieth, red past it. Null when nothing is planned --
+ * there is no standing to report, and colouring it green would claim one.
+ *
+ * The same three the iPhone uses, and they replace the category's own colour
+ * here: this section answers "am I within the plan", and a palette that says
+ * which category it is cannot also say that.
+ */
+internal fun planTone(spent: Long, plan: Long?): Color? = when {
+    plan == null || plan <= 0L -> null
+    spent > plan -> Negative
+    spent >= plan * 95 / 100 -> Caution
+    else -> Positive
 }

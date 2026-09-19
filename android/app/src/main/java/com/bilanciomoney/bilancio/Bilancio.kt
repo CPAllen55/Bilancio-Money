@@ -297,6 +297,9 @@ data class Summary(
     /** Spending by parent category, and what each was planned at. */
     val byParent: Map<String, Long>,
     val budgetByParent: Map<String, Long>,
+    /** Where income came from, by its parent category -- salary, dividends,
+        interest. No budget of their own: income is planned as one figure. */
+    val byIncomeParent: Map<String, Long>,
     /** The same, by subcategory, for a category opened on the Overview. */
     val byCategory: Map<String, Long>,
     val budgetByCategory: Map<String, Long>,
@@ -326,6 +329,7 @@ data class Summary(
                 daysLeft = safe?.optInt("daysLeft"),
                 byParent = totals.optJSONObject("byParent").cents(),
                 budgetByParent = if (available) budget!!.optJSONObject("byParent").cents() else emptyMap(),
+                byIncomeParent = totals.optJSONObject("byIncomeParent").cents(),
                 byCategory = totals.optJSONObject("byCategory").cents(),
                 budgetByCategory = if (available) budget!!.optJSONObject("byCategory").cents() else emptyMap(),
                 previousExpense = o.optJSONObject("previous")?.optLong("expense"),
