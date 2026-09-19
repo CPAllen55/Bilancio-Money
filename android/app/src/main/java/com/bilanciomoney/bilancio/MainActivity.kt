@@ -152,7 +152,10 @@ private fun SignedIn() {
                         Image(
                             painterResource(R.mipmap.ic_launcher_foreground),
                             contentDescription = null,
-                            modifier = Modifier.padding(start = 4.dp).size(44.dp),
+                            /* Bigger than a toolbar icon: the mark is the
+                               brand arriving, not a control. Sized to the bar
+                               rather than beyond it, so nothing else moves. */
+                            modifier = Modifier.padding(start = 6.dp).size(58.dp),
                         )
                     }
                 },
