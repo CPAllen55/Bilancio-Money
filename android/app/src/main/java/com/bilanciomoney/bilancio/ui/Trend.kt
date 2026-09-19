@@ -83,9 +83,11 @@ import java.util.Locale
 @Composable
 fun TrendScreen(onCategory: (slug: String, label: String, month: YearMonth) -> Unit) {
     var months by remember { mutableIntStateOf(12) }
-    Column(Modifier.fillMaxSize()) {
+    /* The range is set once and then read past, so it scrolls away with the
+       page rather than holding the top of the screen. */
+    val range: @Composable () -> Unit = {
         val options = listOf(6, 12, 24)
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(16.dp)) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
             options.forEachIndexed { i, n ->
                 SegmentedButton(
                     selected = months == n,
@@ -94,14 +96,18 @@ fun TrendScreen(onCategory: (slug: String, label: String, month: YearMonth) -> U
                 ) { Text("$n months") }
             }
         }
-        Loader(months, { Bilancio.trend(months) }) { t: Trend, _ -> TrendContent(t, onCategory) }
     }
+    Loader(months, { Bilancio.trend(months) }) { t: Trend, _ -> TrendContent(t, range, onCategory) }
 }
 
 @Composable
-private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Unit) {
+private fun TrendContent(t: Trend, range: @Composable () -> Unit, onCategory: (String, String, YearMonth) -> Unit) {
     if (t.series.isEmpty()) {
-        Text("Nothing to chart yet.", Modifier.padding(16.dp)); return
+        Column(Modifier.padding(horizontal = 16.dp)) {
+            range()
+            Text("Nothing to chart yet.")
+        }
+        return
     }
     var picked by remember(t) { mutableIntStateOf(t.series.lastIndex) }
     /* The category that has been opened, or null for all of them. */
@@ -128,6 +134,7 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
     val track = MaterialTheme.colorScheme.surfaceVariant
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+        range()
         focus?.let { f ->
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                 AssistChip(onClick = { focus = null }, label = { Text("Show all categories") })
