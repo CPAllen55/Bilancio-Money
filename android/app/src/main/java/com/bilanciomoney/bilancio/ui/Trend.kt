@@ -3,6 +3,7 @@ package com.bilanciomoney.bilancio.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,7 +29,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.FilterChip
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -55,7 +62,10 @@ import java.util.Locale
  * under each figure -- the comparison the web Trend and the iPhone make,
  * because "is this a lot?" is only answered against a like month.
  *
- * Tapping a column picks a month. Tapping a category expands it in place (+/-)
+ * Tapping a segment names it -- category, amount, its share of the month and
+ * the same month a year earlier -- and pressing and sliding scrubs across
+ * segments, as the iPhone does. The readout opens that category. Tapping a
+ * category below expands it in place (+/-)
  * to show its subcategories, and the chart follows, stacking those instead;
  * tapping it again, or Back, closes it. A subcategory opens its transactions.
  */
@@ -86,6 +96,9 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
     /* The category that has been opened, or null for all of them. */
     var focus by remember(t) { mutableStateOf<Category?>(null) }
     var listing by remember(t) { mutableStateOf<String?>(null) }
+    /* The segment touched on the chart: its category slug, in month `picked`. */
+    var hit by remember(t, focus) { mutableStateOf<String?>(null) }
+    var showLastYear by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = focus != null) { focus = null }
 
     val bySlug = remember(t) { t.categories.associateBy { it.slug } }
@@ -117,13 +130,44 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp)) {
+                val ago: List<Long> = t.series.indices.map { i ->
+                    t.prior.getOrNull(i)?.let { p -> order.sumOf { valueOf(p, it.slug) } } ?: 0L
+                }
+                LastYearToggle(showLastYear, available = ago.any { it > 0 }) { showLastYear = it }
+                val top = maxOf(top, if (showLastYear) (ago.maxOrNull() ?: 0L).toFloat() else 0f)
+                /* Which segment a point lands on: the column from x, then the
+                   figure from y, found by stacking that month's categories in
+                   the order they were drawn until the running total passes it.
+                   Above the stack is empty space, and names nothing. */
+                fun touch(x: Float, y: Float, w: Float, h: Float) {
+                    val i = (x / (w / t.series.size)).toInt().coerceIn(0, t.series.lastIndex)
+                    picked = i
+                    val value = (h - y) / h * top
+                    var running = 0f
+                    hit = null
+                    for (c in order) {
+                        val v = valueOf(t.series[i], c.slug)
+                        if (v <= 0) continue
+                        running += v
+                        if (value <= running) { hit = c.slug; break }
+                    }
+                }
                 Canvas(
-                    Modifier.fillMaxWidth().height(200.dp).pointerInput(t) {
-                        detectTapGestures { pos ->
-                            val band = size.width / t.series.size
-                            picked = (pos.x / band).toInt().coerceIn(0, t.series.lastIndex)
+                    Modifier.fillMaxWidth().height(200.dp)
+                        .pointerInput(t, focus) {
+                            detectTapGestures { pos -> touch(pos.x, pos.y, size.width.toFloat(), size.height.toFloat()) }
                         }
-                    },
+                        /* A press held before sliding, so an ordinary swipe
+                           still scrolls the page rather than scrubbing. */
+                        .pointerInput(t, focus) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { pos -> touch(pos.x, pos.y, size.width.toFloat(), size.height.toFloat()) },
+                                onDrag = { change, _ ->
+                                    touch(change.position.x, change.position.y.coerceIn(0f, size.height.toFloat()),
+                                        size.width.toFloat(), size.height.toFloat())
+                                },
+                            )
+                        },
                 ) {
                     val band = size.width / t.series.size
                     val barW = band * 0.64f
@@ -138,8 +182,18 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
                             if (v <= 0) return@forEach
                             val h = size.height * (v / top)
                             y -= h
-                            drawRect(Color(c.colour), Offset(x, y), Size(barW, h))
+                            /* The touched category stays full strength in every
+                               month, so its own shape across the year shows. */
+                            val alpha = if (hit == null || hit == c.slug) 1f else 0.3f
+                            drawRect(Color(c.colour).copy(alpha = alpha), Offset(x, y), Size(barW, h))
                         }
+                    }
+                    /* Last year as one line through the bars: a line has a
+                       shape, and the shape is the answer. Months with nothing
+                       a year ago are left out, not drawn at zero -- a line on
+                       the floor claims a year that spent nothing. */
+                    if (showLastYear) {
+                        drawYearAgo(ago.map { if (it > 0) it.toFloat() else null }, band) { v -> size.height - size.height * (v / top) }
                     }
                 }
                 Row(Modifier.fillMaxWidth()) {
@@ -160,6 +214,42 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
 
         val m = t.series[picked]
         val before = t.prior.getOrNull(picked)
+
+        hit?.let { slug ->
+            val c = bySlug[slug] ?: return@let
+            val amount = valueOf(m, slug)
+            val total = columnTotal(m)
+            val yearAgo = valueOf(before, slug)
+            val kids = t.categories.any { it.parentSlug == slug }
+            Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Row(
+                    /* The readout is the way through, not just a label: it
+                       already names a category and a month, which is all the
+                       drill-down needs. */
+                    Modifier.fillMaxWidth().clickable {
+                        if (focus == null && kids) { focus = c; listing = null }
+                        else listing = slug
+                        hit = null
+                    }.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Dot(Color(c.colour)); Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(c.label, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            m.month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()) +
+                                (if (total > 0) " · ${amount * 100 / total}% of spending" else "") +
+                                (if (yearAgo > 0) " · ${yearAgo.asMoney(false)} a year ago" else ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(amount.asMoney(false), fontWeight = FontWeight.SemiBold)
+                    Text("  ›", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = { hit = null }) { Text("✕") }
+                }
+            }
+        }
         SectionTitle(m.month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()) + " " + m.month.year)
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
@@ -178,7 +268,11 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
             }
         }
 
-        SectionTitle("By category")
+        NetChart(t, showLastYear, onLastYear = { showLastYear = it })
+        RunningTotalChart(t)
+        YearAgoCard(t)
+
+        SectionTitle("By category · " + m.month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()))
         /* Every category, always, in the chart's order; the open one shows its
            subcategories beneath it, as Budget and the web's +/- rows do. */
         val parentOrder = parents.sortedByDescending { c -> t.series.sumOf { it.byParent[c.slug] ?: 0L } }
@@ -277,6 +371,239 @@ private fun Figure(label: String, now: Long, yearAgo: Long?) {
                     "${yearAgo.asMoney(false)} a year ago",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/* ------------------------------------------------------------ shared bits -- */
+
+@Composable
+private fun LastYearToggle(on: Boolean, available: Boolean, onChange: (Boolean) -> Unit) {
+    /* Hidden rather than disabled when there is no year to compare with: a
+       switch that does nothing is a question about what is broken. */
+    if (!available) return
+    FilterChip(selected = on, onClick = { onChange(!on) }, label = { Text("Last year") })
+}
+
+private val quiet = Color(0xFF8A8F98)
+
+/** The dashed year-ago line with a bullet on each month; nulls break it. */
+private fun DrawScope.drawYearAgo(values: List<Float?>, band: Float, y: (Float) -> Float) {
+    val path = Path()
+    var drawing = false
+    values.forEachIndexed { i, v ->
+        if (v == null) { drawing = false; return@forEachIndexed }
+        val x = i * band + band / 2
+        if (drawing) path.lineTo(x, y(v)) else path.moveTo(x, y(v))
+        drawing = true
+    }
+    drawPath(path, quiet, style = Stroke(width = 4f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 9f))))
+    values.forEachIndexed { i, v -> if (v != null) drawCircle(quiet, 6f, Offset(i * band + band / 2, y(v))) }
+}
+
+@Composable
+private fun MonthLabels(series: List<TrendMonth>, picked: Int?) {
+    Row(Modifier.fillMaxWidth()) {
+        series.forEachIndexed { i, m ->
+            val show = series.size <= 12 || i % 3 == 0
+            Text(
+                if (show) m.month.month.getDisplayName(TextStyle.NARROW, Locale.getDefault()) else "",
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (i == picked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** What a touched month came to, with the way to put it away. */
+@Composable
+private fun Readout(month: YearMonth, value: Long, caption: String, secondary: Long?, tint: Color, onClose: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()) + " " + month.year,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(value.asMoney(false), fontWeight = FontWeight.SemiBold, color = tint)
+                Text("  " + caption, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (secondary != null) {
+                Text("${secondary.asMoney(false)} a year ago", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        TextButton(onClick = onClose) { Text("✕") }
+    }
+}
+
+private fun tintFor(cents: Long) = if (cents < 0) Negative else Positive
+
+/* ------------------------------------------------------ net, month by month -- */
+
+/**
+ * What each month kept: in less out, green above the line and red below. The
+ * months that went backwards are the ones worth finding at a glance, which is
+ * why each bar is coloured for itself.
+ */
+@Composable
+private fun NetChart(t: Trend, showLastYear: Boolean, onLastYear: (Boolean) -> Unit) {
+    var picked by remember(t) { mutableStateOf<Int?>(null) }
+    val net = t.series.map { it.income - it.expense }
+    /* Every month plotted whatever its sign, zero included: a year that broke
+       even is a finding, not a gap. */
+    val ago: List<Long?> = t.series.indices.map { i -> t.prior.getOrNull(i)?.let { it.income - it.expense } }
+    val agoAny = ago.any { it != null && it != 0L }
+    val shown = net + if (showLastYear) ago.filterNotNull() else emptyList()
+    val hi = maxOf(shown.maxOrNull() ?: 0L, 0L).toFloat()
+    val lo = minOf(shown.minOrNull() ?: 0L, 0L).toFloat()
+    val span = maxOf(hi - lo, 1f)
+    val axis = MaterialTheme.colorScheme.outlineVariant
+
+    SectionTitle("Net, month by month")
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            LastYearToggle(showLastYear, agoAny, onLastYear)
+            Canvas(
+                Modifier.fillMaxWidth().height(170.dp).pointerInput(t) {
+                    detectTapGestures { pos ->
+                        picked = (pos.x / (size.width.toFloat() / t.series.size)).toInt().coerceIn(0, t.series.lastIndex)
+                    }
+                },
+            ) {
+                val band = size.width / t.series.size
+                val barW = band * 0.6f
+                val y = { v: Float -> size.height * (hi - v) / span }
+                val zero = y(0f)
+                drawLine(axis, Offset(0f, zero), Offset(size.width, zero), strokeWidth = 2f)
+                net.forEachIndexed { i, v ->
+                    val alpha = if (picked == null || picked == i) 1f else 0.3f
+                    val top = minOf(y(v.toFloat()), zero)
+                    val h = kotlin.math.abs(y(v.toFloat()) - zero)
+                    drawRect(tintFor(v).copy(alpha = alpha), Offset(i * band + (band - barW) / 2, top), Size(barW, h))
+                }
+                if (showLastYear) drawYearAgo(ago.map { it?.toFloat() }, band) { v -> y(v) }
+            }
+            MonthLabels(t.series, picked)
+            val p = picked
+            if (p != null) {
+                Readout(
+                    t.series[p].month, net[p],
+                    if (net[p] < 0) "more out than in" else "more in than out",
+                    if (showLastYear) ago[p] else null, tintFor(net[p]),
+                ) { picked = null }
+            } else {
+                Text("Touch a month for what it came to.", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+            }
+        }
+    }
+}
+
+/* ---------------------------------------------------------- running total -- */
+
+/**
+ * The same months summed left to right. Its own chart rather than a line over
+ * the bars: a year of monthly figures adds up to ten times any one of them, and
+ * one axis can only serve one of the two.
+ */
+@Composable
+private fun RunningTotalChart(t: Trend) {
+    var picked by remember(t) { mutableStateOf<Int?>(null) }
+    val points = remember(t) {
+        var total = 0L
+        t.series.map { m -> total += m.income - m.expense; total }
+    }
+    val hi = maxOf(points.maxOrNull() ?: 0L, 0L).toFloat()
+    val lo = minOf(points.minOrNull() ?: 0L, 0L).toFloat()
+    val span = maxOf(hi - lo, 1f)
+    val axis = MaterialTheme.colorScheme.outlineVariant
+    val tint = tintFor(points.lastOrNull() ?: 0L)
+
+    SectionTitle("Running total")
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Canvas(
+                Modifier.fillMaxWidth().height(160.dp).pointerInput(t) {
+                    detectTapGestures { pos ->
+                        picked = (pos.x / (size.width.toFloat() / t.series.size)).toInt().coerceIn(0, t.series.lastIndex)
+                    }
+                },
+            ) {
+                val band = size.width / t.series.size
+                val y = { v: Float -> size.height * (hi - v) / span }
+                val zero = y(0f)
+                drawLine(axis, Offset(0f, zero), Offset(size.width, zero), strokeWidth = 2f)
+                val line = Path()
+                val area = Path()
+                points.forEachIndexed { i, v ->
+                    val x = i * band + band / 2
+                    if (i == 0) { line.moveTo(x, y(v.toFloat())); area.moveTo(x, zero); area.lineTo(x, y(v.toFloat())) }
+                    else { line.lineTo(x, y(v.toFloat())); area.lineTo(x, y(v.toFloat())) }
+                }
+                area.lineTo((points.size - 1) * band + band / 2, zero)
+                area.close()
+                drawPath(area, tint.copy(alpha = 0.14f))
+                drawPath(line, tint, style = Stroke(width = 5f))
+                /* The touched month, marked on the line: there are no bars to
+                   darken, so without it nothing says which point is meant. */
+                picked?.let { i ->
+                    drawCircle(tintFor(points[i]), 12f, Offset(i * band + band / 2, y(points[i].toFloat())))
+                }
+            }
+            MonthLabels(t.series, picked)
+            val p = picked
+            if (p != null) {
+                Readout(t.series[p].month, points[p], "by the end of it", null, tintFor(points[p])) { picked = null }
+            } else {
+                Text(
+                    "${(points.lastOrNull() ?: 0L).asMoney(false)} across the ${t.series.size} months shown",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        }
+    }
+}
+
+/* ------------------------------------------------ against the year before -- */
+
+@Composable
+private fun YearAgoCard(t: Trend) {
+    /* Absent rather than empty when the history does not reach back a year. */
+    if (t.prior.isEmpty() || t.prior.all { it.income == 0L && it.expense == 0L }) return
+    val now = t.series.sumOf { it.expense }
+    val before = t.prior.sumOf { it.expense }
+    SectionTitle("Against the year before")
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Row(Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Spent now", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(now.asMoney(false), fontWeight = FontWeight.SemiBold)
+                }
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Same months before", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(before.asMoney(false), fontWeight = FontWeight.SemiBold)
+                }
+            }
+            if (before > 0) {
+                val change = (now - before).toDouble() / before * 100
+                /* A tenth of a point below ten: rounding 0.46% to 0% reports a
+                   real difference as none. */
+                val size = if (kotlin.math.abs(change) < 10) "%.1f".format(kotlin.math.abs(change))
+                    else "%.0f".format(kotlin.math.abs(change))
+                Text(
+                    if (change >= 0) "↗ $size% more than a year ago" else "↘ $size% less than a year ago",
+                    color = if (change >= 0) Negative else Positive,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 10.dp),
                 )
             }
         }
