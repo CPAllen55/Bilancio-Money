@@ -111,12 +111,17 @@ private fun Root() {
         }
     }.collectAsState(initial = AuthState.Loading)
 
-    when (state) {
-        AuthState.Loading ->
-            Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-        AuthState.SignedOut ->
-            Box(Modifier.fillMaxSize(), Alignment.Center) { AuthView() }
-        AuthState.SignedIn -> SignedIn()
+    /* Once per launch, and not again on rotation. */
+    var launching by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(true) }
+    Box(Modifier.fillMaxSize()) {
+        when (state) {
+            AuthState.Loading ->
+                Box(Modifier.fillMaxSize(), Alignment.Center) { if (!launching) CircularProgressIndicator() }
+            AuthState.SignedOut ->
+                Box(Modifier.fillMaxSize(), Alignment.Center) { AuthView() }
+            AuthState.SignedIn -> SignedIn()
+        }
+        if (launching) com.bilanciomoney.bilancio.ui.LaunchFlash(onDone = { launching = false })
     }
 }
 

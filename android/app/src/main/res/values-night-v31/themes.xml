@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.Bilancio" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0E1726</item>
+        <item name="android:windowSplashScreenBackground">#CCA03B</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_blank</item>
+    </style>
+</resources>
