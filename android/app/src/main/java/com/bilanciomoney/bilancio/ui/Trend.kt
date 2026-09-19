@@ -75,10 +75,11 @@ import java.util.Locale
  *
  * Tapping a segment names it -- category, amount, its share of the month and
  * the same month a year earlier -- and pressing and sliding scrubs across
- * segments, as the iPhone does. The readout opens that category. Tapping a
- * category below expands it in place (+/-)
- * to show its subcategories, and the chart follows, stacking those instead;
- * tapping it again, or Back, closes it. A subcategory opens its transactions.
+ * segments, as the iPhone does; the key under the chart picks one out too. The
+ * readout opens that category: its subcategories, stacked in its place (Back
+ * closes them), or -- for one with none -- its transactions, just below.
+ *
+ * No list by category and no month summary here: Overview has both.
  */
 @Composable
 fun TrendScreen(onCategory: (slug: String, label: String, month: YearMonth) -> Unit) {
@@ -217,6 +218,11 @@ private fun TrendContent(t: Trend, range: @Composable () -> Unit, onCategory: (S
                     }
                 }
                 MonthLabels(t.series, picked)
+                /* The key: which colour is which, in the stack's own order.
+                   Tapping one picks it out, as touching its segment does. */
+                Legend(order.filter { c -> t.series.any { valueOf(it, c.slug) > 0 } }, hit) { slug ->
+                    hit = if (hit == slug) null else slug
+                }
 
         hit?.let { slug ->
             val c = bySlug[slug] ?: return@let
@@ -232,7 +238,7 @@ private fun TrendContent(t: Trend, range: @Composable () -> Unit, onCategory: (S
                        drill-down needs. */
                     Modifier.fillMaxWidth().clickable {
                         if (focus == null && kids) { focus = c; listing = null }
-                        /* Transactions open in the list below the charts, so a
+                        /* Transactions open just below the chart, so a
                            full-screen chart steps aside to show them. */
                         else { listing = slug; close() }
                         hit = null
@@ -257,21 +263,16 @@ private fun TrendContent(t: Trend, range: @Composable () -> Unit, onCategory: (S
             }
         }
         }
-        SectionTitle(m.month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()) + " " + m.month.year)
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                val f = focus
-                if (f != null) {
-                    Figure("${f.label} spent", columnTotal(m), before?.let(columnTotal))
-                } else {
-                    Figure("Spent", m.expense, before?.expense)
-                    Figure("Came in", m.income, before?.income)
-                    val net = m.income - m.expense
-                    Row(Modifier.fillMaxWidth().padding(top = 6.dp), Arrangement.SpaceBetween) {
-                        Text("Net")
-                        Text(net.asMoney(false), fontWeight = FontWeight.SemiBold, color = if (net < 0) Negative else Positive)
-                    }
-                }
+        /* A category's transactions for the picked month, opened from the
+           readout -- the way through from a segment to what made it. */
+        listing?.let { slug ->
+            val c = bySlug[slug] ?: return@let
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                SectionTitle(c.label + " · " + m.month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()))
+                TextButton(onClick = { listing = null }) { Text("✕") }
+            }
+            Card(Modifier.fillMaxWidth()) {
+                InlineTransactions(Ranges.key(m.month, 1), slug, Color(c.colour), indent = 12.dp)
             }
         }
 
@@ -279,105 +280,34 @@ private fun TrendContent(t: Trend, range: @Composable () -> Unit, onCategory: (S
         RunningTotalChart(t)
         YearAgoCard(t)
 
-        SectionTitle("By category · " + m.month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()))
-        /* Every category, always, in the chart's order; the open one shows its
-           subcategories beneath it, as Budget and the web's +/- rows do. */
-        val parentOrder = parents.sortedByDescending { c -> t.series.sumOf { it.byParent[c.slug] ?: 0L } }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(vertical = 4.dp)) {
-                val shown = parentOrder.filter { (m.byParent[it.slug] ?: 0L) > 0 || (before?.byParent?.get(it.slug) ?: 0L) > 0 }
-                if (shown.isEmpty()) {
-                    Text("Nothing spent this month.", Modifier.padding(16.dp))
-                }
-                shown.forEach { c ->
-                    val kids = t.categories.filter { it.parentSlug == c.slug }
-                    val open = if (kids.isEmpty()) listing == c.slug else focus?.slug == c.slug
-                    BreakdownRow(
-                        label = c.label, colour = Color(c.colour),
-                        now = m.byParent[c.slug] ?: 0L, yearAgo = before?.byParent?.get(c.slug) ?: 0L,
-                        toggle = open,
-                        indent = false,
-                        onClick = {
-                            /* A category with no subcategories opens straight to its
-                               transactions; one with them opens its subcategories. */
-                            if (kids.isEmpty()) listing = if (open) null else c.slug
-                            else { focus = if (open) null else c; listing = null }
-                        },
-                    )
-                    if (open && kids.isEmpty()) {
-                        InlineTransactions(Ranges.key(m.month, 1), c.slug, Color(c.colour))
-                    }
-                    if (open && kids.isNotEmpty()) {
-                        kids.sortedByDescending { m.byCategory[it.slug] ?: 0L }
-                            .filter { (m.byCategory[it.slug] ?: 0L) > 0 || (before?.byCategory?.get(it.slug) ?: 0L) > 0 }
-                            .forEach { k ->
-                                val kidOpen = listing == k.slug
-                                BreakdownRow(
-                                    label = k.label, colour = Color(k.colour),
-                                    now = m.byCategory[k.slug] ?: 0L, yearAgo = before?.byCategory?.get(k.slug) ?: 0L,
-                                    toggle = kidOpen, indent = true,
-                                    onClick = { listing = if (kidOpen) null else k.slug },
-                                )
-                                if (kidOpen) InlineTransactions(Ranges.key(m.month, 1), k.slug, Color(k.colour), indent = 52.dp)
-                            }
-                    }
-                }
-            }
-        }
         Spacer(Modifier.height(24.dp))
     }
 }
 
+/**
+ * The chart's key, as the iPhone draws it under the stack. The one picked out
+ * on the chart is shown picked out here too.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun BreakdownRow(
-    label: String,
-    colour: Color,
-    now: Long,
-    yearAgo: Long,
-    toggle: Boolean?,
-    indent: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick)
-            .padding(start = if (indent) 34.dp else 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
-        Arrangement.SpaceBetween,
-        Alignment.CenterVertically,
+private fun Legend(items: List<Category>, picked: String?, onTap: (String) -> Unit) {
+    androidx.compose.foundation.layout.FlowRow(
+        Modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                when (toggle) { true -> "−"; false -> "+"; null -> "" },
-                Modifier.width(18.dp),
-                fontWeight = FontWeight.Bold,
-                color = if (indent) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-            )
-            Dot(colour); Spacer(Modifier.width(8.dp))
-            Text(label, style = if (indent) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge)
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            Text(now.asMoney(false), fontWeight = if (indent) FontWeight.Normal else FontWeight.Medium)
-            if (yearAgo > 0) {
+        items.forEach { c ->
+            val dim = picked != null && picked != c.slug
+            Row(
+                Modifier.clickable { onTap(c.slug) }.padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Dot(Color(c.colour).copy(alpha = if (dim) 0.3f else 1f)); Spacer(Modifier.width(5.dp))
                 Text(
-                    "${yearAgo.asMoney(false)} a year ago",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun Figure(label: String, now: Long, yearAgo: Long?) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), Arrangement.SpaceBetween) {
-        Text(label)
-        Column(horizontalAlignment = Alignment.End) {
-            Text(now.asMoney(false), fontWeight = FontWeight.SemiBold)
-            if (yearAgo != null && yearAgo > 0) {
-                Text(
-                    "${yearAgo.asMoney(false)} a year ago",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    c.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (dim) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (picked == c.slug) FontWeight.SemiBold else FontWeight.Normal,
                 )
             }
         }
