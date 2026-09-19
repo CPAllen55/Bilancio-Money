@@ -30,6 +30,17 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import com.bilanciomoney.bilancio.R
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.FilterChip
 import androidx.compose.ui.graphics.Path
@@ -128,8 +139,10 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
             Spacer(Modifier.height(6.dp))
         }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp)) {
+        val m = t.series[picked]
+        val before = t.prior.getOrNull(picked)
+
+        Maximisable(if (focus == null) "Spend by category" else "Inside ${focus!!.label}", 200.dp) { chartHeight, close ->
                 val ago: List<Long> = t.series.indices.map { i ->
                     t.prior.getOrNull(i)?.let { p -> order.sumOf { valueOf(p, it.slug) } } ?: 0L
                 }
@@ -153,7 +166,7 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
                     }
                 }
                 Canvas(
-                    Modifier.fillMaxWidth().height(200.dp)
+                    Modifier.fillMaxWidth().height(chartHeight)
                         .pointerInput(t, focus) {
                             detectTapGestures { pos -> touch(pos.x, pos.y, size.width.toFloat(), size.height.toFloat()) }
                         }
@@ -196,24 +209,7 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
                         drawYearAgo(ago.map { if (it > 0) it.toFloat() else null }, band) { v -> size.height - size.height * (v / top) }
                     }
                 }
-                Row(Modifier.fillMaxWidth()) {
-                    t.series.forEachIndexed { i, m ->
-                        /* Every label on a short range; on a long one, only
-                           every third, so they stay legible. */
-                        val show = t.series.size <= 12 || i % 3 == 0
-                        Text(
-                            if (show) m.month.month.getDisplayName(TextStyle.NARROW, Locale.getDefault()) else "",
-                            Modifier.weight(1f),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (i == picked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        }
-
-        val m = t.series[picked]
-        val before = t.prior.getOrNull(picked)
+                MonthLabels(t.series, picked)
 
         hit?.let { slug ->
             val c = bySlug[slug] ?: return@let
@@ -221,16 +217,19 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
             val total = columnTotal(m)
             val yearAgo = valueOf(before, slug)
             val kids = t.categories.any { it.parentSlug == slug }
-            Card(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            androidx.compose.material3.HorizontalDivider(Modifier.padding(top = 8.dp))
+            run {
                 Row(
                     /* The readout is the way through, not just a label: it
                        already names a category and a month, which is all the
                        drill-down needs. */
                     Modifier.fillMaxWidth().clickable {
                         if (focus == null && kids) { focus = c; listing = null }
-                        else listing = slug
+                        /* Transactions open in the list below the charts, so a
+                           full-screen chart steps aside to show them. */
+                        else { listing = slug; close() }
                         hit = null
-                    }.padding(horizontal = 14.dp, vertical = 10.dp),
+                    }.padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Dot(Color(c.colour)); Spacer(Modifier.width(10.dp))
@@ -249,6 +248,7 @@ private fun TrendContent(t: Trend, onCategory: (String, String, YearMonth) -> Un
                     TextButton(onClick = { hit = null }) { Text("✕") }
                 }
             }
+        }
         }
         SectionTitle(m.month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()) + " " + m.month.year)
         Card(Modifier.fillMaxWidth()) {
@@ -465,12 +465,11 @@ private fun NetChart(t: Trend, showLastYear: Boolean, onLastYear: (Boolean) -> U
     val span = maxOf(hi - lo, 1f)
     val axis = MaterialTheme.colorScheme.outlineVariant
 
-    SectionTitle("Net, month by month")
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
+    Maximisable("Net, month by month", 170.dp) { chartHeight, _ ->
+        run {
             LastYearToggle(showLastYear, agoAny, onLastYear)
             Canvas(
-                Modifier.fillMaxWidth().height(170.dp).pointerInput(t) {
+                Modifier.fillMaxWidth().height(chartHeight).pointerInput(t) {
                     detectTapGestures { pos ->
                         picked = (pos.x / (size.width.toFloat() / t.series.size)).toInt().coerceIn(0, t.series.lastIndex)
                     }
@@ -525,11 +524,10 @@ private fun RunningTotalChart(t: Trend) {
     val axis = MaterialTheme.colorScheme.outlineVariant
     val tint = tintFor(points.lastOrNull() ?: 0L)
 
-    SectionTitle("Running total")
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
+    Maximisable("Running total", 160.dp) { chartHeight, _ ->
+        run {
             Canvas(
-                Modifier.fillMaxWidth().height(160.dp).pointerInput(t) {
+                Modifier.fillMaxWidth().height(chartHeight).pointerInput(t) {
                     detectTapGestures { pos ->
                         picked = (pos.x / (size.width.toFloat() / t.series.size)).toInt().coerceIn(0, t.series.lastIndex)
                     }
@@ -605,6 +603,50 @@ private fun YearAgoCard(t: Trend) {
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 10.dp),
                 )
+            }
+        }
+    }
+}
+
+/* ------------------------------------------------------------ full screen -- */
+
+/**
+ * A chart that can be given the whole screen -- the iPhone's Maximisable. The
+ * same content is drawn in both places, with the same state, so a month or
+ * segment picked in one is picked in the other; only the chart's height
+ * changes. Turned on its side, the full-screen chart simply gets wider.
+ *
+ * `content` gets the chart height to use, and a way to step out of full
+ * screen for anything that opens below the charts.
+ */
+@Composable
+private fun Maximisable(title: String, height: Dp, content: @Composable (chartHeight: Dp, close: () -> Unit) -> Unit) {
+    var big by rememberSaveable { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+        SectionTitle(title)
+        IconButton(onClick = { big = true }) {
+            Icon(painterResource(R.drawable.ic_expand), contentDescription = "Full screen",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+        }
+    }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) { content(height) {} }
+    }
+    if (big) {
+        Dialog(onDismissRequest = { big = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                BoxWithConstraints(Modifier.fillMaxSize().systemBarsPadding().padding(16.dp)) {
+                    /* Room left for the title, the Last year switch, the month
+                       labels and a readout; never smaller than the card's own. */
+                    val chartHeight = maxOf(maxHeight - 200.dp, height)
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                            Text(title, style = MaterialTheme.typography.titleLarge)
+                            TextButton(onClick = { big = false }) { Text("Done") }
+                        }
+                        content(chartHeight) { big = false }
+                    }
+                }
             }
         }
     }
