@@ -43,6 +43,7 @@ import com.bilanciomoney.bilancio.ui.OverviewScreen
 import com.bilanciomoney.bilancio.ui.Period
 import com.bilanciomoney.bilancio.ui.TransactionsScreen
 import com.bilanciomoney.bilancio.ui.theme.BilancioTheme
+import com.bilanciomoney.bilancio.ui.theme.Appearance
 import com.clerk.api.Clerk
 import com.clerk.ui.auth.AuthView
 import kotlinx.coroutines.flow.combine
@@ -50,9 +51,26 @@ import kotlinx.coroutines.flow.combine
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        Appearance.load(this)
         setContent {
-            BilancioTheme {
+            val appearance by Appearance.current.collectAsState()
+            val dark = when (appearance) {
+                Appearance.System -> androidx.compose.foundation.isSystemInDarkTheme()
+                Appearance.Light -> false
+                Appearance.Dark -> true
+            }
+            /* The status and navigation bar icons follow the app's choice, not
+               the phone's -- dark icons on a dark app would vanish. */
+            androidx.compose.runtime.LaunchedEffect(dark) {
+                val clear = android.graphics.Color.TRANSPARENT
+                enableEdgeToEdge(
+                    statusBarStyle = if (dark) androidx.activity.SystemBarStyle.dark(clear)
+                        else androidx.activity.SystemBarStyle.light(clear, clear),
+                    navigationBarStyle = if (dark) androidx.activity.SystemBarStyle.dark(clear)
+                        else androidx.activity.SystemBarStyle.light(clear, clear),
+                )
+            }
+            BilancioTheme(darkTheme = dark) {
                 Root()
             }
         }

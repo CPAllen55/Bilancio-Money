@@ -31,6 +31,10 @@ import androidx.compose.ui.unit.dp
 import com.bilanciomoney.bilancio.Billing
 import com.bilanciomoney.bilancio.Bilancio
 import com.bilanciomoney.bilancio.PlayStore
+import com.bilanciomoney.bilancio.ui.theme.Appearance
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.runtime.collectAsState
 import com.bilanciomoney.bilancio.ui.theme.Negative
 import com.clerk.api.Clerk
@@ -116,6 +120,28 @@ fun MoreScreen(onOpen: (page: String) -> Unit) {
         storeMessage?.let {
             Text(it, Modifier.padding(top = 8.dp).clickable { PlayStore.clearMessage() },
                 style = MaterialTheme.typography.bodyMedium)
+        }
+
+        SectionTitle("Appearance")
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                val appearance by Appearance.current.collectAsState()
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    Appearance.entries.forEachIndexed { i, a ->
+                        SegmentedButton(
+                            selected = appearance == a,
+                            onClick = { Appearance.set(context, a) },
+                            shape = SegmentedButtonDefaults.itemShape(i, Appearance.entries.size),
+                        ) { Text(a.label) }
+                    }
+                }
+                Text(
+                    "System follows whatever this phone is set to, including its dark theme schedule.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
         }
 
         SectionTitle("About")
