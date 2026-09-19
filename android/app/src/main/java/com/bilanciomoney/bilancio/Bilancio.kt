@@ -115,6 +115,25 @@ object Bilancio {
             .put("amount", cents ?: JSONObject.NULL))
     }
 
+    /**
+     * Several edits at once. The Worker groups them by category, so a category
+     * named twice -- a month and a year in the same save -- is read once and
+     * written once.
+     */
+    suspend fun saveBudget(edits: List<JSONObject>) {
+        val arr = org.json.JSONArray()
+        edits.forEach { arr.put(it) }
+        request("PUT", "/api/budget", JSONObject().put("edits", arr))
+    }
+
+    /** One edit for the batch above: a month's figure, or a whole category's. */
+    fun budgetEdit(slug: String, month: String? = null, cents: Long?): JSONObject {
+        val o = JSONObject().put("slug", slug)
+        if (month != null) o.put("month", month).put("amount", cents ?: JSONObject.NULL)
+        else o.put("baseline", cents ?: JSONObject.NULL)
+        return o
+    }
+
     /** Every month at one figure, or back to what history says (null). */
     suspend fun setBaseline(slug: String, cents: Long?) {
         request("PUT", "/api/budget", JSONObject().put("slug", slug).put("baseline", cents ?: JSONObject.NULL))

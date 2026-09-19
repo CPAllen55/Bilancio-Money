@@ -60,6 +60,8 @@ data class BudgetRow(
     val computed: Map<String, Long>,
     /** month -> cents, for months set by hand. */
     val pinned: Map<String, Long>,
+    /** What the engine says a typical month costs, before anybody's hand. */
+    val baseline: Long,
     /** A figure typed for every month, or null when history decides. */
     val baselineOverride: Long?,
     /** month -> cents spent in the same month a year earlier. */
@@ -68,18 +70,35 @@ data class BudgetRow(
 
 data class Budget(
     val months: List<String>,
+    /** "Jan", "Feb", … as the server writes them, one per month above. */
+    val labels: List<String>,
     val currentMonth: String,
     val rows: List<BudgetRow>,
     val incomePlan: Map<String, Long>,
     val incomeSpent: Map<String, Long>,
+    val incomeComputed: Map<String, Long>,
+    val incomePinned: Map<String, Long>,
+    val incomeBaseline: Long,
+    val incomeBaselineOverride: Long?,
     val savingsAnnual: Long,
+    /** How many complete months the plan was shaped from. */
+    val monthsOfHistory: Int,
 ) {
+    /** The income line as a row, so it edits like any other. */
+    val incomeRow: BudgetRow
+        get() = BudgetRow(
+            slug = "income", label = "Income", colour = 0xFF1F9D63, parentSlug = null,
+            plan = incomePlan, spent = incomeSpent, computed = incomeComputed, pinned = incomePinned,
+            baseline = incomeBaseline, baselineOverride = incomeBaselineOverride, priorSpent = emptyMap(),
+        )
+
     companion object {
         fun from(o: JSONObject): Budget {
             val months = o.optJSONArray("months")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
             val income = o.optJSONObject("income")
             return Budget(
                 months = months,
+                labels = o.optJSONArray("labels")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(),
                 currentMonth = o.optString("currentMonth"),
                 rows = o.optJSONArray("categories").orEmpty().map { r ->
                     val c = Category.from(r)
@@ -89,13 +108,20 @@ data class Budget(
                         spent = r.optJSONObject("spent").centsMap(),
                         computed = r.optJSONObject("computed").centsMap(),
                         pinned = r.optJSONObject("pinned").centsMap(),
+                        baseline = r.optLong("baseline"),
                         baselineOverride = if (r.isNull("baselineOverride")) null else r.optLong("baselineOverride"),
                         priorSpent = r.optJSONObject("priorSpent").centsMap(),
                     )
                 },
                 incomePlan = income?.optJSONObject("plan").centsMap(),
                 incomeSpent = income?.optJSONObject("spent").centsMap(),
+                incomeComputed = income?.optJSONObject("computed").centsMap(),
+                incomePinned = income?.optJSONObject("pinned").centsMap(),
+                incomeBaseline = income?.optLong("baseline") ?: 0L,
+                incomeBaselineOverride = if (income == null || income.isNull("baselineOverride")) null
+                    else income.optLong("baselineOverride"),
                 savingsAnnual = o.optJSONObject("savings")?.optLong("annual") ?: 0L,
+                monthsOfHistory = o.optInt("monthsOfHistory"),
             )
         }
     }
