@@ -36,10 +36,10 @@ import kotlinx.coroutines.tasks.await
  */
 object Push {
     /* From Firebase console -> Project settings -> your Android app. */
-    private const val PROJECT_ID = ""
-    private const val APPLICATION_ID = ""
-    private const val API_KEY = ""
-    private const val SENDER_ID = ""
+    private const val PROJECT_ID = "bilancio-b6fc4e72"
+    private const val APPLICATION_ID = "1:261306312668:android:c8f0299a1fe1d9dcd75119"
+    private const val API_KEY = "AIzaSyCMaSdZ8t2gxHwKrrHEhM-pG-T1p3EfgMw"
+    private const val SENDER_ID = "261306312668"
 
     /** The channel the server names; without one, Android 8 and later are silent. */
     const val CHANNEL_ID = "budget_alerts"

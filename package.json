@@ -8,6 +8,7 @@
     "start": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:generate": "drizzle-kit generate",
+    "secret": "node scripts/secret.mjs",
     "db:migrate": "node scripts/migrate.mjs dev",
     "db:migrate:prod": "node scripts/migrate.mjs prod",
     "db:studio": "drizzle-kit studio",
