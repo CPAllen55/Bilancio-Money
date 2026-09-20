@@ -168,11 +168,13 @@ notifications.put("/notifications/subscriptions", async (c) => {
 });
 
 /**
- * POST /api/notifications/devices   { token, environment }
+ * POST /api/notifications/devices   { token, environment, platform }
  *
- * Called on every launch -- iOS can hand out a new token at any time -- so it
- * is an upsert, and a token already registered to somebody else moves to this
- * account: the phone has changed hands, or changed accounts.
+ * Called on every launch -- both stores hand out new tokens whenever they feel
+ * like it -- so it is an upsert, and a token already registered to somebody
+ * else moves to this account: the phone has changed hands, or changed
+ * accounts. `platform` defaults to "ios", which is what the iPhone app has
+ * always sent by not sending it.
  */
 notifications.post("/notifications/devices", async (c) => {
   const { db, ready, close } = getDb(c.env);
@@ -185,9 +187,16 @@ notifications.post("/notifications/devices", async (c) => {
     try { body = await c.req.json(); }
     catch { return c.json({ error: "bad_request", message: "Body must be JSON." }, 400); }
 
-    const token = typeof body.token === "string" ? body.token.trim().toLowerCase() : "";
-    if (!/^[0-9a-f]{32,200}$/.test(token)) {
-      return c.json({ error: "bad_request", message: "token must be the device token as hex." }, 400);
+    const platform = (body as { platform?: unknown }).platform === "android" ? "android" : "ios";
+    const raw = typeof body.token === "string" ? body.token.trim() : "";
+    /* Apple's is hex and case does not matter; Firebase's is a long opaque
+       string whose case does, so only Apple's is folded. */
+    const token = platform === "ios" ? raw.toLowerCase() : raw;
+    const looksRight = platform === "ios"
+      ? /^[0-9a-f]{32,200}$/.test(token)
+      : /^[A-Za-z0-9_:.\-]{64,4096}$/.test(token);
+    if (!looksRight) {
+      return c.json({ error: "bad_request", message: "token is not a device token." }, 400);
     }
     const environment = body.environment === "sandbox" ? "sandbox" : "production";
 
@@ -195,10 +204,10 @@ notifications.post("/notifications/devices", async (c) => {
       .where(eq(pushDevices.token, token)).limit(1);
 
     await db.insert(pushDevices)
-      .values({ userId: auth.user.id, token, environment, updatedAt: new Date() })
+      .values({ userId: auth.user.id, token, environment, platform, updatedAt: new Date() })
       .onConflictDoUpdate({
         target: pushDevices.token,
-        set: { userId: auth.user.id, environment, updatedAt: new Date() },
+        set: { userId: auth.user.id, environment, platform, updatedAt: new Date() },
       });
 
     /* A phone this account had not seen. If a subcategory was chosen before
@@ -234,7 +243,9 @@ notifications.delete("/notifications/devices/:token", async (c) => {
     if (!auth.ok) return c.json({ error: "unauthorized", reason: auth.reason }, 401);
 
     await db.delete(pushDevices).where(and(
-      eq(pushDevices.token, c.req.param("token").toLowerCase()),
+      /* Either spelling: an FCM token's case is significant, while an iPhone
+         may hand back the hex in either case, and it was stored folded. */
+      inArray(pushDevices.token, [c.req.param("token"), c.req.param("token").toLowerCase()]),
       eq(pushDevices.userId, auth.user.id),
     ));
     return c.json({ ok: true });

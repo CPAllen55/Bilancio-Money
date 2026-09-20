@@ -13,3 +13,10 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Signed release builds: artefacts, and not small.
+app/release/
+*.aab
+*.apk
+*.jks
+*.keystore

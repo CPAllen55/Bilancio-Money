@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.bilanciomoney.bilancio.Billing
 import com.bilanciomoney.bilancio.Bilancio
 import com.bilanciomoney.bilancio.PlayStore
+import com.bilanciomoney.bilancio.Push
 import com.bilanciomoney.bilancio.ui.theme.Appearance
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -75,6 +76,8 @@ fun MoreScreen(onOpen: (page: String) -> Unit) {
                 Link("Net worth  ›") { onOpen("NetWorth") }
                 HorizontalDivider()
                 Link("Categories & rules  ›") { onOpen("Categories") }
+                HorizontalDivider()
+                Link("Budget alerts  ›") { onOpen("Alerts") }
                 HorizontalDivider()
                 Link("Banks  ›") { onOpen("Banks") }
             }
@@ -158,7 +161,9 @@ fun MoreScreen(onOpen: (page: String) -> Unit) {
         SectionTitle("Account")
         Card(Modifier.fillMaxWidth()) {
             Column {
-                Link("Sign out") { scope.launch { Clerk.auth.signOut() } }
+                /* The phone stops being this account's before the session
+                    goes, or the token is left pointing at somebody else. */
+                Link("Sign out") { PlayStore.clearMessage(); Push.unregister(); scope.launch { Clerk.auth.signOut() } }
                 HorizontalDivider()
                 Link("Delete account", danger = true) { deleting = true }
             }

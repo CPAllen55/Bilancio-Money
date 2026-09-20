@@ -127,6 +127,46 @@ data class Budget(
     }
 }
 
+/* ---------------------------------------------------------------- alerts -- */
+
+/** One thing already said this month, and whether it has been hushed. */
+data class SaidAlert(
+    val categoryId: String,
+    val label: String,
+    val colour: Long,
+    val level: String?,
+    val acknowledged: Boolean,
+)
+
+data class Alerts(
+    /** Whether the server can send at all -- the keys are set. */
+    val configured: Boolean,
+    val month: String,
+    /** How many phones this account has registered. */
+    val devices: Int,
+    val selected: List<String>,
+    val alerts: List<SaidAlert>,
+) {
+    companion object {
+        fun from(o: JSONObject) = Alerts(
+            configured = o.optBoolean("configured"),
+            month = o.optString("month"),
+            devices = o.optInt("devices"),
+            selected = o.optJSONArray("selected")
+                ?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(),
+            alerts = o.optJSONArray("alerts").orEmpty().map { r ->
+                SaidAlert(
+                    categoryId = r.optString("categoryId"),
+                    label = r.optString("label"),
+                    colour = colourOf(r.optString("colour")),
+                    level = if (r.isNull("level")) null else r.optString("level"),
+                    acknowledged = r.optBoolean("acknowledged"),
+                )
+            },
+        )
+    }
+}
+
 /* -------------------------------------------------------------- calendar -- */
 
 data class CalendarSub(val name: String, val cents: Long, val projected: Boolean)

@@ -11,6 +11,8 @@ composeBom = "2026.02.01"
 clerk = "1.1.8"
 plaid = "6.2.1"
 billing = "9.1.0"
+firebaseBom = "34.4.0"
+coroutinesPlayServices = "1.10.2"
 lifecycleViewmodelCompose = "2.9.2"
 
 [libraries]
@@ -33,6 +35,9 @@ clerk-android-api = { group = "com.clerk", name = "clerk-android-api", version.r
 clerk-android-ui = { group = "com.clerk", name = "clerk-android-ui", version.ref = "clerk" }
 plaid-link = { group = "com.plaid.link", name = "sdk-core", version.ref = "plaid" }
 play-billing = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "billing" }
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
+coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutinesPlayServices" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

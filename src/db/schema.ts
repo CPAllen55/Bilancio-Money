@@ -378,6 +378,10 @@ export const pushDevices = pgTable("push_devices", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   token: text("token").notNull(),
+  /* "ios" or "android": which of the two senders can reach this phone. An
+     APNs token and an FCM one look nothing alike and are not interchangeable,
+     and the column says which is which rather than the shape being guessed. */
+  platform: text("platform").notNull().default("ios"),
   /* "production" or "sandbox". A build run from Xcode is handed a sandbox
      token and TestFlight and the App Store production ones, and each works
      only against its own APNs host. */

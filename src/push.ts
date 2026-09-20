@@ -29,11 +29,20 @@
  */
 
 import type { pushDevices } from "./db/schema";
+import { configured as fcmConfigured, sendFcm } from "./fcm";
 
-type Device = Pick<typeof pushDevices.$inferSelect, "token" | "environment">;
+type Device = Pick<typeof pushDevices.$inferSelect, "token" | "environment" | "platform">;
 
-export function pushConfigured(env: Env): boolean {
+/** Whether Apple's phones can be reached. */
+function apnsConfigured(env: Env): boolean {
   return !!(env.APNS_KEY_ID && env.APNS_PRIVATE_KEY && env.APNS_TEAM_ID);
+}
+
+/* Whether anybody can be reached at all. Either store on its own is enough:
+   an instance with only Apple configured still alerts iPhones, and the alert
+   check stands down only when neither can send. */
+export function pushConfigured(env: Env): boolean {
+  return apnsConfigured(env) || fcmConfigured(env);
 }
 
 const HOSTS = {
@@ -108,7 +117,17 @@ export interface PushResult {
 }
 
 export async function sendPush(env: Env, device: Device, message: PushMessage): Promise<PushResult> {
-  if (!pushConfigured(env)) return { ok: false, gone: false, reason: "not configured" };
+  /* Android goes to Firebase, and nothing below this line applies to it: a
+     different credential, a different host, a different payload. */
+  if (device.platform === "android") {
+    return sendFcm(env, device.token, {
+      title: message.title,
+      body: message.body,
+      collapseKey: message.collapseId,
+      data: message.data,
+    });
+  }
+  if (!apnsConfigured(env)) return { ok: false, gone: false, reason: "not configured" };
   // Hex, as the app sends it. Anything else was never a token and never will be.
   if (!/^[0-9a-f]{32,200}$/i.test(device.token)) return { ok: false, gone: true, reason: "malformed token" };
 

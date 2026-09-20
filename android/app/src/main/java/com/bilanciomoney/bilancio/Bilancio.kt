@@ -184,6 +184,33 @@ object Bilancio {
         request("POST", "/api/plaid/link-token/update", JSONObject().put("itemId", itemId).put("platform", "android"))
             .getString("linkToken")
 
+    /* ------------------------------------------------------------ alerts -- */
+
+    suspend fun alerts(): Alerts = Alerts.from(request("GET", "/api/notifications"))
+
+    /** Choose or unchoose subcategories to be alerted on. */
+    suspend fun setAlertCategories(categoryIds: List<String>, enabled: Boolean) {
+        val arr = org.json.JSONArray()
+        categoryIds.forEach { arr.put(it) }
+        request("PUT", "/api/notifications/subscriptions",
+            JSONObject().put("categoryIds", arr).put("enabled", enabled))
+    }
+
+    /** "Enough for now": quiet for that category until the month turns. */
+    suspend fun acknowledgeAlert(categoryId: String) {
+        request("POST", "/api/notifications/acknowledge", JSONObject().put("categoryId", categoryId))
+    }
+
+    /** This phone, for alerts. Sent on every launch; the server upserts. */
+    suspend fun registerDevice(token: String) {
+        request("POST", "/api/notifications/devices",
+            JSONObject().put("token", token).put("platform", "android"))
+    }
+
+    suspend fun forgetDevice(token: String) {
+        request("DELETE", "/api/notifications/devices/${q(token)}")
+    }
+
     suspend fun calendar(month: YearMonth): CalendarMonth =
         CalendarMonth.from(request("GET", "/api/calendar?month=$month"))
 
@@ -276,8 +303,7 @@ data class Category(
 
         fun list(a: JSONArray?) = a.orEmpty().map(::from)
 
-        private fun parseColour(hex: String): Long =
-            runCatching { 0xFF000000 or hex.removePrefix("#").toLong(16) }.getOrDefault(0xFF888888)
+        private fun parseColour(hex: String): Long = colourOf(hex)
     }
 }
 
@@ -459,6 +485,10 @@ data class Billing(
         )
     }
 }
+
+/** A hex colour from the server as an opaque colour; grey for anything unreadable. */
+internal fun colourOf(hex: String): Long =
+    runCatching { 0xFF000000 or hex.removePrefix("#").toLong(16) }.getOrDefault(0xFF888888)
 
 /* JSONArray is not iterable, and every list here is read the same way. */
 internal fun JSONArray?.orEmpty(): List<JSONObject> =

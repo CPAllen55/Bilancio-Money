@@ -52,6 +52,11 @@ dependencies {
     implementation(libs.plaid.link)
     // Subscriptions sold in the app. Verified by our server, never trusted here.
     implementation(libs.play.billing)
+    // Budget alerts. Configured in code rather than by the google-services
+    // plugin -- see Push.kt for why.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+    implementation(libs.coroutines.play.services)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

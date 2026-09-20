@@ -88,6 +88,16 @@ declare global {
      */
     GOOGLE_PLAY_SERVICE_ACCOUNT?: string;
 
+    /* ── Firebase, for notifications to Android phones ───────────────────
+     *
+     * The whole JSON key file of the Firebase project's service account, with
+     * the Firebase Cloud Messaging API enabled. Secret, and a different
+     * account from the Play one above -- one sends notifications, the other
+     * reads purchases. Unset, Android phones are simply not sent to. See
+     * fcm.ts.
+     */
+    FCM_SERVICE_ACCOUNT?: string;
+
     /* ── APNs, for budget alerts ─────────────────────────────────────────
      *
      * An APNs key: Certificates, Identifiers & Profiles → Keys → Apple Push

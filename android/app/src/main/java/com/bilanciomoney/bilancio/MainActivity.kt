@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.bilanciomoney.bilancio.ui.BanksScreen
 import com.bilanciomoney.bilancio.ui.BudgetingScreen
+import com.bilanciomoney.bilancio.ui.AlertsScreen
 import com.bilanciomoney.bilancio.ui.CalendarScreen
 import com.bilanciomoney.bilancio.ui.CategoriesScreen
 import com.bilanciomoney.bilancio.ui.ForecastScreen
@@ -90,7 +91,8 @@ private enum class Tab(val label: String, val icon: Int) {
 }
 
 private enum class MorePage(val title: String) {
-    Calendar("Calendar"), Banks("Banks"), Forecast("Year ahead"), NetWorth("Net worth"), Categories("Categories")
+    Calendar("Calendar"), Banks("Banks"), Forecast("Year ahead"), NetWorth("Net worth"),
+    Categories("Categories"), Alerts("Budget alerts")
 }
 
 /**
@@ -205,6 +207,7 @@ private fun SignedIn() {
                             MorePage.Forecast -> ForecastScreen()
                             MorePage.NetWorth -> NetWorthScreen()
                             MorePage.Categories -> CategoriesScreen()
+                            MorePage.Alerts -> AlertsScreen()
                         }
                     }
                 }

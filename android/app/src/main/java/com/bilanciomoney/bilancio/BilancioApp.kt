@@ -18,6 +18,7 @@ class BilancioApp : Application() {
         /* Debug logging in debug builds only: Clerk otherwise swallows the
            reason a sign-in did not complete, and a silent return to the
            sign-in screen is not something a user can report usefully. */
+        Push.start(this)
         Clerk.initialize(
             this,
             publishableKey = Bilancio.CLERK_PUBLISHABLE_KEY,

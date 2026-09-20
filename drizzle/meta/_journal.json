@@ -127,6 +127,13 @@
       "when": 1789355313581,
       "tag": "0017_users_google_purchase",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789441713581,
+      "tag": "0018_push_devices_platform",
+      "breakpoints": true
     }
   ]
 }
