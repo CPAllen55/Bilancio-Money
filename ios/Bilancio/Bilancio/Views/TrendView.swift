@@ -365,6 +365,7 @@ private struct CategoryTrendChart: View {
                         .frame(maxWidth: .infinity, minHeight: 120)
                 } else {
                     chart(marks: marks, ago: ago, big: big)
+                    ChartKey(items: visible)
 
                     if let picked {
                         PickedSegment(picked: picked,
@@ -504,7 +505,14 @@ private struct CategoryTrendChart: View {
             }
         }
         .chartForegroundStyleScale(domain: domain, range: range)
-        .chartLegend(position: .bottom, alignment: .leading, spacing: 8)
+        /* The key is drawn by `ChartKey` below the chart, not here.
+         *
+         * Swift Charts puts its own legend inside the chart's frame, and this
+         * frame is a fixed 260. Nine category names wrap to four lines on a
+         * phone, the legend had no room to grow into, and it ran out of the
+         * bottom of the chart and over the edge of the card. Outside the
+         * frame, the key takes whatever height its names need. */
+        .chartLegend(.hidden)
         .chartYAxis {
             AxisMarks(format: .currency(code: "USD").precision(.fractionLength(0)))
         }
@@ -812,6 +820,33 @@ private struct MonthBreakdown: View {
                 }
             }
         }
+    }
+}
+
+/// Which colour is which category, in as many rows as the names need.
+///
+/// Stands in for Swift Charts' own legend, which lives inside the chart's
+/// fixed frame and overflowed it. Same order and colours as the scale the bars
+/// are drawn with — `visible` feeds both — so the key cannot disagree with the
+/// chart it explains.
+private struct ChartKey: View {
+    let items: [TransactionsResponse.Category]
+
+    var body: some View {
+        FlowLayout(spacing: 10, lineSpacing: 4) {
+            ForEach(items) { cat in
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color(hex: cat.colour))
+                        .frame(width: 7, height: 7)
+                    Text(cat.label)
+                        .lineLimit(1)
+                }
+                .font(.caption)
+                .foregroundStyle(Theme.quietText)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

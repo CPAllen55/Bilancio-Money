@@ -531,6 +531,61 @@ extension View {
     }
 }
 
+/// Lays its children out in rows, left to right, starting a new row whenever
+/// the next one would not fit.
+///
+/// For keys and tag lists: things whose count depends on the data and whose
+/// widths depend on the words in them, so no fixed number of columns is right
+/// on every screen. It reports the height it actually used, which is the whole
+/// point — a parent can make room for four rows on a phone and two on an iPad
+/// without either being guessed at.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, line: CGFloat = 0, widest: CGFloat = 0
+        for view in subviews {
+            let size = measure(view, within: width)
+            if x > 0, x + size.width > width {
+                y += line + lineSpacing
+                x = 0
+                line = 0
+            }
+            widest = max(widest, x + size.width)
+            x += size.width + spacing
+            line = max(line, size.height)
+        }
+        return CGSize(width: min(widest, width), height: y + line)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize,
+                       subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, line: CGFloat = 0
+        for view in subviews {
+            let size = measure(view, within: bounds.width)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                y += line + lineSpacing
+                x = bounds.minX
+                line = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), anchor: .topLeading,
+                       proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            line = max(line, size.height)
+        }
+    }
+
+    /// Its natural size, unless that is wider than a whole row — then the row,
+    /// so one very long name truncates instead of running off the edge.
+    private func measure(_ view: LayoutSubview, within width: CGFloat) -> CGSize {
+        let natural = view.sizeThatFits(.unspecified)
+        guard natural.width > width else { return natural }
+        return view.sizeThatFits(ProposedViewSize(width: width, height: nil))
+    }
+}
+
 /// The column cap itself. See `dashboardColumn()`.
 struct DashboardColumn: ViewModifier {
     @Environment(\.horizontalSizeClass) private var width
