@@ -35,6 +35,10 @@ export const users = pgTable("users", {
   email: text("email").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  /* When the operator was told this account existed. NULL is "not yet", which
+     is what makes the sign-up notice exactly-once rather than a job guessing
+     from its own schedule. See signup-alerts.ts. */
+  signupNotifiedAt: timestamp("signup_notified_at", { withTimezone: true }),
 
   plan: userPlan("plan").notNull().default("trial"),
   /* When the current state runs out. NULL means it does not — which is what a

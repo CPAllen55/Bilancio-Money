@@ -22,6 +22,7 @@ import logoRoutes from "./logo-routes";
 import notificationRoutes from "./notification-routes";
 import adminRoutes from "./admin-routes";
 import { closeLapsedConnections } from "./lapse";
+import { announceSignups } from "./signup-alerts";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -113,10 +114,20 @@ app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
    bank connections for accounts whose access ended more than a week ago. */
 export default {
   fetch: app.fetch,
-  scheduled(_event, env, ctx) {
+  scheduled(event, env, ctx) {
+    /* Two schedules, told apart by their cron line: the nightly one closes
+       connections whose access ended, and the quarter-hourly one says who has
+       signed up. */
+    if (event.cron === "23 9 * * *") {
+      ctx.waitUntil(
+        closeLapsedConnections(env).then(() => undefined)
+          .catch((err) => console.error("lapse job failed:", err)),
+      );
+      return;
+    }
     ctx.waitUntil(
-      closeLapsedConnections(env).then(() => undefined)
-        .catch((err) => console.error("lapse job failed:", err)),
+      announceSignups(env).then(() => undefined)
+        .catch((err) => console.error("signup notice failed:", err)),
     );
   },
 } satisfies ExportedHandler<Env>;

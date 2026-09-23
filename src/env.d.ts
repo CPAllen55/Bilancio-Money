@@ -98,6 +98,17 @@ declare global {
      */
     FCM_SERVICE_ACCOUNT?: string;
 
+    /* ── Telling the operator about a sign-up ────────────────────────────
+     *
+     * Cloudflare's email binding, and the address it may write to. Both are
+     * needed together; without them the quarter-hourly job does nothing. The
+     * address must be verified as a destination in Email Routing -- Cloudflare
+     * will not deliver anywhere else, which is what stops a Worker being a
+     * spam cannon. See signup-alerts.ts.
+     */
+    NOTIFY_EMAIL?: { send(message: unknown): Promise<void> };
+    NOTIFY_EMAIL_TO?: string;
+
     /* ── APNs, for budget alerts ─────────────────────────────────────────
      *
      * An APNs key: Certificates, Identifiers & Profiles → Keys → Apple Push

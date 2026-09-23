@@ -125,6 +125,11 @@
     // and webhooks simply are not registered during local development.
     "PLAID_WEBHOOK_URL": "https://bilanciomoney.com/api/plaid/webhook",
 
+    // Where the sign-up notice goes. Not a secret -- it is a business address
+    // already on the site -- and it must be verified as a destination in
+    // Cloudflare Email Routing or nothing is delivered.
+    "NOTIFY_EMAIL_TO": "chris@bilanciomoney.com",
+
     // Apple's id for the team that owns the app, and the issuer of every APNs
     // provider token. Not a secret: it is in the Xcode project.
     "APNS_TEAM_ID": "Z9C3CA95C7"
@@ -139,8 +144,20 @@
   // subscription ended more than a week ago, so they stop costing a monthly
   // fee. See src/lapse.ts.
   "triggers": {
-    "crons": ["23 9 * * *"]
+    // Nightly: close bank connections whose access ended a week ago.
+    // Quarter-hourly: say who has signed up since the last look.
+    "crons": ["23 9 * * *", "*/15 * * * *"]
   },
+
+  /* Sending the sign-up notice. Cloudflare delivers only to an address
+     verified as a destination in Email Routing, so this can reach nobody
+     else. */
+  "send_email": [
+    {
+      "name": "NOTIFY_EMAIL",
+      "destination_address": "chris@bilanciomoney.com"
+    }
+  ],
 
   "observability": {
     "enabled": true
