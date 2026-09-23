@@ -125,10 +125,10 @@
     // and webhooks simply are not registered during local development.
     "PLAID_WEBHOOK_URL": "https://bilanciomoney.com/api/plaid/webhook",
 
-    // Where the sign-up notice goes. Not a secret -- it is a business address
-    // already on the site -- and it must be verified as a destination in
-    // Cloudflare Email Routing or nothing is delivered.
-    "NOTIFY_EMAIL_TO": "chris@bilanciomoney.com",
+    // Where the sign-up notice goes: the mailbox the bilanciomoney.com
+    // addresses forward to, which is already verified as a destination in
+    // Cloudflare Email Routing. Nothing is delivered anywhere else.
+    "NOTIFY_EMAIL_TO": "cpallen55@gmail.com",
 
     // Apple's id for the team that owns the app, and the issuer of every APNs
     // provider token. Not a secret: it is in the Xcode project.
@@ -155,7 +155,7 @@
   "send_email": [
     {
       "name": "NOTIFY_EMAIL",
-      "destination_address": "chris@bilanciomoney.com"
+      "destination_address": "cpallen55@gmail.com"
     }
   ],
 
