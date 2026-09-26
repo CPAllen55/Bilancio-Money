@@ -26,7 +26,7 @@
 import { Hono } from "hono";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
-import { users, waitlist, items } from "./db/schema";
+import { users, waitlist } from "./db/schema";
 import { requireUser } from "./auth";
 import { addMonths, type Plan } from "./entitlement";
 import { selfTest } from "./apple";
@@ -92,8 +92,16 @@ admin.get("/overview", async (c) => {
         plan: users.plan,
         planUntil: users.planUntil,
         planNote: users.planNote,
+        /* Written out rather than interpolated. Drizzle renders
+           ${items.userId} inside a subquery as a bare "user_id", and the
+           "id" beside it then resolves against items too -- so this compared
+           items.user_id with items.id, which is true for nobody, and counted
+           zero banks for everybody. Closed connections are left out because
+           this is the number that costs money, and Plaid stops billing for
+           an item once it is closed. */
         itemCount: sql<number>`(
-          select count(*)::int from ${items} where ${items.userId} = ${users.id}
+          select count(*)::int from "items"
+          where "items"."user_id" = "users"."id" and "items"."closed_at" is null
         )`,
       })
       .from(users)

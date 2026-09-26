@@ -117,7 +117,7 @@ export async function announceSignups(env: Env): Promise<{ sent: number }> {
       "",
       ...lines,
       "",
-      `${total} accounts in total.`,
+      `${total} people have signed up in total.`,
       "",
       "-- ",
       "Sent by Bilancio's own Worker. Nothing about anybody's money is in this mail.",
