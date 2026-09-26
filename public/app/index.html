@@ -4617,6 +4617,15 @@ async function renderTransactions() {
   const parts = [];
   if (s.in) parts.push('+' + money(s.in) + ' in');
   if (s.out) parts.push(money(-s.out) + ' out');
+  /* Transfers sit on neither side. Paying a card is one movement the ledger
+     sees twice -- leaving the account, arriving at the card -- so counting it
+     would inflate both figures by the size of the bill. Left out of In and
+     Out, and named here, because money that moved and appears nowhere reads
+     as an error. */
+  if (s.transfersExcluded) {
+    parts.push(s.transfersExcluded + ' transfer' + (s.transfersExcluded === 1 ? '' : 's') +
+      ' (' + money(s.transfersMoved) + ') not counted');
+  }
   const foot = '<tfoot><tr>' +
     '<td class="tx-total-label" colspan="5">' + r.total + ' transaction' + (r.total === 1 ? '' : 's') +
       (parts.length > 1 ? ' · ' + parts.join(' · ') : '') + '</td>' +

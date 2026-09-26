@@ -1130,6 +1130,13 @@ summary.get("/transactions", async (c) => {
     // answer to a different question whenever the list is capped.
     let moneyIn = 0;
     let moneyOut = 0;
+    /* Transfers are on neither side of the ledger, but they are not nothing:
+       said out loud, so a reader who knows a card bill went out this month can
+       see where it went rather than wondering which figure swallowed it. */
+    let transfersExcluded = 0;
+    let transfersMoved = 0;
+    /* True when more rows matched than were read for the totals. */
+    let partial = false;
 
     if (bucket) {
       // A parent drills into everything beneath it, a leaf into just itself.
@@ -1232,23 +1239,58 @@ summary.get("/transactions", async (c) => {
       }
       vendors = [...byVendor.values()].sort((a, b) => b.cents - a.cents);
     } else {
-      const [pageRows, totals] = await Promise.all([
+      /* Classified, not summed.
+       *
+       * Summing the amount column counts a transfer twice. Paying a card is
+       * money out of the current account and money in at the card, and with
+       * both linked the ledger holds both halves -- so In and Out each grow by
+       * the size of the bill, and the period looks like it earned and spent
+       * money that never existed. The Overview never had this: it runs every
+       * row through displayBucket, which puts a transfer on neither side.
+       *
+       * The same rule is applied here, and what it leaves out is counted
+       * rather than silently dropped -- the money did move, and a total that
+       * pretends otherwise is its own kind of wrong. Capped like the
+       * drill-down, and the client is told when the cap was reached. */
+      const [pageRows, counted, scan] = await Promise.all([
         page.limit(limit).offset(offset),
+        db.select({ total: sql<number>`count(*)::int` }).from(transactions).where(where),
         db
           .select({
-            total: sql<number>`count(*)::int`,
-            // The column is Plaid's way round — positive means money left — so
-            // "in" is the negative side of it and the signs swap here.
-            moneyIn: sql<string>`coalesce(sum(case when ${transactions.amount} < 0 then -${transactions.amount} else 0 end), 0)::text`,
-            moneyOut: sql<string>`coalesce(sum(case when ${transactions.amount} > 0 then ${transactions.amount} else 0 end), 0)::text`,
+            id: transactions.id,
+            amount: transactions.amount,
+            categoryPrimary: transactions.categoryPrimary,
+            categoryDetailed: transactions.categoryDetailed,
+            merchantName: transactions.merchantName,
+            name: transactions.name,
+            overrideCategoryId: transactionOverrides.categoryId,
           })
           .from(transactions)
-          .where(where),
+          .leftJoin(
+            transactionOverrides,
+            and(
+              eq(transactionOverrides.transactionId, transactions.id),
+              eq(transactionOverrides.userId, auth.user.id),
+            ),
+          )
+          .where(where)
+          .limit(DRILL_SCAN_CAP),
       ]);
       rows = pageRows;
-      total = totals[0].total;
-      moneyIn = Number(totals[0].moneyIn);
-      moneyOut = Number(totals[0].moneyOut);
+      total = counted[0].total;
+
+      for (const r of scan) {
+        for (const part of partsFor(r as AmountRow, splits)) {
+          const { kind, signed } = displayBucket(part.amount, part.row, ctx);
+          if (kind === "transfer") {
+            transfersExcluded++;
+            transfersMoved += Math.abs(signed);
+            continue;
+          }
+          if (signed > 0) moneyIn += signed; else moneyOut += -signed;
+        }
+      }
+      partial = total > scan.length;
     }
 
     /* The labels, now that there is a page to label. Asked of its own merchants
@@ -1266,7 +1308,16 @@ summary.get("/transactions", async (c) => {
       ok: true,
       total,
       // Across everything matched, in the reader's convention: positive is in.
-      sum: { in: moneyIn, out: moneyOut, net: moneyIn - moneyOut },
+      /* In and Out leave transfers out, as every other total in the app does;
+         what was left out is reported beside them rather than hidden. */
+      sum: {
+        in: moneyIn,
+        out: moneyOut,
+        net: moneyIn - moneyOut,
+        transfersExcluded,
+        transfersMoved,
+        partial,
+      },
       /* Who the money went to, biggest first, over the whole filtered set.
          Empty on the unbucketed path, which never has the whole set. */
       vendors,
