@@ -84,7 +84,20 @@ const BY_DETAILED: Record<string, string> = {
      an override somebody set by hand still wins, as it always does. */
   RENT_AND_UTILITIES_INTERNET_AND_CABLE: "internet",
   RENT_AND_UTILITIES_TELEPHONE: "cell-phone",
+  /* Every premium Plaid can see -- car, home, life -- which is why this
+     belongs with the bills rather than under Health & Care, where it used to
+     make a car policy read as healthcare. */
   GENERAL_SERVICES_INSURANCE: "insurance",
+  /* The chemist. Prescriptions used to land in the general medical line,
+     beside consultations and hospital bills, which are a different kind of
+     money: one is monthly and small, the other rare and large. */
+  MEDICAL_PHARMACIES_AND_SUPPLEMENTS: "supplements",
+  /* Bought to drink at home, which is shopping rather than an evening out. */
+  FOOD_AND_DRINK_BEER_WINE_AND_LIQUOR: "alcohol",
+  /* Water and refuse, away from electricity and gas: the seasons move one and
+     leave the other flat. */
+  RENT_AND_UTILITIES_WATER: "water-waste",
+  RENT_AND_UTILITIES_SEWAGE_AND_WASTE_MANAGEMENT: "water-waste",
   GENERAL_SERVICES_EDUCATION: "tuition-fees",
   GENERAL_SERVICES_CHILDCARE: "childcare",
   GENERAL_SERVICES_ACCOUNTING_AND_FINANCIAL_PLANNING: "business",
@@ -129,8 +142,17 @@ const BY_DETAILED: Record<string, string> = {
      below -- the one place a large, irregular, entirely ordinary cost had no
      line of its own. */
   GENERAL_SERVICES_AUTOMOTIVE: "car-maintenance",
+  /* Parking and tolls, kept off the fuel line: fuel tracks the miles driven
+     and parking does not, so averaging them together describes neither. */
+  TRANSPORTATION_PARKING: "parking-tolls",
+  TRANSPORTATION_TOLLS: "parking-tolls",
   TRAVEL_FLIGHTS: "airlines",
   LOAN_PAYMENTS_CAR_PAYMENT: "car-payment",
+  /* A mortgage is housing, not a loan in the sense Obligations means.
+     Filed under Loan Payments it sat away from rent -- so an owner and a
+     renter paying the same for the same house looked nothing alike, and
+     neither Home nor the budget shaped from it told the truth. */
+  LOAN_PAYMENTS_MORTGAGE_PAYMENT: "housing",
 
   /* Work on the house, which is not the same money as living in it. All four
      of these used to reach Housing through the primary below, and Housing is

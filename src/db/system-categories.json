@@ -72,6 +72,14 @@
     "kind": "spend"
   },
   {
+    "slug": "alcohol",
+    "label": "Alcohol & Bars",
+    "colour": "#9E3F63",
+    "sortOrder": 22.5,
+    "parent": "food",
+    "kind": "spend"
+  },
+  {
     "slug": "coffee",
     "label": "Coffee",
     "colour": "#a2703f",
@@ -134,9 +142,17 @@
   },
   {
     "slug": "utilities",
-    "label": "Utilities",
+    "label": "Electric & Gas",
     "colour": "#5c6fd0",
     "sortOrder": 361,
+    "parent": "bills",
+    "kind": "spend"
+  },
+  {
+    "slug": "water-waste",
+    "label": "Water & Waste",
+    "colour": "#3FA4E0",
+    "sortOrder": 361.5,
     "parent": "bills",
     "kind": "spend"
   },
@@ -169,6 +185,14 @@
     "label": "Fuel & Transit",
     "colour": "#008a4b",
     "sortOrder": 41,
+    "parent": "transportation",
+    "kind": "spend"
+  },
+  {
+    "slug": "parking-tolls",
+    "label": "Parking & Tolls",
+    "colour": "#2E9C84",
+    "sortOrder": 41.5,
     "parent": "transportation",
     "kind": "spend"
   },
@@ -209,15 +233,15 @@
     "label": "Airlines",
     "colour": "#00a2a2",
     "sortOrder": 46,
-    "parent": "entertainment",
+    "parent": "trips",
     "kind": "spend"
   },
   {
     "slug": "travel",
-    "label": "Travel",
+    "label": "Hotels & Other Travel",
     "colour": "#00b8b8",
     "sortOrder": 47,
-    "parent": "entertainment",
+    "parent": "trips",
     "kind": "spend"
   },
   {
@@ -262,9 +286,17 @@
   },
   {
     "slug": "entertainment",
-    "label": "Travel & Entertainment",
-    "colour": "#E0611F",
+    "label": "Entertainment",
+    "colour": "#93408C",
     "sortOrder": 55,
+    "parent": null,
+    "kind": "spend"
+  },
+  {
+    "slug": "trips",
+    "label": "Travel",
+    "colour": "#0B6E76",
+    "sortOrder": 45.5,
     "parent": null,
     "kind": "spend"
   },
@@ -339,7 +371,7 @@
   },
   {
     "slug": "supplements",
-    "label": "Supplements",
+    "label": "Pharmacy & Supplements",
     "colour": "#c46389",
     "sortOrder": 64,
     "parent": "health-care",
@@ -348,9 +380,9 @@
   {
     "slug": "insurance",
     "label": "Insurance",
-    "colour": "#7a8ba8",
-    "sortOrder": 65,
-    "parent": "health-care",
+    "colour": "#8A7FD4",
+    "sortOrder": 364,
+    "parent": "bills",
     "kind": "spend"
   },
   {
