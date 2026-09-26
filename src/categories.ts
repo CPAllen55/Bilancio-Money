@@ -120,10 +120,15 @@ const BY_DETAILED: Record<string, string> = {
 
   PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS: "gym",
 
-  // Transportation. Plaid has one code for taxis and ride-hailing together, so
-  // it goes to the commoner of the two and a genuine cab has to be re-filed —
-  // which sets a merchant rule and fixes every later one.
+  /* Transportation. Plaid has one code for taxis and ride-hailing together,
+     and the category is named for both rather than pretending the difference
+     is knowable from a transaction. */
   TRANSPORTATION_TAXIS_AND_RIDE_SHARES: "rideshare",
+  /* Servicing, repairs, tyres, car washes. Unmapped until now, which sent
+     every garage bill to Unsorted through the GENERAL_SERVICES primary
+     below -- the one place a large, irregular, entirely ordinary cost had no
+     line of its own. */
+  GENERAL_SERVICES_AUTOMOTIVE: "car-maintenance",
   TRAVEL_FLIGHTS: "airlines",
   LOAN_PAYMENTS_CAR_PAYMENT: "car-payment",
 

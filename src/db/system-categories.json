@@ -174,15 +174,15 @@
   },
   {
     "slug": "rideshare",
-    "label": "Uber & Lyft",
+    "label": "Rideshare & Taxi",
     "colour": "#12a85f",
     "sortOrder": 42,
-    "parent": "entertainment",
+    "parent": "transportation",
     "kind": "spend"
   },
   {
-    "slug": "taxi",
-    "label": "Taxi",
+    "slug": "car-maintenance",
+    "label": "Maintenance & Repairs",
     "colour": "#2fb877",
     "sortOrder": 43,
     "parent": "transportation",
