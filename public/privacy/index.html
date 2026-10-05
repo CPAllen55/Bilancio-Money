@@ -92,7 +92,7 @@
 <main class="wrap">
 
   <h1>Privacy Policy</h1>
-  <p class="stamp">Last updated September 16, 2026</p>
+  <p class="stamp">Last updated October 5, 2026</p>
 
   <p class="lede">Bilancio Money reads your bank accounts so it can show you what you
   have and where it went. That is the only thing it does with your data. It is not sold,
@@ -120,9 +120,10 @@
   is active. We do not receive or store card numbers (see section 2).</p>
 
   <h3>Notifications</h3>
-  <p>If you turn on budget alerts in the iPhone app, we store the <strong>push token</strong>
-  Apple assigns to that install of the app, whether it is a test or App Store build, and
-  which categories you asked to be alerted about. We also record which alerts have already
+  <p>If you turn on budget alerts in the iPhone or Android app, we store the
+  <strong>push token</strong> that Apple or Google assigns to that install of the app,
+  which of the two it came from, whether it is a test or store build, and which
+  categories you asked to be alerted about. We also record which alerts have already
   been sent, so you are not told the same thing twice.</p>
 
   <h3>The former waitlist</h3>
@@ -179,8 +180,8 @@
     <li><strong>Full account numbers.</strong> Only the last four digits, as Plaid supplies them.</li>
     <li><strong>Social Security numbers, dates of birth, or government ID.</strong> Never requested.</li>
     <li><strong>Payment card details.</strong> If you subscribe, your card is entered with
-      Stripe (on the website) or held by Apple (in the iPhone app). Card numbers are never
-      sent to us or stored by us.</li>
+      Stripe (on the website), by Apple (in the iPhone app) or by Google (in the Android
+      app). Card numbers are never sent to us or stored by us.</li>
     <li><strong>Analytics, advertising, or tracking data.</strong> There are no analytics
       scripts, no advertising pixels, and no third-party trackers anywhere on this site
       or in the app. We do not build a record of what you look at. Our hosting keeps
@@ -244,6 +245,16 @@
         <a href="https://stripe.com/privacy" rel="noopener">Stripe's privacy policy</a>.
         We receive your subscription's status and identifiers, never the card
         number.</td></tr>
+      <tr><td>Google (payments)</td><td>Only if you subscribe in the Android app.
+        Google Play takes the payment under its own terms and tells us whether the
+        subscription is live. Card details go to Google, never to us. Governed by
+        <a href="https://policies.google.com/privacy" rel="noopener">Google's privacy
+        policy</a>.</td></tr>
+      <tr><td>Google (notifications)</td><td>Only if you use the Android app and switch
+        on budget alerts. Firebase Cloud Messaging carries the alert to your phone, the
+        way Apple's service does for the iPhone. It receives the alert itself — a
+        category name and an amount — and an identifier for that install of the
+        app.</td></tr>
       <tr><td>Apple</td><td>Only if you use the iPhone app. Takes payment for
         subscriptions bought in the app, under Apple's terms; tells us whether that
         subscription is active. Also delivers budget alerts to your phone — the alert's
@@ -299,9 +310,10 @@
     under <em>Banks</em>. Disconnecting revokes our access at Plaid and then deletes that
     bank's accounts and transactions. Deleting your account does that for every connected
     bank, then erases your data and your sign-in. Neither can be undone.</p>
-    <p><strong>Deleting your account does not cancel a subscription.</strong> Cancel it
-    first — on the website from your account page, or for a subscription bought in the
-    iPhone app, in your Apple account under Settings, your name, then Subscriptions.</p>
+    <p>Deleting your account <strong>cancels a subscription bought on the website or
+    through Google Play</strong>. <strong>It does not cancel one bought in the iPhone
+    app</strong> — Apple allows only you to do that, so cancel it first, in your Apple
+    account under Settings, your name, then Subscriptions.</p>
     <p>For a copy of your data, a correction, or removal from our former waitlist, email
     <strong>privacy@bilanciomoney.com</strong> from the address on your account and we will
     action it within <strong>30 days</strong>.</p>
