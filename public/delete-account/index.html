@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deleting your account — Bilancio Money</title>
+<meta name="description" content="How to delete your Bilancio Money account and everything in it: the steps in the app, what is erased, what is kept, and how long it takes.">
+<link rel="canonical" href="https://www.bilanciomoney.com/delete-account/">
+
+<link rel="icon" href="/brand/icon-32.png" sizes="32x32">
+<link rel="icon" href="/brand/icon-16.png" sizes="16x16">
+<link rel="apple-touch-icon" href="/brand/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#F9F4E4">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Lifted from the landing page by scripts in the scratchpad ──────────────
+   Tokens, base type, the header and the footer are the landing page's own
+   rules, copied so this page is the same page with different words in it.
+   Everything below the second banner is this page's own. */
+  :root{
+    --page:#F9F4E4;
+    --tint:#F1E7CD;
+    --card:#F7EBCA;
+    --panel:#FFFFFF;
+    --ink:#12253F;
+    --body:rgba(18,37,63,.72);
+    --body-soft:rgba(18,37,63,.68);
+    --hair:rgba(18,37,63,.12);
+    --hair-strong:rgba(18,37,63,.16);
+    /* Gold at 3.52:1 on cream is fine filling a button and fails on 11px
+       tracked type, so the small stuff takes the darker one at 5.4:1.
+       Both are the brand; only one of them can be read at that size. */
+    --gold:#A07026;
+    --gold-deep:#7d601d;
+    --pos:#0B7A55;
+    --neg:#C3354B;
+    --dark:#05080B;
+    --dark-ink:#E7EEF3;
+    --dark-gold:#E7C567;
+    --shot-shadow:0 18px 44px -18px rgba(18,37,63,.3);
+    --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+    --display:'Space Grotesk',var(--sans);
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  body{
+    margin:0; background:var(--page); color:var(--ink);
+    font:400 16.5px/1.6 var(--sans);
+    -webkit-font-smoothing:antialiased;
+  }
+  img{ max-width:100%; display:block; }
+  a{ color:var(--gold); text-decoration:none; }
+  a:hover{ color:var(--gold-deep); }
+  .wrap{ max-width:1200px; margin:0 auto; padding:0 32px; }
+  h1,h2,h3{ font-family:var(--display); font-weight:700; letter-spacing:-.02em; margin:0; }
+  /* Every anchor target clears the sticky header rather than hiding under it. */
+  section[id]{ scroll-margin-top:84px; }
+
+  .eyebrow{
+    font:500 11px/1 var(--mono); letter-spacing:.16em; text-transform:uppercase;
+    color:var(--gold-deep);
+  }
+  .num{ font:500 11px/1 var(--mono); color:var(--gold-deep); letter-spacing:.14em; }
+
+  /* ---------------------------------------------------------------- header */
+  header{
+    position:sticky; top:0; z-index:20;
+    background:rgba(249,244,228,.93); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--hair);
+  }
+  .head-inner{ display:flex; align-items:center; gap:26px; padding:14px 0; }
+  .lockup{ display:flex; align-items:center; gap:11px; text-decoration:none; flex:none; }
+  .lockup:hover{ color:inherit; }
+  .lockup img{ width:34px; height:auto; }
+  .mark-glide{ display:block; }
+  .mark-swoop{ display:block; transform-origin:50% 80%; }
+  .word{ font:700 21px/1 var(--display); color:var(--gold); letter-spacing:-.02em; }
+  .desc{ font:500 10.5px/1 var(--mono); letter-spacing:.2em; color:var(--body-soft);
+         text-transform:uppercase; }
+  /* The app's own mark, assembled rather than decorated: four columns of
+     2/3/4/5, which is the logo. */
+  .coins{ display:flex; align-items:flex-end; gap:2px; height:19px; }
+  .coins > span{ display:flex; flex-direction:column-reverse; gap:1px; }
+  .coins i{ display:block; width:4px; height:3px; border-radius:1px; background:var(--gold); }
+
+  nav.main{ margin-left:auto; display:flex; align-items:center; gap:26px; }
+  nav.main a{ font-size:14.5px; color:var(--body); }
+  nav.main a:hover{ color:var(--gold-deep); }
+  nav.main .signin{ font-weight:600; color:var(--ink); }
+  nav.main .signin:hover{ color:var(--gold-deep); }
+  .btn{
+    display:inline-block; font:600 14.5px/1 var(--sans); padding:11px 18px;
+    border-radius:8px; border:0; cursor:pointer; background:var(--gold); color:#fff;
+    transition:background .15s;
+  }
+  .btn:hover{ background:var(--gold-deep); color:#fff; }
+  nav.main .btn{ padding:10px 16px; border-radius:7px; }
+  .btn-ghost{
+    display:inline-block; font:600 15.5px/1 var(--sans); padding:13px 20px;
+    border-radius:8px; border:1px solid var(--hair-strong); background:transparent;
+    color:var(--ink);
+  }
+  .btn-ghost:hover{ border-color:var(--gold); color:var(--gold-deep); }
+
+  /* ---------------------------------------------------------------- footer */
+  footer{ border-top:1px solid var(--hair); padding:38px 0 46px; }
+  .foot{ display:flex; align-items:center; gap:22px; flex-wrap:wrap; }
+  .foot img{ width:26px; }
+  .foot .tag{ font-size:14px; color:var(--body-soft); }
+  .foot nav{ margin-left:auto; display:flex; gap:22px; flex-wrap:wrap; }
+  .foot nav a{ font-size:14px; color:var(--body); }
+  .foot nav a:hover{ color:var(--gold-deep); }
+  /* Instagram and YouTube, on a row of their own under the page links.
+     They were icons at the end of that row first, the same grey as the words
+     beside them, and read as decoration. Now each is a card saying where it
+     goes and under what name, with the mark people recognise. Plain links,
+     nothing embedded: neither service hears from a visitor who does not click. */
+  .foot .social{ width:100%; display:flex; justify-content:flex-end; align-items:center;
+                 gap:12px; flex-wrap:wrap; }
+  .foot .social-label{ font-family:var(--mono); font-size:11px; letter-spacing:.12em;
+                       text-transform:uppercase; color:var(--gold-deep); margin-right:4px; }
+  .foot .social a{ display:inline-flex; align-items:center; gap:11px; padding:8px 18px 8px 9px;
+                   background:var(--panel); border:1px solid var(--hair-strong); border-radius:14px;
+                   text-decoration:none; box-shadow:0 6px 16px -12px rgba(18,37,63,.45);
+                   transition:border-color .15s, transform .15s, box-shadow .15s; }
+  .foot .social a:hover{ border-color:var(--gold); transform:translateY(-1px);
+                         box-shadow:0 10px 22px -12px rgba(18,37,63,.5); }
+  .foot .social a:focus-visible{ outline:2px solid var(--gold-deep); outline-offset:3px; }
+  .foot .social svg{ display:block; flex:none; }
+  .foot .social b{ display:block; font-size:14.5px; font-weight:600; color:var(--ink); line-height:1.2; }
+  .foot .social small{ display:block; font-size:12.5px; color:var(--body-soft); line-height:1.3; }
+  @media (max-width:820px){ .foot .social{ justify-content:flex-start; } }
+  /* On a phone the label takes its own line and the cards stack under it.
+     Without this the label shared a line with Instagram and left YouTube alone
+     below; side by side does not fit, the pair being 345px in a 335px column. */
+  @media (max-width:560px){ .foot .social-label{ width:100%; } }
+  @media (prefers-reduced-motion: reduce){ .foot .social a{ transition:none; } .foot .social a:hover{ transform:none; } }
+  .foot .copy{ font-size:13px; color:var(--body-soft); width:100%; }
+
+  /* ---------------------------------------------------------------- narrow */
+  @media (max-width:820px){
+    .hero h1{ font-size:44px; }
+    .row, .budget-grid, .dark-grid,
+    .rows .row:nth-child(even){ grid-template-columns:1fr; gap:32px; }
+    .row + .row{ margin-top:64px; }
+    .rows{ margin-top:56px; }
+    .rows .row:nth-child(even) .row-text{ order:0; }
+    .trio-grid{ grid-template-columns:1fr; }
+    .trio-grid > div + div{ border-left:0; border-top:1px solid var(--hair); }
+    .cards{ grid-template-columns:1fr; }
+    .hero-shot{ height:300px; }
+    /* The page navigation collapses, the way in does not: on a phone this is
+       the only route to an account that already exists. */
+    nav.main a:not(.btn):not(.signin){ display:none; }
+  }
+  @media (max-width:560px){
+    .wrap{ padding:0 20px; }
+    .hero h1{ font-size:36px; }
+    .sec-head h2, .join h2, .budget h2, .dark h2{ font-size:30px; }
+  }
+
+  /* ---------------------------------------------------------------- support */
+  /* A reading column inside the 1200px wrap, which is sized for the landing
+     page's charts and far too wide for prose. */
+  main{ padding:54px 0 84px; }
+  .doc{ max-width:760px; }
+  .doc h1{ font-size:40px; margin:10px 0 12px; }
+  .doc h2{ font-size:23px; margin:44px 0 10px; padding-top:22px;
+           border-top:1px solid var(--hair); }
+  .doc h3{ font-size:17px; margin:26px 0 4px; }
+  .doc p, .doc li{ color:var(--body); }
+  .doc .lede{ font-size:18.5px; color:var(--ink); }
+  .doc ul{ padding-left:20px; }
+  .doc li{ margin-bottom:7px; }
+  .doc strong{ color:var(--ink); font-weight:600; }
+  .box{ background:var(--card); border:1px solid var(--hair); border-radius:10px;
+        padding:16px 20px; margin:20px 0; }
+  .box p:first-child{ margin-top:0; } .box p:last-child{ margin-bottom:0; }
+  /* The one thing most people arrive wanting: an address that answers. */
+  .contact{ display:flex; flex-wrap:wrap; gap:18px 30px; background:var(--panel);
+            border:1px solid var(--hair-strong); border-radius:12px;
+            padding:20px 22px; margin:24px 0 10px;
+            box-shadow:0 10px 26px -20px rgba(18,37,63,.5); }
+  .contact div{ min-width:190px; }
+  .contact .who{ display:block; font:500 11px/1 var(--mono); letter-spacing:.14em;
+                 text-transform:uppercase; color:var(--gold-deep); margin-bottom:5px; }
+  .contact a{ font-size:16px; font-weight:600; color:var(--ink); }
+  .contact a:hover{ color:var(--gold-deep); }
+  /* Where the reader has to tap, set apart from the sentence around it. */
+  .path{ font:500 14px/1.5 var(--mono); color:var(--ink); background:var(--tint);
+         border-radius:5px; padding:1px 7px; }
+  @media (max-width:560px){
+    .doc h1{ font-size:30px; }
+    .doc h2{ font-size:20px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap head-inner">
+    <a class="lockup" href="/" aria-label="Bilancio Money — home">
+      <span class="mark-glide"><span class="mark-swoop">
+        <img src="/brand/owl-mark-light.png" alt="" width="34">
+      </span></span>
+      <span class="word">Bilancio</span>
+      <span class="desc">Money</span>
+      <span class="coins" aria-hidden="true">
+        <span><i></i><i></i></span>
+        <span><i></i><i></i><i></i></span>
+        <span><i></i><i></i><i></i><i></i></span>
+        <span><i></i><i></i><i></i><i></i><i></i></span>
+      </span>
+    </a>
+    <nav class="main">
+      <a href="/#views">The dashboards</a>
+      <a href="/#budget">How it works</a>
+      <a href="/#trust">Your data</a>
+      <a href="/#pricing">Pricing</a>
+      <!-- Somebody who already has an account is looking for this word and no
+           other. The handoff put "See the demo" here; the same destination
+           under a different name is not a way in for a reader who has one. -->
+      <a class="signin" href="/app/">Sign in</a>
+      <a class="btn" href="/app/?signup">Start free</a>
+    </nav>
+  </div></header>
+
+<main class="wrap">
+  <article class="prose">
+    <h1>Deleting your Bilancio Money account</h1>
+    <p class="lede">Bilancio Money is operated by Guardiano del Faro LLC. You can delete
+    your account, and everything in it, from inside the app. Nobody has to ask us, and we
+    cannot undo it afterwards.</p>
+
+    <h2>In the Android app</h2>
+    <ol>
+      <li>Open <strong>Bilancio Money</strong> and sign in.</li>
+      <li>Tap <strong>More</strong> at the bottom right.</li>
+      <li>Scroll to <strong>Account</strong> and tap <strong>Delete account</strong>.</li>
+      <li>Type <strong>DELETE</strong> when asked, and confirm.</li>
+    </ol>
+
+    <h2>In the iPhone app</h2>
+    <ol>
+      <li>Open <strong>Bilancio</strong> and sign in.</li>
+      <li>Tap <strong>More</strong>, then <strong>Banks</strong>.</li>
+      <li>Choose <strong>Delete account</strong> at the bottom, and confirm.</li>
+    </ol>
+
+    <h2>On the website</h2>
+    <ol>
+      <li>Sign in at <a href="https://bilanciomoney.com/app/">bilanciomoney.com/app</a>.</li>
+      <li>Open <strong>Banks</strong>.</li>
+      <li>Choose <strong>Delete account</strong> at the bottom, and confirm.</li>
+    </ol>
+
+    <h2>What is deleted</h2>
+    <p>Everything, immediately:</p>
+    <ul>
+      <li>Every bank connection, revoked at Plaid, so no further data can be read.</li>
+      <li>Your accounts, balances and transactions.</li>
+      <li>Your budgets, categories, merchant rules and split transactions.</li>
+      <li>Your notification settings and any device registered for alerts.</li>
+      <li>Your email address and your sign-in.</li>
+    </ul>
+
+    <h2>What is kept, and for how long</h2>
+    <p>Nothing of your financial data is kept. Two things outlive the account, and neither
+    identifies what you spent:</p>
+    <ul>
+      <li><strong>Payment records.</strong> Stripe, Apple or Google hold the record of a
+      subscription you paid for, under their own terms, because tax law requires it of
+      them.</li>
+      <li><strong>Server logs.</strong> Our host keeps request logs for a short period as
+      part of running the service. They are not linked to your account once it is gone.</li>
+    </ul>
+
+    <h2>Subscriptions</h2>
+    <p>Deleting your account <strong>cancels a subscription bought on the website or
+    through Google Play</strong>. A subscription bought in the iPhone app can only be
+    cancelled by you, in your Apple account under Settings, your name, then Subscriptions
+    — do that first.</p>
+
+    <h2>Removing one bank instead</h2>
+    <p>If you want to disconnect a single bank but keep your account, open
+    <strong>Banks</strong> and remove that connection. Its accounts and transactions are
+    deleted with it; your categories, rules and the rest of your account stay.</p>
+
+    <h2>If you cannot sign in</h2>
+    <p>Email <strong>privacy@bilanciomoney.com</strong> from the address on your account
+    and we will delete it for you within <strong>30 days</strong>.</p>
+  </article>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <img src="/brand/owl-mark-light.png" alt="" width="26">
+    <span class="tag">"il bilancio" — the balance, the equilibrium.</span>
+    <nav>
+      <a href="/privacy/">Privacy</a>
+      <a href="/terms/">Terms</a>
+      <a href="mailto:security@bilanciomoney.com">Security</a>
+      <a href="/support/">Support</a>
+    </nav>
+    <div class="social">
+      <span class="social-label">Follow Bilancio</span>
+      <a href="https://www.instagram.com/bilancio_money/" target="_blank" rel="me noopener noreferrer"><svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><defs><radialGradient id="ig-grad" cx="0.3" cy="1.07" r="1.35"><stop offset="0" stop-color="#FDD074"/><stop offset=".25" stop-color="#F77F34"/><stop offset=".5" stop-color="#DD326E"/><stop offset=".75" stop-color="#D82B7E"/><stop offset="1" stop-color="#4F5BD5"/></radialGradient></defs><rect width="32" height="32" rx="8" fill="url(#ig-grad)"/><rect x="7.5" y="7.5" width="17" height="17" rx="5" fill="none" stroke="#fff" stroke-width="2.2"/><circle cx="16" cy="16" r="4.1" fill="none" stroke="#fff" stroke-width="2.2"/><circle cx="21.3" cy="10.7" r="1.3" fill="#fff"/></svg><span><b>Instagram</b><small>@bilancio_money</small></span></a>
+      <a href="https://www.youtube.com/@BilancioMoney" target="_blank" rel="me noopener noreferrer"><svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><rect x="1" y="6" width="30" height="20" rx="6" fill="#FF0033"/><path d="M13 11.5v9l8-4.5z" fill="#fff"/></svg><span><b>YouTube</b><small>@BilancioMoney</small></span></a>
+    </div>
+    <span class="copy">© 2026 Bilancio Money · Guardiano del Faro LLC</span>
+  </div></footer>
+
+</body>
+</html>
