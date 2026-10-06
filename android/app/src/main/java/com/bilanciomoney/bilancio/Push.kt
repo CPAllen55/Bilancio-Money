@@ -2,7 +2,11 @@ package com.bilanciomoney.bilancio
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.messaging.FirebaseMessaging
@@ -64,7 +68,15 @@ object Push {
         }
         val manager = context.getSystemService(NotificationManager::class.java)
         manager?.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Budget alerts", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            /* HIGH, not DEFAULT: the server already asks FCM for a high-priority
+               message, but on Android 8+ the channel overrules it, and at DEFAULT
+               the alert lands silently in the shade. A category about to be spent
+               is worth looking up for -- and it is what the iPhone does.
+
+               Importance is locked once a channel exists, so an install that
+               already has the quiet one keeps it until the app is reinstalled or
+               the person changes it in Settings. */
+            NotificationChannel(CHANNEL_ID, "Budget alerts", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "When a category is nearly spent, or over its budget."
             },
         )
@@ -107,9 +119,47 @@ class BilancioMessagingService : FirebaseMessagingService() {
         }
     }
 
+    /**
+     * Android draws the server's notification block itself only while the app
+     * is in the background. In the foreground Firebase delivers it here
+     * instead, and an earlier version did nothing with it -- so an alert that
+     * arrived while somebody had the app open was thrown away silently. That
+     * is the likeliest moment for one to arrive, since choosing a category
+     * checks the month on the spot.
+     *
+     * The tag is FCM's own collapse key, which is what makes "over budget"
+     * replace "nearly spent" for the same category rather than stack beneath
+     * it -- the same thing the background path does with it.
+     */
     override fun onMessageReceived(message: RemoteMessage) {
-        /* Nothing to do: the server sends a notification block, which Android
-           draws itself whether or not the app is running. This is here so a
-           data-only message in future has somewhere to land. */
+        val note = message.notification ?: return
+        val title = note.title ?: return
+        val body = note.body.orEmpty()
+
+        val open = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+        val built = NotificationCompat.Builder(this, Push.CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setColor(getColor(R.color.notification_tint))
+            .setContentTitle(title)
+            .setContentText(body)
+            // The figures run past one line on a narrow phone.
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(open)
+            .build()
+
+        /* Posting without permission throws on Android 13+. There would be
+           nothing to show in that case anyway, so it is not worth a crash. */
+        runCatching {
+            NotificationManagerCompat.from(this)
+                .notify(note.tag ?: message.collapseKey ?: title, 0, built)
+        }
     }
 }

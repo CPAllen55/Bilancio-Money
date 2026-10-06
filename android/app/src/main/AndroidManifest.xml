@@ -30,6 +30,22 @@
             </intent-filter>
         </activity>
 
+        <!-- What Firebase draws with when the app is not running and it builds
+             the notification itself. Without these it falls back to the launcher
+             icon, which the system flattens into a white square, and to a grey
+             tint. The channel is named too, so a message that somehow arrives
+             without one still lands in Budget alerts rather than a default
+             channel the person has never seen. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_tint" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="budget_alerts" />
+
         <!-- Firebase's callbacks: a new token, and messages while running. -->
         <service
             android:name=".BilancioMessagingService"

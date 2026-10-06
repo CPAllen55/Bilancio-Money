@@ -147,10 +147,15 @@ export async function checkBudgetAlerts(env: Env, userId: string): Promise<void>
         });
         if (result.ok) delivered++;
         if (result.gone) {
+          /* Said out loud, because it used to be done in silence. A phone that
+             has been wiped is routine; the same phone dropped on every run,
+             re-registering in between, is a misconfigured sender, and that
+             looked exactly like nothing at all in the logs. */
+          console.warn(`dropped a ${phone.platform} device: ${result.reason}`);
           await db.delete(pushDevices).where(eq(pushDevices.id, phone.id));
         } else {
           kept.push(phone);
-          if (!result.ok) console.warn(`push to a device failed: ${result.reason}`);
+          if (!result.ok) console.warn(`push to a ${phone.platform} device failed: ${result.reason}`);
         }
       }
       phones = kept;

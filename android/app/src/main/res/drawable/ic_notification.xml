@@ -1,0 +1,24 @@
+<!--
+  The owl, reduced to the one shape Android will accept in a status bar.
+
+  A notification's small icon is flattened to a single colour and tinted by
+  the system, so the drawn owl cannot be used: its gold, its shading and its
+  bar-chart body would all arrive as one white blob. What survives at 24dp is
+  the outline everybody recognises anyway: two ear tufts, a round head, two
+  wide eyes.
+
+  evenOdd, because the eyes are holes in the body rather than shapes on top
+  of it; with the default winding they would fill in and the owl would go
+  blind.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960"
+>
+  <path
+      android:fillColor="@android:color/white"
+      android:fillType="evenOdd"
+      android:pathData="M200,80 L353,228 A300,300 0 0 1 607,228 L760,80 L692,288 A300,300 0 1 1 268,288 Z M305,470 a70,70 0 1 0 140,0 a70,70 0 1 0 -140,0 Z M515,470 a70,70 0 1 0 140,0 a70,70 0 1 0 -140,0 Z"/>
+</vector>
