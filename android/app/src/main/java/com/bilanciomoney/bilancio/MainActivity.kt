@@ -176,7 +176,16 @@ private fun SignedIn() {
                             tab = t
                         },
                         icon = { Icon(painterResource(t.icon), contentDescription = null) },
-                        label = { Text(t.label) },
+                        /* One line, always: "Transactions" wrapped to a second
+                           line on a 720px phone and read as a typo. */
+                        label = {
+                            Text(
+                                t.label,
+                                maxLines = 1,
+                                softWrap = false,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        },
                     )
                 }
             }
