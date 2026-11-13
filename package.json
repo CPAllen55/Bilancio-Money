@@ -37,7 +37,7 @@
   "dependencies": {
     "@clerk/backend": "^3.16.8",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.13.3",
+    "hono": "^4.13.18",
     "pg": "^8.23.0"
   }
 }
